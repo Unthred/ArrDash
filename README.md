@@ -1,70 +1,80 @@
 # ArrDash
 
-Blazor Server dashboard for recent *arr downloads, audiobooks, music, and Plex/Emby now playing.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+**ArrDash** is a [Blazor Server](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor) dashboard for homelab media stacks. It aggregates recent downloads from the *arr apps, audiobooks from Chaptarr and AudioBookShelf, music from Lidarr, and live playback from Plex and Emby — in one configurable UI.
+
+![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4)
+![MudBlazor](https://img.shields.io/badge/UI-MudBlazor-594AE2)
 
 ## Features
 
-- Recent TV, movies, audiobooks, and music from Sonarr, Radarr, Chaptarr, Lidarr, and AudioBookShelf
-- Merged audiobook view (Chaptarr history + ABS library)
-- Now playing from Plex and Emby
-- Configurable layout, themes, panel colours, and kiosk mode
-- Server CPU, memory, and disk metrics (Unraid host)
-- Live refresh via SignalR with configurable poll interval
-- Settings UI with live preview before save
-
-## Stack
-
-- .NET 8 / Blazor Server
-- MudBlazor
-- Docker
+| Area | What you get |
+|------|----------------|
+| **Recent media** | TV (Sonarr), movies (Radarr), audiobooks (Chaptarr + ABS), music (Lidarr) |
+| **Now playing** | Live Plex and Emby sessions with progress |
+| **Layout** | Panel order, hide/show, Cards / List / Table per panel |
+| **Appearance** | Light / dark / system theme, colours, density, poster size |
+| **Kiosk** | Full-screen TV mode, panel rotation, screensaver |
+| **Metrics** | Host CPU graph, memory and disk rings, per-service library counts |
+| **Settings** | In-app configuration with live preview before save |
+| **Refresh** | Background polling + SignalR push to all connected browsers |
 
 ## Quick start
 
-1. Copy the example compose file and set your service URLs and API keys:
+```bash
+git clone https://github.com/Unthred/arrdash-blazor.git
+cd arrdash-blazor
+cp docker-compose.example.yml docker-compose.yml
+# Edit docker-compose.yml — set service URLs and API keys
+docker compose build && docker compose up -d
+```
 
-   ```bash
-   cp docker-compose.example.yml docker-compose.yml
-   # edit docker-compose.yml — keys can also be saved in the Settings UI after first run
-   ```
+Open **http://localhost:7979**. Further setup (reverse proxy, Unraid, secrets) is in the [deployment guide](docs/deployment.md).
 
-2. Build and run:
+## Documentation
 
-   ```bash
-   docker compose build
-   docker compose up -d
-   ```
+| Doc | Contents |
+|-----|----------|
+| [docs/README.md](docs/README.md) | Documentation index |
+| [architecture.md](docs/architecture.md) | How the app is structured |
+| [configuration.md](docs/configuration.md) | Environment variables and config files |
+| [deployment.md](docs/deployment.md) | Docker, Unraid, reverse proxy |
+| [settings-reference.md](docs/settings-reference.md) | Every Settings tab and option |
+| [services.md](docs/services.md) | Supported apps and API requirements |
+| [api.md](docs/api.md) | HTTP endpoints |
+| [development.md](docs/development.md) | Local dev, tests, contributing |
 
-3. Open `http://localhost:7979`
+## Stack
 
-Layout preferences and API keys are persisted under `/config` (`user-layout.json`, `service-secrets.json`).
+- **.NET 8** — Blazor Server (interactive)
+- **MudBlazor 7** — UI components
+- **SignalR** — live dashboard updates
+- **Docker** — recommended deployment
 
-## Development
+## Service URLs
+
+ArrDash calls each *arr / media app over HTTP from inside the container. Use URLs that resolve **from the container network** — typically HTTPS hostnames on your LAN or split-DNS FQDNs, not `localhost` on the host unless you know routing works.
+
+See [services.md](docs/services.md) for per-app notes.
+
+## Persistence
+
+| Path | Purpose |
+|------|---------|
+| `/config/user-layout.json` | Theme, layout, behaviour preferences |
+| `/config/service-secrets.json` | API keys saved from the Settings UI |
+
+Environment variables seed initial URLs and keys; the Settings UI can override and persist secrets without redeploying.
+
+## Tests
 
 ```bash
-dotnet run --project src/ArrDash/ArrDash.csproj
 dotnet test tests/ArrDash.Tests/ArrDash.Tests.csproj
 ```
 
-Or run tests in Docker:
-
-```bash
-docker run --rm -v "$PWD:/src" -w /src/tests/ArrDash.Tests mcr.microsoft.com/dotnet/sdk:8.0 dotnet test
-```
-
-## Unraid
-
-See `unraid/my-arrdash.xml` for a Community Applications template stub. Point the image at your built `arrdash:latest` or a registry tag you publish.
-
-## Configuration
-
-| Source | Purpose |
-|--------|---------|
-| Environment variables | Initial service URLs and API keys |
-| `/config/user-layout.json` | Layout, theme, and behaviour preferences |
-| `/config/service-secrets.json` | API keys saved from the Settings UI |
-
-Service URLs should be reachable from the container (HTTPS FQDNs or internal hostnames that resolve inside Docker).
+135+ unit tests cover settings wiring, theme building, filters, and display helpers.
 
 ## License
 
-Private / personal project unless otherwise noted.
+[MIT](LICENSE) — use and modify freely; no warranty.

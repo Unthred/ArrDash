@@ -105,7 +105,7 @@ static void WarnPrivateServiceUrls(WebApplication app)
     foreach (var (name, url) in urls)
     {
         if (ServiceUrlRules.IsPrivateOrLoopbackUrl(url))
-            app.Logger.LogWarning("{Service} URL {Url} uses a private address — use https://*.yeradonkey.com (split DNS)", name, url);
+            app.Logger.LogWarning("{Service} URL {Url} uses a private address — use a hostname reachable from the container", name, url);
     }
 }
 

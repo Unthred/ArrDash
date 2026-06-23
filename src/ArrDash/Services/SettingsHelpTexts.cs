@@ -72,7 +72,7 @@ public static class SettingsHelpTexts
 
     public const string ServicesEnabled = "Turn off a service to stop ArrDash fetching from it — useful if an app is down or unused.";
     public const string ApiServicePicker = "Choose which service to configure credentials for.";
-    public const string ApiUrl = "Base URL for the service API. Use the ArrDash FQDN (e.g. https://sonarr.yeradonkey.com).";
+    public const string ApiUrl = "Base URL for the service API. Use an HTTPS hostname reachable from the ArrDash container.";
     public const string ApiKey = "Paste a new key to replace the saved one. Leave blank to keep the existing key.";
 
     public static string PanelRecentLimit(string panelLabel) =>
