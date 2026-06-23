@@ -1,0 +1,28 @@
+<div class="@RootClass">
+    @ChildContent
+    @if (ShowSettingsHelp && !string.IsNullOrWhiteSpace(Text))
+    {
+        <p class="setting-help">@Text</p>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public bool ShowSettingsHelp { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public bool Span2 { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string RootClass
+    {
+        get
+        {
+            var parts = new List<string> { "setting-field" };
+            if (Span2)
+                parts.Add("settings-span-2");
+            if (!string.IsNullOrWhiteSpace(Class))
+                parts.Add(Class);
+            return string.Join(' ', parts);
+        }
+    }
+}

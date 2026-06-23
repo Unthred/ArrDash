@@ -1,0 +1,74 @@
+<div class="preset-color-field">
+    <span class="color-picker-label">@Label</span>
+    @if (!string.IsNullOrWhiteSpace(Hint))
+    {
+        <p class="preset-color-hint muted">@Hint</p>
+    }
+    @if (Preview is not null)
+    {
+        <div class="preset-color-preview">@Preview</div>
+    }
+    <div class="preset-color-swatches" role="list" aria-label="@($"{Label} presets")">
+        @foreach (var preset in Presets)
+        {
+            var active = IsActive(preset.Value);
+            <button type="button"
+                    role="listitem"
+                    class="preset-color-swatch @(active ? "active" : null)"
+                    style="@($"background-color:{preset.Value}")"
+                    title="@preset.Label"
+                    aria-label="@preset.Label"
+                    aria-pressed="@active"
+                    @onclick="() => SelectPreset(preset.Value)">
+            </button>
+        }
+    </div>
+    <div class="preset-color-custom">
+        <span class="preset-color-custom-label">Custom</span>
+        <ColorPickerField Label="@Label"
+                          Value="@Value"
+                          ValueChanged="OnCustomColorChanged"
+                          DefaultColor="@DefaultColor"
+                          Inline="true" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<ColorPreset> Presets { get; set; } = AppearanceColorPresets.Accent;
+    [Parameter] public string DefaultColor { get; set; } = AppearanceColorPresets.DefaultAccent;
+    [Parameter] public RenderFragment? Preview { get; set; }
+
+    private bool IsActive(string presetValue) =>
+        string.Equals(Normalize(Value), Normalize(presetValue), StringComparison.OrdinalIgnoreCase);
+
+    private async Task SelectPreset(string color)
+    {
+        Value = color;
+        await ValueChanged.InvokeAsync(color);
+    }
+
+    private async Task OnCustomColorChanged(string color)
+    {
+        Value = color;
+        await ValueChanged.InvokeAsync(color);
+    }
+
+    private static string Normalize(string? value)
+    {
+        var v = (value ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(v))
+            return "";
+
+        if (!v.StartsWith('#'))
+            v = "#" + v;
+
+        if (v.Length == 4)
+            v = $"#{v[1]}{v[1]}{v[2]}{v[2]}{v[3]}{v[3]}";
+
+        return v.Length >= 7 ? v[..7].ToLowerInvariant() : v.ToLowerInvariant();
+    }
+}

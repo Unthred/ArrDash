@@ -1,0 +1,32 @@
+@using ArrDash.Models
+@using ArrDash.Services
+@inject ExternalLinkService Links
+@inject LayoutPreferencesService Prefs
+
+@if (_links.Count > 0)
+{
+    <div class="poster-quick-links" @onclick:stopPropagation="true">
+        @foreach (var link in _links)
+        {
+            <button type="button"
+                    class="poster-quick-link @link.CssClass"
+                    title="@link.Label"
+                    aria-label="@link.Label"
+                    @onclick="() => OpenAsync(link.Url)">
+                @link.Label
+            </button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public DownloadItem Item { get; set; } = default!;
+
+    private IReadOnlyList<MediaQuickLink> _links = [];
+
+    protected override void OnParametersSet() =>
+        _links = MediaQuickLinkBuilder.Build(Item);
+
+    private async Task OpenAsync(string url) =>
+        await Links.OpenAsync(url, Prefs.Current.ExternalLinkTarget);
+}

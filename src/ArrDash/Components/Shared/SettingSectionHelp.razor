@@ -1,0 +1,9 @@
+@if (ShowSettingsHelp && !string.IsNullOrWhiteSpace(Text))
+{
+    <p class="setting-help setting-help-section">@Text</p>
+}
+
+@code {
+    [CascadingParameter] public bool ShowSettingsHelp { get; set; }
+    [Parameter] public string? Text { get; set; }
+}

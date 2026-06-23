@@ -1,0 +1,196 @@
+@using ArrDash.Models
+@using ArrDash.Services
+@using ArrDash.Services.Clients
+@inject SonarrClient Sonarr
+@inject LayoutPreferencesService Prefs
+@inject ExternalLinkService Links
+@inject MediaServiceOptionsAccessor Options
+@inject ISnackbar Snackbar
+
+@{
+    var episodes = DownloadDisplayHelper.ResolveBadgeEpisodeNumbers(Item);
+    var pageEpisodes = episodes.Skip(_pageIndex * PageSize).Take(PageSize).ToList();
+    var usePaging = episodes.Count > PageSize;
+}
+
+@if (episodes.Count > 0)
+{
+    <div class="episode-badge-row">
+        <button type="button"
+                class="episode-badge-arrow @(!usePaging ? "episode-badge-arrow-reserved" : null)"
+                aria-label="Previous episode page"
+                aria-hidden="@(!usePaging)"
+                disabled="@(!usePaging || _pageIndex <= 0)"
+                @onclick="PreviousPage"
+                @onclick:stopPropagation="true">
+            <MudIcon Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" />
+        </button>
+
+        <div class="episode-badge-panel">
+            @foreach (var episode in pageEpisodes)
+            {
+                @RenderEpisodeBadge(episode)
+            }
+        </div>
+
+        <button type="button"
+                class="episode-badge-arrow @(!usePaging ? "episode-badge-arrow-reserved" : null)"
+                aria-label="Next episode page"
+                aria-hidden="@(!usePaging)"
+                disabled="@(!usePaging || !HasNextPage)"
+                @onclick="NextPage"
+                @onclick:stopPropagation="true">
+            <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" />
+        </button>
+    </div>
+}
+
+@code {
+    private const int PageSize = 9;
+
+    [Parameter, EditorRequired] public DownloadItem Item { get; set; } = default!;
+    [Parameter] public bool ShowMissingEpisodes { get; set; } = true;
+
+    private int _pageIndex;
+    private string? _lastItemId;
+    private int? _searchingEpisode;
+
+    private bool HasNextPage
+    {
+        get
+        {
+            var total = DownloadDisplayHelper.ResolveBadgeEpisodeNumbers(Item).Count;
+            return (_pageIndex + 1) * PageSize < total;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_lastItemId != Item.Id)
+        {
+            _pageIndex = 0;
+            _lastItemId = Item.Id;
+        }
+    }
+
+    private void PreviousPage()
+    {
+        if (_pageIndex > 0)
+            _pageIndex--;
+    }
+
+    private void NextPage()
+    {
+        if (HasNextPage)
+            _pageIndex++;
+    }
+
+    private RenderFragment RenderEpisodeBadge(int episode) => __builder =>
+    {
+        var recentEpisodes = Item.EpisodeNumbers ?? [];
+        var onDiskEpisodes = Item.OnDiskEpisodeNumbers;
+        var unairedEpisodes = Item.UnairedEpisodeNumbers;
+        var unaired = DownloadDisplayHelper.IsUnairedEpisode(episode, unairedEpisodes);
+        var missing = !unaired &&
+                      DownloadDisplayHelper.IsMissingOnDisk(episode, onDiskEpisodes, recentEpisodes);
+        var recent = !unaired && !missing && recentEpisodes.Contains(episode);
+        var airLabel = DownloadDisplayHelper.GetEpisodeAirLabel(episode, Item.EpisodeAirDates);
+
+        if (ShowMissingEpisodes && missing && Item.SeriesId is int seriesId && Item.SeasonNumber is int season)
+        {
+            var searching = _searchingEpisode == episode;
+            var missingTitle = Prefs.Current.MissingEpisodeClickAction == MissingEpisodeClickAction.OpenSonarrAndSearch
+                ? "Open Sonarr and search for this episode"
+                : "Search Sonarr for this episode";
+            __builder.OpenElement(0, "button");
+            __builder.AddAttribute(1, "type", "button");
+            __builder.AddAttribute(2, "class", $"episode-badge episode-badge-missing episode-badge-action{(searching ? " episode-badge-searching" : "")}");
+            __builder.AddAttribute(3, "title", missingTitle);
+            __builder.AddAttribute(4, "disabled", searching);
+            __builder.AddAttribute(5, "onclick", EventCallback.Factory.Create(this, () => HandleMissingEpisodeAsync(seriesId, season, episode)));
+            __builder.AddEventStopPropagationAttribute(6, "onclick", true);
+            __builder.AddContent(7, episode);
+            __builder.CloseElement();
+            return;
+        }
+
+        if (unaired)
+        {
+            __builder.OpenElement(8, "span");
+            __builder.AddAttribute(9, "class", "episode-badge episode-badge-unaired");
+            if (!string.IsNullOrWhiteSpace(airLabel))
+                __builder.AddAttribute(10, "title", airLabel);
+            __builder.AddContent(11, episode);
+            __builder.CloseElement();
+            return;
+        }
+
+        __builder.OpenElement(12, "span");
+        __builder.AddAttribute(13, "class", recent ? "episode-badge episode-badge-recent" : "episode-badge");
+        if (recent)
+            __builder.AddAttribute(14, "title", "Just downloaded");
+        __builder.AddContent(15, episode);
+        __builder.CloseElement();
+    };
+
+    private async Task HandleMissingEpisodeAsync(int seriesId, int seasonNumber, int episodeNumber)
+    {
+        if (!Prefs.IsServiceEnabled("sonarr"))
+        {
+            Snackbar.Add("Sonarr is disabled in settings.", Severity.Warning);
+            return;
+        }
+
+        var label = FormatEpisodeSearchLabel(seasonNumber, episodeNumber);
+        var action = Prefs.Current.MissingEpisodeClickAction;
+
+        _searchingEpisode = episodeNumber;
+        StateHasChanged();
+
+        try
+        {
+            if (action == MissingEpisodeClickAction.OpenSonarrAndSearch)
+            {
+                Snackbar.Add($"Searching Sonarr for {label}…", Severity.Info);
+                var (ok, message) = await Sonarr.SearchEpisodeAsync(seriesId, seasonNumber, episodeNumber, CancellationToken.None);
+                Snackbar.Add(message, ok ? Severity.Success : Severity.Warning);
+
+                var url = ResolveSonarrUrl();
+                if (url is not null)
+                    await Links.OpenAsync(url, Prefs.Current.ExternalLinkTarget);
+            }
+            else
+            {
+                Snackbar.Add($"Searching Sonarr for {label}…", Severity.Info);
+                var (ok, message) = await Sonarr.SearchEpisodeAsync(seriesId, seasonNumber, episodeNumber, CancellationToken.None);
+                Snackbar.Add(ok ? $"Search queued for {label}" : message, ok ? Severity.Success : Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Sonarr search failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _searchingEpisode = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string FormatEpisodeSearchLabel(int seasonNumber, int episodeNumber)
+    {
+        var episodeCode = $"S{seasonNumber:D2}E{episodeNumber:D2}";
+        return string.IsNullOrWhiteSpace(Item.Title)
+            ? episodeCode
+            : $"{Item.Title} {episodeCode}";
+    }
+
+    private string? ResolveSonarrUrl()
+    {
+        if (!string.IsNullOrWhiteSpace(Item.ExternalUrl))
+            return Item.ExternalUrl;
+
+        var baseUrl = Options.Options.Sonarr.Url?.TrimEnd('/');
+        return string.IsNullOrWhiteSpace(baseUrl) ? null : baseUrl;
+    }
+}

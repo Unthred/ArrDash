@@ -1,0 +1,23 @@
+# Build output
+**/bin/
+**/obj/
+**/publish/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Local secrets / machine-specific compose
+docker-compose.yml
+docker-compose.override.yml
+.env
+.env.*
+
+# Appdata / runtime config
+/config/
+
+# OS
+.DS_Store
+Thumbs.db

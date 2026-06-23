@@ -1,0 +1,59 @@
+@inject IJSRuntime Js
+
+<div class="scroll-carousel">
+    <button type="button"
+            class="scroll-arrow scroll-arrow-left @(CanScrollLeft ? "is-visible" : "")"
+            aria-label="Scroll left"
+            @onclick="() => ScrollAsync(-1)">
+        <MudIcon Icon="@Icons.Material.Filled.ChevronLeft" />
+    </button>
+
+    <div class="scroll-track" @ref="_track" @onscroll="UpdateStateAsync">
+        @ChildContent
+    </div>
+
+    <button type="button"
+            class="scroll-arrow scroll-arrow-right @(CanScrollRight ? "is-visible" : "")"
+            aria-label="Scroll right"
+            @onclick="() => ScrollAsync(1)">
+        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" />
+    </button>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ElementReference _track;
+    private bool CanScrollLeft;
+    private bool CanScrollRight;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await UpdateStateAsync();
+    }
+
+    private async Task ScrollAsync(int direction)
+    {
+        await Js.InvokeVoidAsync("arrdashCarousel.scrollBy", _track, direction);
+        await Task.Delay(350);
+        await UpdateStateAsync();
+    }
+
+    private async Task UpdateStateAsync()
+    {
+        try
+        {
+            var state = await Js.InvokeAsync<ScrollState>("arrdashCarousel.getState", _track);
+            CanScrollLeft = state.CanScrollLeft;
+            CanScrollRight = state.CanScrollRight;
+            StateHasChanged();
+        }
+        catch
+        {
+            // Ignore disconnects during navigation.
+        }
+    }
+
+    private sealed record ScrollState(bool CanScrollLeft, bool CanScrollRight);
+}

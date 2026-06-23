@@ -1,0 +1,1052 @@
+@page "/settings"
+@inject LayoutPreferencesService Prefs
+@inject ThemeService ThemeService
+@inject ServiceCredentialsPreviewService CredentialsPreview
+@inject ServiceSecretsStore Secrets
+@inject MediaServiceOptionsAccessor OptionsAccessor
+@inject DashboardRefreshService RefreshService
+@inject ServiceConnectionTester ConnectionTester
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>ArrDash Settings</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="settings-page">
+    <div class="settings-header-row">
+        <div>
+            <h1 class="settings-title">Settings</h1>
+            <p class="settings-lead muted">Most layout changes apply on the dashboard — use Preview dashboard to see them before saving.</p>
+        </div>
+    </div>
+
+    <div class="settings-toolbar">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync" Disabled="_saving" Size="Size.Small">
+            @(_saving ? "Saving…" : "Save")
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" OnClick="Cancel" Size="Size.Small">Discard</MudButton>
+        <MudButton Variant="@(Prefs.IsPreviewActive ? Variant.Filled : Variant.Text)"
+                   Color="@(Prefs.IsPreviewActive ? Color.Warning : Color.Default)"
+                   StartIcon="@Icons.Material.Filled.Dashboard"
+                   OnClick="PreviewDashboardAsync"
+                   Size="Size.Small">
+            Preview dashboard
+        </MudButton>
+        @if (Prefs.IsPreviewActive)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Unsaved — open Preview dashboard</MudChip>
+        }
+        <div class="settings-toolbar-spacer"></div>
+        <MudSwitch @bind-Value="_showSettingsHelp"
+                   @bind-Value:after="PersistShowSettingsHelpAsync"
+                   Color="Color.Primary"
+                   Label="Show help"
+                   Class="settings-help-toggle" />
+    </div>
+
+    <CascadingValue Value="_showSettingsHelp">
+    <MudTabs Class="settings-tabs" Rounded="true" ApplyEffectsToContainer="true" PanelClass="settings-tab-panel settings-tab-fit">
+        <MudTabPanel Text="Layout" Icon="@Icons.Material.Filled.Dashboard">
+            <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-section-title">Display</div>
+                <div class="settings-grid-2">
+                    <SettingField Text="@SettingsHelpTexts.DashboardTitle">
+                        <MudTextField @bind-Value="_dashboardTitle" @bind-Value:after="ScheduleLivePreviewDebounced" Label="Dashboard title" Variant="Variant.Outlined" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.HideHeroStrip" Class="settings-switch-cell">
+                        <MudSwitch @bind-Value="_hideHeroStrip" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Hide hero strip" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.DashboardSubtitle" Span2="true">
+                        <MudTextField @bind-Value="_dashboardSubtitle" @bind-Value:after="ScheduleLivePreviewDebounced" Label="Subtitle" Variant="Variant.Outlined" Lines="2" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.PosterSize">
+                        <MudSelect T="PosterSize" @bind-Value="_posterSize" @bind-Value:after="ScheduleLivePreviewNow" Label="Poster size" Variant="Variant.Outlined">
+                            <MudSelectItem Value="PosterSize.Small">Small</MudSelectItem>
+                            <MudSelectItem Value="PosterSize.Medium">Medium</MudSelectItem>
+                            <MudSelectItem Value="PosterSize.Large">Large</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.PosterPlacement">
+                        <MudSelect T="PosterPlacement" @bind-Value="_posterPlacement" @bind-Value:after="ScheduleLivePreviewNow" Label="Poster placement" Variant="Variant.Outlined">
+                            <MudSelectItem Value="PosterPlacement.Left">Left</MudSelectItem>
+                            <MudSelectItem Value="PosterPlacement.Top">Top</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowQuality">
+                        <MudSwitch @bind-Value="_showQuality" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Quality labels" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowEpisodeBadges">
+                        <MudSwitch @bind-Value="_showEpisodeBadges" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Episode badges" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowMissingEpisodes">
+                        <MudSwitch @bind-Value="_showMissingEpisodes" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Highlight missing episodes" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowSyncNotes">
+                        <MudSwitch @bind-Value="_showSyncNotes" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Audiobook sync notes" />
+                    </SettingField>
+                </div>
+            </MudPaper>
+
+            <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-section-title">Panels</div>
+                <SettingSectionHelp Text="@SettingsHelpTexts.PanelOrder" />
+                <div class="panel-order-compact">
+                    @for (var i = 0; i < _panelOrder.Count; i++)
+                    {
+                        var panelId = _panelOrder[i];
+                        var index = i;
+                        <div class="panel-order-row">
+                            <MudText Class="panel-order-label">@PanelCatalog.LabelFor(panelId)</MudText>
+                            <div class="panel-order-actions">
+                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Disabled="@(index == 0)" OnClick="@(() => MovePanel(index, -1))" Size="Size.Small" />
+                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Disabled="@(index == _panelOrder.Count - 1)" OnClick="@(() => MovePanel(index, 1))" Size="Size.Small" />
+                                <MudSwitch @bind-Value="_panelHidden[panelId]" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Hide" />
+                                <MudSelect T="PanelViewMode" @bind-Value="_panelViewModes[panelId]" @bind-Value:after="ScheduleLivePreviewNow" Label="View" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense" Class="panel-view-select">
+                                    <MudSelectItem Value="PanelViewMode.Cards">Cards</MudSelectItem>
+                                    <MudSelectItem Value="PanelViewMode.Compact">List</MudSelectItem>
+                                    <MudSelectItem Value="PanelViewMode.Table">Table</MudSelectItem>
+                                </MudSelect>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Appearance" Icon="@Icons.Material.Filled.Palette">
+            <MudPaper Class="settings-section compact appearance-panel" Elevation="0">
+                <div class="appearance-row appearance-row--theme">
+                    <div class="appearance-section appearance-section--flat">
+                        <div class="settings-section-title">Theme</div>
+                        <SettingField Text="@SettingsHelpTexts.Theme">
+                            <MudToggleGroup T="ThemePreference"
+                                            @bind-Value="_theme"
+                                            @bind-Value:after="OnThemePreferenceChangedAsync"
+                                            Color="Color.Default"
+                                            Rounded="true"
+                                            SelectedClass="segmented-toggle-selected"
+                                            Class="arrdash-segmented-toggle theme-toggle settings-theme-toggle"
+                                            FixedContent>
+                                <MudToggleItem Value="ThemePreference.Light" Text="Light" />
+                                <MudToggleItem Value="ThemePreference.Dark" Text="Dark" />
+                                <MudToggleItem Value="ThemePreference.System" Text="System" />
+                            </MudToggleGroup>
+                        </SettingField>
+                        @if (_theme == ThemePreference.System)
+                        {
+                            <p class="appearance-system-hint muted">
+                                Using <strong>@(_systemIsDark ? "dark" : "light")</strong> from system preference.
+                            </p>
+                        }
+                    </div>
+                </div>
+
+                <div class="settings-grid-4 appearance-layout-row">
+                    <SettingField Text="@SettingsHelpTexts.Density">
+                        <MudSelect T="LayoutDensity" Value="@_density" ValueChanged="OnDensityChanged" Label="Density" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem Value="LayoutDensity.Comfortable">Comfortable</MudSelectItem>
+                            <MudSelectItem Value="LayoutDensity.Compact">Compact</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.BorderRadius">
+                        <MudSelect T="BorderRadiusStyle" Value="@_borderRadius" ValueChanged="OnBorderRadiusChanged" Label="Card corners" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem Value="BorderRadiusStyle.Rounded">Rounded</MudSelectItem>
+                            <MudSelectItem Value="BorderRadiusStyle.Sharp">Sharp</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.BrandMark">
+                        <MudTextField Value="@_brandMark" ValueChanged="@((string v) => OnBrandMarkChanged(v))" Label="Brand mark" Variant="Variant.Outlined" MaxLength="3" Margin="Margin.Dense" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.BackgroundStyle">
+                        <MudSelect T="BackgroundStyle" @bind-Value="_backgroundStyle" @bind-Value:after="ScheduleLivePreviewNow" Label="Background style" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem Value="BackgroundStyle.Gradient">Gradient</MudSelectItem>
+                            <MudSelectItem Value="BackgroundStyle.Solid">Solid</MudSelectItem>
+                            <MudSelectItem Value="BackgroundStyle.Minimal">Minimal</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                </div>
+
+                <div class="appearance-row appearance-row--accent">
+                    <div class="appearance-color-card appearance-color-card--accent">
+                        <SettingField Text="@SettingsHelpTexts.AccentColor">
+                            <PresetColorField Label="Accent colour"
+                                              Hint="Buttons, links, and highlights."
+                                              @bind-Value="_primaryColor"
+                                              @bind-Value:after="ScheduleLivePreviewDebounced"
+                                              Presets="AppearanceColorPresets.Accent"
+                                              DefaultColor="@AppearanceColorPresets.DefaultAccent">
+                                <Preview>
+                                    <div class="appearance-accent-preview">
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small">Sample</MudButton>
+                                        <span class="appearance-accent-link">Sample link</span>
+                                    </div>
+                                </Preview>
+                            </PresetColorField>
+                        </SettingField>
+                    </div>
+                </div>
+
+                @if (_theme == ThemePreference.System)
+                {
+                    <SettingSectionHelp Text="@SettingsHelpTexts.TextColorSystem(_systemIsDark)" />
+                    <div class="appearance-mode-grid">
+                        <div class="appearance-color-card">
+                            <SettingField Text="@SettingsHelpTexts.LightBackgroundColor">
+                                @RenderBackgroundColorField(isLightMode: true)
+                            </SettingField>
+                        </div>
+                        <div class="appearance-color-card">
+                            <SettingField Text="@SettingsHelpTexts.DarkBackgroundColor">
+                                @RenderBackgroundColorField(isLightMode: false)
+                            </SettingField>
+                        </div>
+                        <div class="appearance-color-card">
+                            <SettingField Text="@SettingsHelpTexts.LightTextColor">
+                                @RenderTextColorField(isLightMode: true)
+                            </SettingField>
+                        </div>
+                        <div class="appearance-color-card">
+                            <SettingField Text="@SettingsHelpTexts.DarkTextColor">
+                                @RenderTextColorField(isLightMode: false)
+                            </SettingField>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="appearance-mode-grid appearance-mode-grid--single">
+                        <div class="appearance-color-card">
+                            <SettingField Text="@(_theme == ThemePreference.Light ? SettingsHelpTexts.LightBackgroundColor : SettingsHelpTexts.DarkBackgroundColor)">
+                                @RenderBackgroundColorField(_theme == ThemePreference.Light)
+                            </SettingField>
+                        </div>
+                        <div class="appearance-color-card">
+                            <SettingField Text="@(_theme == ThemePreference.Light ? SettingsHelpTexts.LightTextColor : SettingsHelpTexts.DarkTextColor)">
+                                @RenderTextColorField(_theme == ThemePreference.Light)
+                            </SettingField>
+                        </div>
+                    </div>
+                }
+
+                <div class="settings-section-title">Panel colours</div>
+                <SettingSectionHelp Text="Accent colours used for each panel heading and highlights." />
+                <div class="settings-grid-3 accent-grid">
+                    @foreach (var panel in PanelCatalog.All)
+                    {
+                        <SettingField Text="@SettingsHelpTexts.PanelAccent(panel.Label)">
+                            <ColorPickerField Label="@panel.Label"
+                                              Value="@_panelAccentColors[panel.Id]"
+                                              ValueChanged="@(color => OnPanelAccentChanged(panel.Id, color))"
+                                              DefaultColor="@panel.DefaultAccent"
+                                              AllowDefault="true" />
+                        </SettingField>
+                    }
+                </div>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Lists" Icon="@Icons.Material.Filled.List">
+            <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-grid-2">
+                    <SettingField Text="@SettingsHelpTexts.RecentWindow">
+                        <MudSelect T="RecentWindowMode" @bind-Value="_recentWindowMode" @bind-Value:after="ScheduleLivePreviewNow" Label="Recent window" Variant="Variant.Outlined">
+                            <MudSelectItem Value="RecentWindowMode.ItemCount">Item count</MudSelectItem>
+                            <MudSelectItem Value="RecentWindowMode.Days">Last N days</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.TimeFormat">
+                        <MudSelect T="TimeDisplayFormat" @bind-Value="_timeFormat" @bind-Value:after="ScheduleLivePreviewNow" Label="Time display" Variant="Variant.Outlined">
+                            <MudSelectItem Value="TimeDisplayFormat.Relative">Relative</MudSelectItem>
+                            <MudSelectItem Value="TimeDisplayFormat.Clock">Clock</MudSelectItem>
+                            <MudSelectItem Value="TimeDisplayFormat.DateTime">Date + time</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    @if (_recentWindowMode == RecentWindowMode.Days)
+                    {
+                        <SettingField Text="@SettingsHelpTexts.RecentDays">
+                            <MudNumericField @bind-Value="_recentDays" @bind-Value:after="ScheduleLivePreviewNow" Label="Days" Variant="Variant.Outlined" Min="1" Max="365" />
+                        </SettingField>
+                    }
+                    <SettingField Text="@SettingsHelpTexts.DefaultRecentLimit">
+                        <MudNumericField @bind-Value="_defaultRecentLimit" @bind-Value:after="ScheduleLivePreviewNow" Label="Default list size" Variant="Variant.Outlined" Min="5" Max="100" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.AudiobookSource" Span2="true">
+                        <MudSelect T="AudiobookSourceMode" @bind-Value="_audiobookSource" @bind-Value:after="ScheduleLivePreviewNow" Label="Audiobook source" Variant="Variant.Outlined">
+                            <MudSelectItem Value="AudiobookSourceMode.Merge">Merge Chaptarr + ABS</MudSelectItem>
+                            <MudSelectItem Value="AudiobookSourceMode.ChaptarrOnly">Chaptarr only</MudSelectItem>
+                            <MudSelectItem Value="AudiobookSourceMode.AudiobookShelfOnly">AudioBookShelf only</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    @foreach (var panel in PanelCatalog.Recent)
+                    {
+                        <SettingField Text="@SettingsHelpTexts.PanelRecentLimit(panel.Label)">
+                            <MudNumericField @bind-Value="_recentLimits[panel.Id]"
+                                             @bind-Value:after="ScheduleLivePreviewNow"
+                                             Label="@panel.Label"
+                                             Variant="Variant.Outlined"
+                                             Min="5"
+                                             Max="100"
+                                             Disabled="@(_recentWindowMode == RecentWindowMode.Days)" />
+                        </SettingField>
+                    }
+                </div>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Playback" Icon="@Icons.Material.Filled.PlayCircle">
+            <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-grid-2">
+                    <div class="settings-field-stack">
+                        <SettingField Text="@SettingsHelpTexts.ShowPlexSessions">
+                            <MudSwitch @bind-Value="_showPlexSessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Plex sessions" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.ShowEmbySessions">
+                            <MudSwitch @bind-Value="_showEmbySessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Emby sessions" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.HideIdleSessions">
+                            <MudSwitch @bind-Value="_hideIdleSessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Hide idle (0%)" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.ShowServerMetrics">
+                            <MudSwitch @bind-Value="_showServerMetrics" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show server CPU, memory & disk" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.MetricsPollInterval">
+                            <MudNumericField @bind-Value="_metricsPollIntervalSeconds" @bind-Value:after="ScheduleLivePreviewNow" Label="Server metrics interval (sec)" Variant="Variant.Outlined" Min="0" Max="60" Disabled="@(!_showServerMetrics)" HelperText="0 = default (2 sec)" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.MetricsGraphWindow">
+                            <MudNumericField @bind-Value="_metricsGraphWindowMinutes" @bind-Value:after="ScheduleLivePreviewNow" Label="CPU graph window (min)" Variant="Variant.Outlined" Min="0" Max="240" Disabled="@(!_showServerMetrics)" HelperText="0 = default (15 min)" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.EnableClickThrough">
+                            <MudSwitch @bind-Value="_enableClickThrough" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Click-through links" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.DeepLinkClickThrough">
+                            <MudSwitch @bind-Value="_deepLinkClickThrough" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Open specific item" Disabled="@(!_enableClickThrough)" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.ExternalLinkTarget">
+                            <MudSelect T="ExternalLinkTarget" @bind-Value="_externalLinkTarget" @bind-Value:after="ScheduleLivePreviewNow" Label="Open links in" Variant="Variant.Outlined" Disabled="@(!_enableClickThrough)">
+                                <MudSelectItem Value="ExternalLinkTarget.NewTab">New tab</MudSelectItem>
+                                <MudSelectItem Value="ExternalLinkTarget.SameTab">Same tab</MudSelectItem>
+                            </MudSelect>
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.MissingEpisodeClickAction">
+                            <MudSelect T="MissingEpisodeClickAction" @bind-Value="_missingEpisodeClickAction" @bind-Value:after="ScheduleLivePreviewNow" Label="Missing episode click" Variant="Variant.Outlined" Disabled="@(!_showMissingEpisodes)">
+                                <MudSelectItem Value="MissingEpisodeClickAction.SearchOnly">Search only</MudSelectItem>
+                                <MudSelectItem Value="MissingEpisodeClickAction.OpenSonarrAndSearch">Open Sonarr and search</MudSelectItem>
+                            </MudSelect>
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.FriendlyQualityLabels">
+                            <MudSwitch @bind-Value="_friendlyQualityLabels" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Friendly quality labels" Disabled="@(!_showQuality)" />
+                        </SettingField>
+                    </div>
+                    <div class="settings-field-stack">
+                        <SettingField Text="@SettingsHelpTexts.PollInterval">
+                            <MudNumericField @bind-Value="_pollIntervalSeconds" @bind-Value:after="ScheduleLivePreviewNow" Label="Poll interval (sec)" Variant="Variant.Outlined" Min="0" Max="3600" HelperText="0 = env default" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.ManualRefreshOnly">
+                            <MudSwitch @bind-Value="_manualRefreshOnly" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Manual refresh only" />
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.StatusBar">
+                            <MudSelect T="StatusBarMode" @bind-Value="_statusBarMode" @bind-Value:after="ScheduleLivePreviewNow" Label="Status bar" Variant="Variant.Outlined">
+                                <MudSelectItem Value="StatusBarMode.All">All services</MudSelectItem>
+                                <MudSelectItem Value="StatusBarMode.OfflineOnly">Offline only</MudSelectItem>
+                                <MudSelectItem Value="StatusBarMode.Hidden">Hidden</MudSelectItem>
+                            </MudSelect>
+                        </SettingField>
+                        <SettingField Text="@SettingsHelpTexts.StartupPage">
+                            <MudSelect T="StartupPage" @bind-Value="_startupPage" @bind-Value:after="ScheduleLivePreviewNow" Label="Startup page" Variant="Variant.Outlined">
+                                <MudSelectItem Value="StartupPage.Dashboard">Dashboard</MudSelectItem>
+                                <MudSelectItem Value="StartupPage.Settings">Settings</MudSelectItem>
+                            </MudSelect>
+                        </SettingField>
+                    </div>
+                </div>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Kiosk" Icon="@Icons.Material.Filled.Tv">
+            <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-grid-2">
+                    <SettingField Text="@SettingsHelpTexts.AutoKioskOnLoad">
+                        <MudSwitch @bind-Value="_autoKioskOnLoad" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Kiosk on load" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.KioskHideHero">
+                        <MudSwitch @bind-Value="_kioskHideHero" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Hide hero in kiosk" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.KioskLargeNowPlaying">
+                        <MudSwitch @bind-Value="_kioskLargeNowPlaying" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Large Now Playing" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.KioskScreensaver">
+                        <MudSwitch @bind-Value="_kioskScreensaver" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Screensaver when idle" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.KioskScreensaverMinutes">
+                        <MudNumericField @bind-Value="_kioskScreensaverMinutes" @bind-Value:after="ScheduleLivePreviewNow" Label="Screensaver after (min)" Variant="Variant.Outlined" Min="1" Max="120" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.KioskRotateSeconds">
+                        <MudNumericField @bind-Value="_kioskRotateSeconds" @bind-Value:after="ScheduleLivePreviewNow" Label="Rotate every (sec)" Variant="Variant.Outlined" Min="5" Max="300" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.KioskRotate" Span2="true">
+                        <MudSelect T="KioskRotateMode" @bind-Value="_kioskRotate" @bind-Value:after="ScheduleLivePreviewNow" Label="Panel rotation" Variant="Variant.Outlined">
+                            <MudSelectItem Value="KioskRotateMode.Off">Show all panels</MudSelectItem>
+                            <MudSelectItem Value="KioskRotateMode.Sequential">Rotate panels</MudSelectItem>
+                            <MudSelectItem Value="KioskRotateMode.NowPlayingOnly">Now Playing only</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                </div>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Services" Icon="@Icons.Material.Filled.ToggleOn">
+            <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-section-title">Enabled services</div>
+                <SettingSectionHelp Text="@SettingsHelpTexts.ServicesEnabled" />
+                <div class="settings-grid-2">
+                    @foreach (var cred in _credentialStatuses)
+                    {
+                        <SettingField Text="@SettingsHelpTexts.ServiceEnabled(cred.Label)">
+                            <MudSwitch @bind-Value="_serviceEnabled[cred.Key]" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="@cred.Label" Dense="true" />
+                        </SettingField>
+                    }
+                </div>
+            </MudPaper>
+        </MudTabPanel>
+
+        <MudTabPanel Text="API keys" Icon="@Icons.Material.Filled.Key">
+            @if (SelectedCredential is { } cred)
+            {
+                <MudPaper Class="settings-section compact" Elevation="0">
+                    <SettingField Text="@SettingsHelpTexts.ApiServicePicker" Class="mb-3">
+                        <MudSelect T="string" @bind-Value="_selectedServiceKey" Label="Service" Variant="Variant.Outlined">
+                            @foreach (var option in _credentialStatuses)
+                            {
+                                <MudSelectItem Value="@option.Key">@option.Label</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </SettingField>
+                    <div class="credential-head mb-2">
+                        <MudText Typo="Typo.subtitle1">@cred.Label</MudText>
+                        <div class="credential-head-actions">
+                            <MudChip T="string" Size="Size.Small" Color="@(cred.Configured ? Color.Success : Color.Default)" Variant="Variant.Outlined">
+                                @(cred.Configured ? "Configured" : "Not set")
+                            </MudChip>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => TestConnectionAsync(cred.Key))" Disabled="@_testing.Contains(cred.Key)">
+                                @(_testing.Contains(cred.Key) ? "Testing…" : "Test")
+                            </MudButton>
+                        </div>
+                    </div>
+                    <MudText Typo="Typo.caption" Class="muted mb-2">@cred.Instructions</MudText>
+                    @if (!string.IsNullOrWhiteSpace(cred.HelpUrl))
+                    {
+                        <MudLink Href="@cred.HelpUrl" Target="_blank" Class="mb-2 d-block">Open @cred.Label</MudLink>
+                    }
+                    <SettingField Text="@SettingsHelpTexts.ApiUrl" Class="mb-2">
+                        <MudTextField @bind-Value="_urlInputs[cred.Key]"
+                                      @bind-Value:after="ScheduleLivePreviewDebounced"
+                                      Label="URL"
+                                      Variant="Variant.Outlined"
+                                      Placeholder="@(cred.CurrentUrl ?? "https://service.yeradonkey.com")" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ApiKey">
+                        <MudTextField @bind-Value="_credentialInputs[cred.Key]"
+                                      @bind-Value:after="ScheduleLivePreviewDebounced"
+                                      Label="API key / token"
+                                      Variant="Variant.Outlined"
+                                      Placeholder="Leave blank to use saved key"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@Icons.Material.Filled.Visibility"
+                                      OnAdornmentClick="@(() => ToggleReveal(cred.Key))"
+                                      InputType="@RevealType(cred.Key)" />
+                    </SettingField>
+                </MudPaper>
+            }
+        </MudTabPanel>
+    </MudTabs>
+    </CascadingValue>
+</MudContainer>
+
+@code {
+    private ThemePreference _theme = ThemePreference.System;
+    private LayoutDensity _density = LayoutDensity.Comfortable;
+    private BorderRadiusStyle _borderRadius = BorderRadiusStyle.Rounded;
+    private string _primaryColor = AppearanceColorPresets.DefaultAccent;
+    private string _lightTextColor = AppearanceColorPresets.DefaultLightText;
+    private string _darkTextColor = AppearanceColorPresets.DefaultDarkText;
+    private string _lightBackgroundColor = AppearanceColorPresets.DefaultLightBackground;
+    private string _darkBackgroundColor = AppearanceColorPresets.DefaultDarkBackground;
+    private BackgroundStyle _backgroundStyle = BackgroundStyle.Gradient;
+    private string _brandMark = "A";
+    private string _dashboardTitle = "";
+    private string _dashboardSubtitle = "";
+    private bool _hideHeroStrip;
+    private PosterSize _posterSize = PosterSize.Medium;
+    private PosterPlacement _posterPlacement = PosterPlacement.Left;
+    private bool _showQuality = true;
+    private bool _showEpisodeBadges = true;
+    private bool _showMissingEpisodes = true;
+    private bool _showSyncNotes = true;
+    private int _defaultRecentLimit = 20;
+    private RecentWindowMode _recentWindowMode = RecentWindowMode.ItemCount;
+    private int _recentDays = 30;
+    private AudiobookSourceMode _audiobookSource = AudiobookSourceMode.Merge;
+    private TimeDisplayFormat _timeFormat = TimeDisplayFormat.Relative;
+    private bool _showPlexSessions = true;
+    private bool _showEmbySessions = true;
+    private bool _hideIdleSessions;
+    private bool _showServerMetrics = true;
+    private int _metricsPollIntervalSeconds;
+    private int _metricsGraphWindowMinutes;
+    private bool _enableClickThrough = true;
+    private bool _deepLinkClickThrough = true;
+    private ExternalLinkTarget _externalLinkTarget = ExternalLinkTarget.NewTab;
+    private MissingEpisodeClickAction _missingEpisodeClickAction = MissingEpisodeClickAction.SearchOnly;
+    private bool _friendlyQualityLabels = true;
+    private int _pollIntervalSeconds;
+    private bool _manualRefreshOnly;
+    private StatusBarMode _statusBarMode = StatusBarMode.All;
+    private StartupPage _startupPage = StartupPage.Dashboard;
+    private bool _autoKioskOnLoad;
+    private bool _kioskHideHero = true;
+    private bool _kioskLargeNowPlaying;
+    private bool _kioskScreensaver;
+    private int _kioskScreensaverMinutes = 5;
+    private KioskRotateMode _kioskRotate = KioskRotateMode.Off;
+    private int _kioskRotateSeconds = 30;
+    private List<string> _panelOrder = [];
+    private Dictionary<string, int?> _recentLimits = new();
+    private Dictionary<string, bool> _panelHidden = new();
+    private Dictionary<string, PanelViewMode> _panelViewModes = new();
+    private Dictionary<string, string> _panelAccentColors = new();
+    private Dictionary<string, bool> _serviceEnabled = new();
+    private Dictionary<string, string> _credentialInputs = new();
+    private Dictionary<string, string> _urlInputs = new();
+    private HashSet<string> _revealedKeys = new();
+    private HashSet<string> _testing = new();
+    private IReadOnlyList<CredentialStatus> _credentialStatuses = [];
+    private string _selectedServiceKey = "sonarr";
+    private bool _saving;
+    private bool _showSettingsHelp;
+    private bool _systemIsDark;
+    private System.Threading.Timer? _debounceTimer;
+
+    private CredentialStatus? SelectedCredential =>
+        _credentialStatuses.FirstOrDefault(c => c.Key == _selectedServiceKey)
+        ?? _credentialStatuses.FirstOrDefault();
+
+    private RenderFragment RenderTextColorField(bool isLightMode) => __builder =>
+    {
+        var value = isLightMode ? _lightTextColor : _darkTextColor;
+        var presets = isLightMode ? AppearanceColorPresets.LightText : AppearanceColorPresets.DarkText;
+        var defaultColor = isLightMode ? AppearanceColorPresets.DefaultLightText : AppearanceColorPresets.DefaultDarkText;
+        var label = isLightMode ? "Light mode text" : "Dark mode text";
+        var hint = isLightMode
+            ? "Dark colours for light backgrounds."
+            : "Light colours for dark backgrounds.";
+        var previewBg = isLightMode ? "#f4f6fb" : "#0b1020";
+
+        <PresetColorField Label="@label"
+                          Hint="@hint"
+                          Value="@value"
+                          ValueChanged="@(color => OnTextColorChanged(isLightMode, color))"
+                          Presets="@presets"
+                          DefaultColor="@defaultColor">
+            <Preview>
+                <div class="appearance-text-preview" style="@($"color:{value};background:{previewBg}")">
+                    <span class="appearance-text-preview-heading">Sample heading</span>
+                    <span class="appearance-text-preview-body">Body text</span>
+                </div>
+            </Preview>
+        </PresetColorField>;
+    };
+
+    private RenderFragment RenderBackgroundColorField(bool isLightMode) => __builder =>
+    {
+        var value = isLightMode ? _lightBackgroundColor : _darkBackgroundColor;
+        var presets = isLightMode ? AppearanceColorPresets.LightBackground : AppearanceColorPresets.DarkBackground;
+        var defaultColor = isLightMode ? AppearanceColorPresets.DefaultLightBackground : AppearanceColorPresets.DefaultDarkBackground;
+        var label = isLightMode ? "Light background" : "Dark background";
+        var hint = isLightMode
+            ? "Page background in light mode."
+            : "Page background in dark mode.";
+
+        <PresetColorField Label="@label"
+                          Hint="@hint"
+                          Value="@value"
+                          ValueChanged="@(color => OnBackgroundColorChanged(isLightMode, color))"
+                          Presets="@presets"
+                          DefaultColor="@defaultColor">
+            <Preview>
+                <div class="appearance-bg-preview" style="@($"background:{value}")"></div>
+            </Preview>
+        </PresetColorField>;
+    };
+
+    protected override void OnInitialized()
+    {
+        RefreshCredentialStatuses();
+        LoadFromPrefs();
+        Prefs.Changed += OnPrefsChanged;
+        Secrets.Changed += OnSecretsChanged;
+        ThemeService.OnChange += OnSystemThemeChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RefreshSystemAppearanceAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshSystemAppearanceAsync()
+    {
+        _systemIsDark = _theme switch
+        {
+            ThemePreference.Dark => true,
+            ThemePreference.Light => false,
+            _ => await ThemeService.ResolveDarkModeAsync()
+        };
+    }
+
+    private async Task OnThemePreferenceChangedAsync()
+    {
+        await RefreshSystemAppearanceAsync();
+        ScheduleLivePreviewNow();
+    }
+
+    private void OnSystemThemeChanged() => _ = InvokeAsync(async () =>
+    {
+        if (_theme != ThemePreference.System)
+            return;
+
+        await RefreshSystemAppearanceAsync();
+        StateHasChanged();
+    });
+
+    private void LoadFromPrefs()
+    {
+        var prefs = Prefs.GetFormPreferences();
+        _theme = prefs.Theme;
+        _density = prefs.Density;
+        _borderRadius = prefs.BorderRadius;
+        _primaryColor = string.IsNullOrWhiteSpace(prefs.PrimaryColor)
+            ? AppearanceColorPresets.DefaultAccent
+            : prefs.PrimaryColor;
+        _lightTextColor = string.IsNullOrWhiteSpace(prefs.LightTextColor)
+            ? AppearanceColorPresets.DefaultLightText
+            : prefs.LightTextColor;
+        _darkTextColor = string.IsNullOrWhiteSpace(prefs.DarkTextColor)
+            ? AppearanceColorPresets.DefaultDarkText
+            : prefs.DarkTextColor;
+        _lightBackgroundColor = string.IsNullOrWhiteSpace(prefs.LightBackgroundColor)
+            ? AppearanceColorPresets.DefaultLightBackground
+            : prefs.LightBackgroundColor;
+        _darkBackgroundColor = string.IsNullOrWhiteSpace(prefs.DarkBackgroundColor)
+            ? AppearanceColorPresets.DefaultDarkBackground
+            : prefs.DarkBackgroundColor;
+        _backgroundStyle = prefs.BackgroundStyle;
+        _brandMark = prefs.BrandMark;
+        _dashboardTitle = prefs.DashboardTitle;
+        _dashboardSubtitle = prefs.DashboardSubtitle;
+        _hideHeroStrip = prefs.HideHeroStrip;
+        _posterSize = prefs.PosterSize;
+        _posterPlacement = prefs.PosterPlacement;
+        _showQuality = prefs.ShowQuality;
+        _showEpisodeBadges = prefs.ShowEpisodeBadges;
+        _showMissingEpisodes = prefs.ShowMissingEpisodes;
+        _showSyncNotes = prefs.ShowSyncNotes;
+        _defaultRecentLimit = prefs.DefaultRecentLimit;
+        _recentWindowMode = prefs.RecentWindowMode;
+        _recentDays = prefs.RecentDays;
+        _audiobookSource = prefs.AudiobookSource;
+        _timeFormat = prefs.TimeFormat;
+        _showPlexSessions = prefs.ShowPlexSessions;
+        _showEmbySessions = prefs.ShowEmbySessions;
+        _hideIdleSessions = prefs.HideIdleSessions;
+        _showServerMetrics = prefs.ShowServerMetrics;
+        _metricsPollIntervalSeconds = prefs.MetricsPollIntervalSeconds;
+        _metricsGraphWindowMinutes = prefs.MetricsGraphWindowMinutes;
+        _enableClickThrough = prefs.EnableClickThrough;
+        _deepLinkClickThrough = prefs.DeepLinkClickThrough;
+        _externalLinkTarget = prefs.ExternalLinkTarget;
+        _missingEpisodeClickAction = prefs.MissingEpisodeClickAction;
+        _friendlyQualityLabels = prefs.FriendlyQualityLabels;
+        _pollIntervalSeconds = prefs.PollIntervalSeconds;
+        _manualRefreshOnly = prefs.ManualRefreshOnly;
+        _statusBarMode = prefs.StatusBarMode;
+        _startupPage = prefs.StartupPage;
+        _autoKioskOnLoad = prefs.AutoKioskOnLoad;
+        _kioskHideHero = prefs.KioskHideHero;
+        _kioskLargeNowPlaying = prefs.KioskLargeNowPlaying;
+        _kioskScreensaver = prefs.KioskScreensaver;
+        _kioskScreensaverMinutes = prefs.KioskScreensaverMinutes;
+        _kioskRotate = prefs.KioskRotate;
+        _kioskRotateSeconds = prefs.KioskRotateSeconds;
+        _showSettingsHelp = prefs.ShowSettingsHelp;
+
+        _panelOrder = prefs.PanelOrder.Count > 0 ? prefs.PanelOrder.ToList() : PanelCatalog.DefaultOrder.ToList();
+        foreach (var panelId in PanelCatalog.DefaultOrder)
+        {
+            if (!_panelOrder.Contains(panelId))
+                _panelOrder.Add(panelId);
+        }
+
+        _recentLimits = PanelCatalog.Recent.ToDictionary(
+            p => p.Id,
+            p => prefs.RecentLimits.TryGetValue(p.Id, out var limit) ? limit : (int?)null);
+
+        _panelHidden = PanelCatalog.All.ToDictionary(
+            p => p.Id,
+            p => prefs.PanelCollapsed.TryGetValue(p.Id, out var hidden) && hidden);
+
+        _panelViewModes = PanelCatalog.All.ToDictionary(
+            p => p.Id,
+            p => prefs.PanelViewModes.TryGetValue(p.Id, out var mode) ? mode : PanelViewMode.Cards);
+
+        _panelAccentColors = PanelCatalog.All.ToDictionary(
+            p => p.Id,
+            p => prefs.PanelAccentColors.TryGetValue(p.Id, out var color) && !string.IsNullOrWhiteSpace(color)
+                ? color
+                : p.DefaultAccent);
+
+        foreach (var cred in _credentialStatuses)
+            _serviceEnabled[cred.Key] = prefs.ServiceEnabled.TryGetValue(cred.Key, out var enabled) ? enabled : true;
+    }
+
+    private void RefreshCredentialStatuses()
+    {
+        var configured = Secrets.GetConfiguredFlags(OptionsAccessor.Options);
+        var hints = Secrets.GetMaskedHints();
+        var urls = Secrets.GetCurrentUrls(OptionsAccessor.Options);
+        _credentialStatuses = ServiceCredentialCatalog.BuildStatuses(configured, hints, urls);
+
+        foreach (var cred in _credentialStatuses)
+        {
+            _credentialInputs.TryAdd(cred.Key, "");
+            _urlInputs.TryAdd(cred.Key, "");
+            _serviceEnabled.TryAdd(cred.Key, true);
+        }
+
+        if (_credentialStatuses.All(c => c.Key != _selectedServiceKey))
+            _selectedServiceKey = _credentialStatuses.FirstOrDefault()?.Key ?? "sonarr";
+    }
+
+    private UserLayoutPreferences BuildFormPrefs()
+    {
+        var prefs = Prefs.GetFormPreferences();
+        ApplyFormToPrefs(prefs);
+        return prefs;
+    }
+
+    private void OnDensityChanged(LayoutDensity value) { _density = value; ScheduleLivePreviewNow(); }
+    private void OnBorderRadiusChanged(BorderRadiusStyle value) { _borderRadius = value; ScheduleLivePreviewNow(); }
+    private void OnBrandMarkChanged(string value) { _brandMark = value; ScheduleLivePreviewDebounced(); }
+
+    private void OnTextColorChanged(bool isLightMode, string value)
+    {
+        if (isLightMode)
+            _lightTextColor = value;
+        else
+            _darkTextColor = value;
+
+        ScheduleLivePreviewDebounced();
+    }
+
+    private void OnBackgroundColorChanged(bool isLightMode, string value)
+    {
+        if (isLightMode)
+            _lightBackgroundColor = value;
+        else
+            _darkBackgroundColor = value;
+
+        ScheduleLivePreviewDebounced();
+    }
+
+    private void OnPanelAccentChanged(string panelId, string value)
+    {
+        _panelAccentColors[panelId] = value;
+        ScheduleLivePreviewDebounced();
+    }
+
+    private async Task PersistShowSettingsHelpAsync() =>
+        await Prefs.UpdateAsync(p => p.ShowSettingsHelp = _showSettingsHelp);
+
+    private InputType RevealType(string key) =>
+        _revealedKeys.Contains(key) ? InputType.Text : InputType.Password;
+
+    private void ToggleReveal(string key)
+    {
+        if (!_revealedKeys.Add(key))
+            _revealedKeys.Remove(key);
+    }
+
+    private void MovePanel(int index, int delta)
+    {
+        var target = index + delta;
+        if (target < 0 || target >= _panelOrder.Count)
+            return;
+
+        (_panelOrder[index], _panelOrder[target]) = (_panelOrder[target], _panelOrder[index]);
+        ScheduleLivePreviewNow();
+    }
+
+    private void SyncDraftFromForm()
+    {
+        var prefs = Prefs.GetFormPreferences();
+        ApplyFormToPrefs(prefs);
+        Prefs.SetSettingsDraft(prefs);
+    }
+
+    private void ScheduleLivePreviewDebounced()
+    {
+        SyncDraftFromForm();
+        ScheduleLivePreview(debounce: true);
+    }
+
+    private void ScheduleLivePreviewNow()
+    {
+        SyncDraftFromForm();
+        ScheduleLivePreview(debounce: false);
+    }
+
+    private void ScheduleLivePreview(bool debounce)
+    {
+        if (debounce)
+        {
+            _debounceTimer?.Dispose();
+            _debounceTimer = new System.Threading.Timer(_ =>
+                _ = InvokeAsync(PushLivePreviewAsync), null, 350, Timeout.Infinite);
+            return;
+        }
+
+        _ = PushLivePreviewAsync();
+    }
+
+    private async Task PushLivePreviewAsync()
+    {
+        var prefs = new UserLayoutPreferences();
+        ApplyFormToPrefs(prefs);
+        var secretUpdates = BuildSecretUpdates();
+        var hasPrefChanges = Prefs.DiffersFromSaved(prefs);
+        var hasSecretChanges = HasAnySecretInput(secretUpdates);
+
+        if (!hasPrefChanges && !hasSecretChanges)
+        {
+            ClearLivePreview();
+            Prefs.ClearSettingsDraft();
+            await RefreshService.RefreshAsync(CancellationToken.None);
+            return;
+        }
+
+        Prefs.SetSettingsDraft(prefs);
+        Prefs.SetPreview(prefs);
+        CredentialsPreview.Set(hasSecretChanges ? secretUpdates : null);
+        OptionsAccessor.Reload();
+        await RefreshService.RefreshAsync(CancellationToken.None);
+    }
+
+    private void ClearLivePreview()
+    {
+        _debounceTimer?.Dispose();
+        Prefs.ClearPreview();
+        Prefs.ClearSettingsDraft();
+        CredentialsPreview.Clear();
+        OptionsAccessor.Reload();
+    }
+
+    private async Task PreviewDashboardAsync()
+    {
+        _debounceTimer?.Dispose();
+        SyncDraftFromForm();
+        await PushLivePreviewAsync();
+        Nav.NavigateTo("/");
+    }
+
+    private ServiceTestInput BuildTestInput(string serviceKey)
+    {
+        _urlInputs.TryGetValue(serviceKey, out var url);
+        _credentialInputs.TryGetValue(serviceKey, out var key);
+        return new ServiceTestInput(
+            string.IsNullOrWhiteSpace(url) ? null : url.Trim(),
+            string.IsNullOrWhiteSpace(key) ? null : key.Trim());
+    }
+
+    private async Task TestConnectionAsync(string serviceKey)
+    {
+        _testing.Add(serviceKey);
+        try
+        {
+            var (ok, message) = await ConnectionTester.TestAsync(serviceKey, BuildTestInput(serviceKey), CancellationToken.None);
+            var label = _credentialStatuses.FirstOrDefault(c => c.Key == serviceKey)?.Label ?? serviceKey;
+            Snackbar.Add($"{label}: {message}", ok ? Severity.Success : Severity.Warning);
+        }
+        finally
+        {
+            _testing.Remove(serviceKey);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        try
+        {
+            var prefs = BuildFormPrefs();
+            await Prefs.SaveAsync(prefs);
+            await ThemeService.SetPreferenceAsync(_theme);
+            CredentialsPreview.Clear();
+
+            var secretUpdates = BuildSecretUpdates();
+            if (HasAnySecretInput(secretUpdates))
+            {
+                await Secrets.SavePartialAsync(secretUpdates);
+                OptionsAccessor.Reload();
+            }
+
+            await RefreshService.RefreshAsync(CancellationToken.None);
+
+            foreach (var key in _credentialInputs.Keys.ToList())
+                _credentialInputs[key] = "";
+            foreach (var key in _urlInputs.Keys.ToList())
+                _urlInputs[key] = "";
+
+            RefreshCredentialStatuses();
+            Snackbar.Add("Settings saved.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Save failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void ApplyFormToPrefs(UserLayoutPreferences p)
+    {
+        p.Theme = _theme;
+        p.Density = _density;
+        p.BorderRadius = _borderRadius;
+        var accent = ThemeBuilder.NormalizeColor(_primaryColor.Trim(), AppearanceColorPresets.DefaultAccent);
+        p.PrimaryColor = accent;
+        p.SecondaryColor = ThemeBuilder.DeriveSecondaryColor(accent);
+        p.GradientStartColor = accent;
+        p.GradientEndColor = ThemeBuilder.DeriveSecondaryColor(accent);
+        p.LightTextColor = ThemeBuilder.NormalizeColor(_lightTextColor.Trim(), AppearanceColorPresets.DefaultLightText);
+        p.DarkTextColor = ThemeBuilder.NormalizeColor(_darkTextColor.Trim(), AppearanceColorPresets.DefaultDarkText);
+        p.LightBackgroundColor = ThemeBuilder.NormalizeColor(_lightBackgroundColor.Trim(), AppearanceColorPresets.DefaultLightBackground);
+        p.DarkBackgroundColor = ThemeBuilder.NormalizeColor(_darkBackgroundColor.Trim(), AppearanceColorPresets.DefaultDarkBackground);
+        p.BackgroundStyle = _backgroundStyle;
+        p.BrandMark = string.IsNullOrWhiteSpace(_brandMark) ? "A" : _brandMark.Trim()[..Math.Min(3, _brandMark.Trim().Length)];
+        p.DashboardTitle = _dashboardTitle.Trim();
+        p.DashboardSubtitle = _dashboardSubtitle.Trim();
+        p.HideHeroStrip = _hideHeroStrip;
+        p.PosterSize = _posterSize;
+        p.PosterPlacement = _posterPlacement;
+        p.ShowQuality = _showQuality;
+        p.ShowEpisodeBadges = _showEpisodeBadges;
+        p.ShowMissingEpisodes = _showMissingEpisodes;
+        p.ShowSyncNotes = _showSyncNotes;
+        p.DefaultRecentLimit = Math.Clamp(_defaultRecentLimit, 5, 100);
+        p.RecentWindowMode = _recentWindowMode;
+        p.RecentDays = Math.Clamp(_recentDays, 1, 365);
+        p.AudiobookSource = _audiobookSource;
+        p.TimeFormat = _timeFormat;
+        p.ShowPlexSessions = _showPlexSessions;
+        p.ShowEmbySessions = _showEmbySessions;
+        p.HideIdleSessions = _hideIdleSessions;
+        p.ShowServerMetrics = _showServerMetrics;
+        p.MetricsPollIntervalSeconds = Math.Clamp(_metricsPollIntervalSeconds, 0, 60);
+        p.MetricsGraphWindowMinutes = Math.Clamp(_metricsGraphWindowMinutes, 0, 240);
+        p.EnableClickThrough = _enableClickThrough;
+        p.DeepLinkClickThrough = _deepLinkClickThrough;
+        p.ExternalLinkTarget = _externalLinkTarget;
+        p.MissingEpisodeClickAction = _missingEpisodeClickAction;
+        p.FriendlyQualityLabels = _friendlyQualityLabels;
+        p.PollIntervalSeconds = Math.Clamp(_pollIntervalSeconds, 0, 3600);
+        p.ManualRefreshOnly = _manualRefreshOnly;
+        p.StatusBarMode = _statusBarMode;
+        p.StartupPage = _startupPage;
+        p.AutoKioskOnLoad = _autoKioskOnLoad;
+        p.KioskHideHero = _kioskHideHero;
+        p.KioskLargeNowPlaying = _kioskLargeNowPlaying;
+        p.KioskScreensaver = _kioskScreensaver;
+        p.KioskScreensaverMinutes = Math.Clamp(_kioskScreensaverMinutes, 1, 120);
+        p.KioskRotate = _kioskRotate;
+        p.KioskRotateSeconds = Math.Clamp(_kioskRotateSeconds, 5, 300);
+        p.PanelOrder = _panelOrder.ToList();
+        p.RecentLimits = _recentLimits.Where(kv => kv.Value is > 0).ToDictionary(kv => kv.Key, kv => Math.Clamp(kv.Value!.Value, 5, 100));
+        p.PanelCollapsed = _panelHidden.Where(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value);
+        p.PanelViewModes = new Dictionary<string, PanelViewMode>(_panelViewModes);
+        p.PanelAccentColors = _panelAccentColors.ToDictionary(
+            kv => kv.Key,
+            kv => ThemeBuilder.NormalizeColor(kv.Value.Trim(), PanelCatalog.All.First(p => p.Id == kv.Key).DefaultAccent));
+        p.ServiceEnabled = _serviceEnabled.ToDictionary(kv => kv.Key, kv => kv.Value);
+        p.ShowSettingsHelp = _showSettingsHelp;
+    }
+
+    private ServiceSecretsFile BuildSecretUpdates() => new()
+    {
+        SonarrApiKey = _credentialInputs.GetValueOrDefault("sonarr"),
+        RadarrApiKey = _credentialInputs.GetValueOrDefault("radarr"),
+        LidarrApiKey = _credentialInputs.GetValueOrDefault("lidarr"),
+        ChaptarrApiKey = _credentialInputs.GetValueOrDefault("chaptarr"),
+        AudiobookShelfApiKey = _credentialInputs.GetValueOrDefault("audiobookshelf"),
+        SlskdApiKey = _credentialInputs.GetValueOrDefault("slskd"),
+        PlexToken = _credentialInputs.GetValueOrDefault("plex"),
+        EmbyApiKey = _credentialInputs.GetValueOrDefault("emby"),
+        SonarrUrl = _urlInputs.GetValueOrDefault("sonarr"),
+        RadarrUrl = _urlInputs.GetValueOrDefault("radarr"),
+        LidarrUrl = _urlInputs.GetValueOrDefault("lidarr"),
+        ChaptarrUrl = _urlInputs.GetValueOrDefault("chaptarr"),
+        AudiobookShelfUrl = _urlInputs.GetValueOrDefault("audiobookshelf"),
+        SlskdUrl = _urlInputs.GetValueOrDefault("slskd"),
+        PlexUrl = _urlInputs.GetValueOrDefault("plex"),
+        EmbyUrl = _urlInputs.GetValueOrDefault("emby")
+    };
+
+    private static bool HasAnySecretInput(ServiceSecretsFile updates) =>
+        !string.IsNullOrWhiteSpace(updates.SonarrApiKey)
+        || !string.IsNullOrWhiteSpace(updates.RadarrApiKey)
+        || !string.IsNullOrWhiteSpace(updates.LidarrApiKey)
+        || !string.IsNullOrWhiteSpace(updates.ChaptarrApiKey)
+        || !string.IsNullOrWhiteSpace(updates.AudiobookShelfApiKey)
+        || !string.IsNullOrWhiteSpace(updates.SlskdApiKey)
+        || !string.IsNullOrWhiteSpace(updates.PlexToken)
+        || !string.IsNullOrWhiteSpace(updates.EmbyApiKey)
+        || !string.IsNullOrWhiteSpace(updates.SonarrUrl)
+        || !string.IsNullOrWhiteSpace(updates.RadarrUrl)
+        || !string.IsNullOrWhiteSpace(updates.LidarrUrl)
+        || !string.IsNullOrWhiteSpace(updates.ChaptarrUrl)
+        || !string.IsNullOrWhiteSpace(updates.AudiobookShelfUrl)
+        || !string.IsNullOrWhiteSpace(updates.SlskdUrl)
+        || !string.IsNullOrWhiteSpace(updates.PlexUrl)
+        || !string.IsNullOrWhiteSpace(updates.EmbyUrl);
+
+    private void Cancel()
+    {
+        ClearLivePreview();
+        LoadFromPrefs();
+        _ = RefreshService.RefreshAsync(CancellationToken.None);
+        Nav.NavigateTo("/");
+    }
+
+    private void OnPrefsChanged() => _ = InvokeAsync(async () =>
+    {
+        if (!Prefs.IsPreviewActive)
+            LoadFromPrefs();
+        else if (_theme == ThemePreference.System)
+            await RefreshSystemAppearanceAsync();
+
+        StateHasChanged();
+    });
+
+    private void OnSecretsChanged() => _ = InvokeAsync(() => { RefreshCredentialStatuses(); StateHasChanged(); });
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+        Prefs.Changed -= OnPrefsChanged;
+        Secrets.Changed -= OnSecretsChanged;
+        ThemeService.OnChange -= OnSystemThemeChanged;
+    }
+}

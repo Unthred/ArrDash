@@ -1,0 +1,349 @@
+@page "/"
+@inject DashboardState State
+@inject LayoutPreferencesService Prefs
+@inject DashboardRefreshService RefreshService
+@inject NavigationManager Nav
+@using Microsoft.AspNetCore.SignalR.Client
+@implements IAsyncDisposable
+@implements IDisposable
+@inject IJSRuntime Js
+
+<PageTitle>ArrDash</PageTitle>
+
+<div class="@DashboardShellClass" @onmousemove="ResetIdle" @onkeydown="ResetIdle">
+    @if (_screensaverActive)
+    {
+        <div class="screensaver" @onclick="ResetIdle">
+            <div class="screensaver-clock">@DateTime.Now.ToString("HH:mm")</div>
+            <div class="screensaver-copy">Nothing playing</div>
+        </div>
+    }
+
+    @if (ShowHero)
+    {
+        <section class="hero-strip">
+            <div>
+                <h1 class="hero-title">@_display.Title</h1>
+                <p class="hero-copy">@_display.Subtitle</p>
+            </div>
+            <div class="hero-meta">
+                <MudText Typo="Typo.caption" Class="muted">Last refresh</MudText>
+                <MudText Typo="Typo.body2">@FormatUpdated(_snapshot.UpdatedAt)</MudText>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshNow" Class="mt-2">
+                    Refresh now
+                </MudButton>
+            </div>
+        </section>
+    }
+
+    @if (Prefs.Current.ShowServerMetrics && _snapshot.Host is not null)
+    {
+        <ServerMetricsBar Metrics="_snapshot.Host" SampledAt="_snapshot.UpdatedAt" />
+    }
+
+    @foreach (var panelId in VisiblePanels)
+    {
+        @if (!ShouldShowPanel(panelId))
+        {
+            continue;
+        }
+
+        @switch (panelId)
+        {
+            case "now-playing":
+                <NowPlayingPanel Sessions="_snapshot.ActiveSessions"
+                                   Kiosk="Kiosk"
+                                   Accent="@Prefs.GetPanelAccent(panelId, "#818cf8")"
+                                   EnableClickThrough="@Prefs.Current.EnableClickThrough"
+                                   ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
+                                   LargeCards="@(Kiosk && Prefs.Current.KioskLargeNowPlaying)" />
+                break;
+            case "recent-tv":
+                <DownloadPanel PanelId="recent-tv" Title="Recent TV" Icon="@Icons.Material.Filled.LiveTv"
+                               Accent="@Prefs.GetPanelAccent(panelId, "#35c5f4")" Items="_snapshot.RecentTv" ViewMode="@GetViewMode(panelId)"
+                               TimeFormat="@Prefs.Current.TimeFormat" ShowQuality="@Prefs.Current.ShowQuality"
+                               ShowEpisodeBadges="@Prefs.Current.ShowEpisodeBadges" ShowMissingEpisodes="@Prefs.Current.ShowMissingEpisodes" ShowSyncNotes="@Prefs.Current.ShowSyncNotes"
+                               EnableClickThrough="@Prefs.Current.EnableClickThrough"
+                               DeepLinkClickThrough="@Prefs.Current.DeepLinkClickThrough"
+                               ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
+                               FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
+                               ServiceUrl="@OptionsAccessor.Options.Sonarr.Url"
+                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))" />
+                break;
+            case "recent-movies":
+                <DownloadPanel PanelId="recent-movies" Title="Recent Movies" Icon="@Icons.Material.Filled.Movie"
+                               Accent="@Prefs.GetPanelAccent(panelId, "#f5c518")" Items="_snapshot.RecentMovies" ViewMode="@GetViewMode(panelId)"
+                               TimeFormat="@Prefs.Current.TimeFormat" ShowQuality="@Prefs.Current.ShowQuality"
+                               ShowEpisodeBadges="@Prefs.Current.ShowEpisodeBadges" ShowMissingEpisodes="@Prefs.Current.ShowMissingEpisodes" ShowSyncNotes="@Prefs.Current.ShowSyncNotes"
+                               EnableClickThrough="@Prefs.Current.EnableClickThrough"
+                               DeepLinkClickThrough="@Prefs.Current.DeepLinkClickThrough"
+                               ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
+                               FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
+                               ServiceUrl="@OptionsAccessor.Options.Radarr.Url"
+                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))" />
+                break;
+            case "recent-audiobooks":
+                <DownloadPanel PanelId="recent-audiobooks" Title="Recent Audiobooks" Icon="@Icons.Material.Filled.Headphones"
+                               Accent="@Prefs.GetPanelAccent(panelId, "#00d2be")" Items="_snapshot.RecentAudiobooks" ViewMode="@GetViewMode(panelId)"
+                               TimeFormat="@Prefs.Current.TimeFormat" ShowQuality="@Prefs.Current.ShowQuality"
+                               ShowEpisodeBadges="@Prefs.Current.ShowEpisodeBadges" ShowMissingEpisodes="@Prefs.Current.ShowMissingEpisodes" ShowSyncNotes="@Prefs.Current.ShowSyncNotes"
+                               EnableClickThrough="@Prefs.Current.EnableClickThrough"
+                               DeepLinkClickThrough="@Prefs.Current.DeepLinkClickThrough"
+                               ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
+                               FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
+                               ServiceUrl="@OptionsAccessor.Options.Chaptarr.Url"
+                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))"
+                               NotConfiguredMessage="@AudiobookPanelMessage()" />
+                break;
+            case "recent-music":
+                <DownloadPanel PanelId="recent-music" Title="Recent Music" Icon="@Icons.Material.Filled.MusicNote"
+                               Accent="@Prefs.GetPanelAccent(panelId, "#bc93e1")" Items="_snapshot.RecentMusic" ViewMode="@GetViewMode(panelId)"
+                               TimeFormat="@Prefs.Current.TimeFormat" ShowQuality="@Prefs.Current.ShowQuality"
+                               ShowEpisodeBadges="@Prefs.Current.ShowEpisodeBadges" ShowMissingEpisodes="@Prefs.Current.ShowMissingEpisodes" ShowSyncNotes="@Prefs.Current.ShowSyncNotes"
+                               EnableClickThrough="@Prefs.Current.EnableClickThrough"
+                               DeepLinkClickThrough="@Prefs.Current.DeepLinkClickThrough"
+                               ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
+                               FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
+                               ServiceUrl="@OptionsAccessor.Options.Lidarr.Url"
+                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))"
+                               NotConfiguredMessage="@MusicNotConfiguredMessage()" />
+                break;
+        }
+    }
+
+    @if (Prefs.Current.StatusBarMode != StatusBarMode.Hidden)
+    {
+        <ServiceStatusBar Services="_snapshot.Services" Mode="Prefs.Current.StatusBarMode" />
+    }
+</div>
+
+@code {
+    [Inject] private MediaServiceOptionsAccessor OptionsAccessor { get; set; } = default!;
+
+    private DashboardSnapshot _snapshot = DashboardState.Empty();
+    private HubConnection? _hub;
+    private DashboardDisplaySettings _display = new("Your media universe", "", PosterSize.Medium, PosterPlacement.Left, new Dictionary<string, string>());
+    private System.Threading.Timer? _rotateTimer;
+    private System.Threading.Timer? _screensaverTimer;
+    private System.Threading.Timer? _refreshLabelTimer;
+    private int _rotateIndex;
+    private DateTime _lastActivity = DateTime.UtcNow;
+    private bool _screensaverActive;
+    [CascadingParameter] public bool Kiosk { get; set; }
+
+    private IReadOnlyList<string> VisiblePanels => Prefs.GetVisiblePanelOrder();
+    private bool ShowHero => !Prefs.Current.HideHeroStrip && !(Kiosk && Prefs.Current.KioskHideHero);
+
+    private string DashboardShellClass =>
+        $"dashboard-shell poster-size-{Prefs.Current.PosterSize.ToString().ToLowerInvariant()} poster-placement-{Prefs.Current.PosterPlacement.ToString().ToLowerInvariant()}";
+
+    protected override void OnInitialized()
+    {
+        _snapshot = State.Current;
+        _display = Prefs.GetDisplaySettings();
+        Prefs.Changed += OnPrefsChanged;
+        ConfigureRefreshLabelTimer();
+        ApplyStartupPagePreference();
+    }
+
+    protected override void OnParametersSet()
+    {
+        _display = Prefs.GetDisplaySettings();
+        ApplyStartupPagePreference();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _snapshot = State.Current;
+        ConfigureKioskTimers();
+        StateHasChanged();
+
+        _hub = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/hubs/dashboard"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hub.On<DashboardSnapshot>("DashboardUpdated", snapshot =>
+        {
+            _snapshot = snapshot;
+            UpdateScreensaverState();
+            return InvokeAsync(StateHasChanged);
+        });
+
+        _hub.Reconnected += _ =>
+        {
+            _snapshot = State.Current;
+            return InvokeAsync(StateHasChanged);
+        };
+
+        try
+        {
+            await _hub.StartAsync();
+            _snapshot = State.Current;
+            StateHasChanged();
+        }
+        catch
+        {
+            await RefreshNow();
+        }
+    }
+
+    private void ConfigureRefreshLabelTimer()
+    {
+        _refreshLabelTimer?.Dispose();
+        if (!ShowHero)
+            return;
+
+        _refreshLabelTimer = new System.Threading.Timer(_ =>
+            _ = InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private void ConfigureKioskTimers()
+    {
+        _rotateTimer?.Dispose();
+        _screensaverTimer?.Dispose();
+
+        if (Kiosk && Prefs.Current.KioskRotate == KioskRotateMode.Sequential)
+        {
+            var seconds = Math.Clamp(Prefs.Current.KioskRotateSeconds, 5, 300);
+            _rotateTimer = new System.Threading.Timer(_ =>
+            {
+                var panels = Prefs.GetVisiblePanelOrder();
+                if (panels.Count == 0) return;
+                _rotateIndex = (_rotateIndex + 1) % panels.Count;
+                _ = InvokeAsync(StateHasChanged);
+            }, null, TimeSpan.FromSeconds(seconds), TimeSpan.FromSeconds(seconds));
+        }
+
+        if (Kiosk && Prefs.Current.KioskScreensaver)
+        {
+            _screensaverTimer = new System.Threading.Timer(_ =>
+            {
+                UpdateScreensaverState();
+                _ = InvokeAsync(StateHasChanged);
+            }, null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+        }
+    }
+
+    private void UpdateScreensaverState()
+    {
+        if (!Kiosk || !Prefs.Current.KioskScreensaver)
+        {
+            _screensaverActive = false;
+            return;
+        }
+
+        var idleMinutes = Math.Clamp(Prefs.Current.KioskScreensaverMinutes, 1, 120);
+        var idle = DateTime.UtcNow - _lastActivity;
+        _screensaverActive = _snapshot.ActiveSessions.Count == 0 && idle >= TimeSpan.FromMinutes(idleMinutes);
+    }
+
+    private void ResetIdle()
+    {
+        _lastActivity = DateTime.UtcNow;
+        if (_screensaverActive)
+        {
+            _screensaverActive = false;
+            StateHasChanged();
+        }
+    }
+
+    private bool ShouldShowPanel(string panelId)
+    {
+        var prefs = Prefs.Current;
+        if (!Kiosk)
+            return true;
+
+        return prefs.KioskRotate switch
+        {
+            KioskRotateMode.NowPlayingOnly => panelId == "now-playing",
+            KioskRotateMode.Sequential => VisiblePanels.Count > 0 && VisiblePanels[_rotateIndex % VisiblePanels.Count] == panelId,
+            _ => true
+        };
+    }
+
+    private void OnPrefsChanged()
+    {
+        _display = Prefs.GetDisplaySettings();
+        ApplyStartupPagePreference();
+        ConfigureKioskTimers();
+        ConfigureRefreshLabelTimer();
+        _ = InvokeAsync(async () =>
+        {
+            await RefreshNow();
+            StateHasChanged();
+        });
+    }
+
+    private void ApplyStartupPagePreference()
+    {
+        if (Prefs.Current.StartupPage != StartupPage.Settings)
+            return;
+
+        var path = new Uri(Nav.Uri).AbsolutePath.TrimEnd('/');
+        if (!path.Equals("/settings", StringComparison.OrdinalIgnoreCase))
+            Nav.NavigateTo("/settings", replace: true);
+    }
+
+    private PanelViewMode GetViewMode(string panelId) =>
+        Prefs.Current.PanelViewModes.TryGetValue(panelId, out var mode) ? mode : PanelViewMode.Cards;
+
+    private string FormatUpdated(DateTimeOffset ts) =>
+        TimeDisplayHelper.FormatLastRefresh(ts, Prefs.Current.TimeFormat);
+
+    private string? MusicNotConfiguredMessage()
+    {
+        var lidarr = _snapshot.Services.FirstOrDefault(s => s.Key == "lidarr");
+        if (lidarr is { Configured: false })
+            return "Add Lidarr and slskd API keys in Settings to enable music downloads.";
+        return null;
+    }
+
+    private string? AudiobookPanelMessage()
+    {
+        if (_snapshot.RecentAudiobooks.Count > 0)
+            return null;
+
+        var chaptarr = _snapshot.Services.FirstOrDefault(s => s.Key == "chaptarr");
+        var abs = _snapshot.Services.FirstOrDefault(s => s.Key == "audiobookshelf");
+
+        if (abs is { Configured: false })
+            return "Add AudioBookShelf API key in Settings to show library audiobooks.";
+
+        if (chaptarr is { Online: false } && abs is { Online: false })
+            return "Chaptarr and AudioBookShelf are unreachable. Chaptarr currently reports a database error.";
+
+        return null;
+    }
+
+    private async Task RefreshNow()
+    {
+        await RefreshService.RefreshAsync(CancellationToken.None);
+        _snapshot = State.Current;
+        UpdateScreensaverState();
+        StateHasChanged();
+    }
+
+    private async Task OnViewModeChanged(string panelId, PanelViewMode mode)
+    {
+        await Prefs.UpdatePanelViewModeAsync(panelId, mode);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Prefs.Changed -= OnPrefsChanged;
+        _rotateTimer?.Dispose();
+        _screensaverTimer?.Dispose();
+        _refreshLabelTimer?.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Dispose();
+        if (_hub is not null)
+            await _hub.DisposeAsync();
+    }
+}

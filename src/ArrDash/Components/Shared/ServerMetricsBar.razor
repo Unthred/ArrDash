@@ -1,0 +1,547 @@
+@using ArrDash.Models
+@using ArrDash.Services
+@using System.Globalization
+@using Microsoft.JSInterop
+@implements IDisposable
+@implements IAsyncDisposable
+@inject HostSystemMetricsService HostMetrics
+@inject LayoutPreferencesService Prefs
+@inject LibraryStatsService LibraryStats
+@inject IJSRuntime Js
+
+@if (DisplayMetrics is not null)
+{
+    <MudPaper Class="@ShellClass" Elevation="0">
+        <div class="server-metrics-head panel-header-rollup" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
+            <div class="server-metrics-title-wrap">
+                <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
+                <span class="server-metrics-label">@DisplayMetrics.Label</span>
+            </div>
+
+            @if (RolledUp)
+            {
+                <div class="rollup-summary server-metrics-rollup">
+                    <div class="rollup-metrics-group">
+                        <CpuSparkline Samples="SparkSamples" />
+                        <span class="rollup-stat rollup-stat-cpu">CPU @($"{_displayCpu ?? DisplayMetrics.CpuPercent ?? 0:0.#}%")</span>
+                    </div>
+                    <MiniUsageRing Label="Mem"
+                                   Detail="@ByteDisplayHelper.FormatUsedTotal(DisplayMetrics.MemoryUsedBytes, DisplayMetrics.MemoryTotalBytes)"
+                                   Percent="DisplayMetrics.MemoryUsedPercent"
+                                   Color="@UsageColor(DisplayMetrics.MemoryUsedPercent)" />
+                    <MiniUsageRing Label="Disk"
+                                   Detail="@ByteDisplayHelper.FormatUsedTotal(DisplayMetrics.DiskUsedBytes, DisplayMetrics.DiskTotalBytes)"
+                                   Percent="DisplayMetrics.DiskUsedPercent"
+                                   Color="@UsageColor(DisplayMetrics.DiskUsedPercent)" />
+                    @if (_libraryStats.Count > 0)
+                    {
+                        <RollupLibraryStrip Stats="_libraryStats" />
+                    }
+                </div>
+            }
+        </div>
+
+        @if (!RolledUp)
+        {
+        <div class="server-metrics-body">
+            <div class="cpu-live-graph">
+                <div class="cpu-live-head">
+                    <span class="cpu-live-title">CPU usage</span>
+                    @if (_displayCpu is not null)
+                    {
+                        <span class="cpu-live-now">@($"{_displayCpu:0.#}%")</span>
+                    }
+                </div>
+                <div class="cpu-live-chart-row">
+                    <div class="cpu-live-axis-y" aria-hidden="true">
+                        <span>100%</span>
+                        <span>50%</span>
+                        <span>0%</span>
+                    </div>
+                    <div class="cpu-live-plot" @ref="_plotRef">
+                        <div class="cpu-live-hitarea"
+                             @onmousemove="OnGraphHover"
+                             @onmouseleave="OnGraphLeave"></div>
+                        <svg viewBox="0 0 @ChartWidth @ChartHeight" preserveAspectRatio="none" class="cpu-live-svg" aria-label="CPU usage over time">
+                            <defs>
+                                <linearGradient id="cpuAreaFill" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="var(--cpu-line)" stop-opacity="0.35" />
+                                    <stop offset="100%" stop-color="var(--cpu-line)" stop-opacity="0.02" />
+                                </linearGradient>
+                            </defs>
+                            @foreach (var y in _gridLines)
+                            {
+                                <line x1="@PlotLeft" y1="@y" x2="@PlotRight" y2="@y" class="cpu-grid-line" />
+                            }
+                            @if (!string.IsNullOrEmpty(_areaPath))
+                            {
+                                <path d="@_areaPath" class="cpu-area" />
+                            }
+                            @if (!string.IsNullOrEmpty(_linePath))
+                            {
+                                <path d="@_linePath" class="cpu-line" />
+                            }
+                            @if (_hover is { } hover)
+                            {
+                                <line x1="@hover.ChartX" y1="@PlotTop" x2="@hover.ChartX" y2="@PlotBottom" class="cpu-hover-line" />
+                                <circle cx="@hover.ChartX" cy="@hover.ChartY" r="3.5" class="cpu-dot cpu-hover-dot" />
+                            }
+                            else if (_latestPoint is { } point)
+                            {
+                                <circle cx="@point.X" cy="@point.Y" r="3" class="cpu-dot" />
+                            }
+                        </svg>
+                        @if (_hover is { } tip)
+                        {
+                            <div class="cpu-graph-tooltip" style="left: @(tip.PixelX.ToString(CultureInfo.InvariantCulture))px">
+                                <span class="cpu-graph-tooltip-value">@($"{tip.Percent:0.#}%")</span>
+                                <span class="cpu-graph-tooltip-time">@tip.TimeLabel</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+                <div class="cpu-live-axis-x">
+                    <span>@_windowStartLabel</span>
+                    <span>now</span>
+                </div>
+            </div>
+
+            <div class="usage-stack">
+                <div class="usage-row" style="@RingStyle(DisplayMetrics.MemoryUsedPercent)">
+                    @RingSvg(DisplayMetrics.MemoryUsedPercent)
+                    <div class="usage-row-copy">
+                        <div class="usage-row-title">Memory</div>
+                        <div class="usage-row-used">@ByteDisplayHelper.Format(DisplayMetrics.MemoryUsedBytes) used</div>
+                        <div class="usage-row-total">@ByteDisplayHelper.Format(DisplayMetrics.MemoryTotalBytes - DisplayMetrics.MemoryUsedBytes) free · @ByteDisplayHelper.Format(DisplayMetrics.MemoryTotalBytes) total</div>
+                    </div>
+                </div>
+                <div class="usage-stack-divider" aria-hidden="true"></div>
+                <div class="usage-row" style="@RingStyle(DisplayMetrics.DiskUsedPercent)">
+                    @RingSvg(DisplayMetrics.DiskUsedPercent)
+                    <div class="usage-row-copy">
+                        <div class="usage-row-title">Disk</div>
+                        <div class="usage-row-used">@ByteDisplayHelper.Format(DisplayMetrics.DiskUsedBytes) used</div>
+                        <div class="usage-row-total">@ByteDisplayHelper.Format(DisplayMetrics.DiskTotalBytes - DisplayMetrics.DiskUsedBytes) free · @ByteDisplayHelper.Format(DisplayMetrics.DiskTotalBytes) total</div>
+                    </div>
+                </div>
+            </div>
+
+            @if (_libraryStats.Count > 0)
+            {
+                <div class="library-stack">
+                    <div class="library-stack-head">Libraries</div>
+                    <div class="library-stack-grid">
+                    @foreach (var stat in _libraryStats)
+                    {
+                        var rowClass = "library-row" + (Prefs.Current.EnableClickThrough && !string.IsNullOrWhiteSpace(stat.Url) ? " library-row-link" : "");
+                        if (Prefs.Current.EnableClickThrough && !string.IsNullOrWhiteSpace(stat.Url))
+                        {
+                            <a class="@rowClass" href="@stat.Url" target="@ExternalLinkService.TargetAttribute(Prefs.Current.ExternalLinkTarget)" rel="@(Prefs.Current.ExternalLinkTarget == ExternalLinkTarget.NewTab ? "noopener noreferrer" : null)" style="@LibraryAccentStyle(stat.AccentColor)">
+                                <span class="library-row-label">@stat.Label</span>
+                                <span class="library-row-headline">@stat.Headline</span>
+                                @if (!string.IsNullOrWhiteSpace(stat.Detail))
+                                {
+                                    <span class="library-row-detail">@stat.Detail</span>
+                                }
+                            </a>
+                        }
+                        else
+                        {
+                            <div class="@rowClass" style="@LibraryAccentStyle(stat.AccentColor)">
+                                <span class="library-row-label">@stat.Label</span>
+                                <span class="library-row-headline">@stat.Headline</span>
+                                @if (!string.IsNullOrWhiteSpace(stat.Detail))
+                                {
+                                    <span class="library-row-detail">@stat.Detail</span>
+                                }
+                            </div>
+                        }
+                    }
+                    </div>
+                </div>
+            }
+        </div>
+        }
+    </MudPaper>
+}
+
+@code {
+    private const string PanelId = "server-metrics";
+    private const int ChartWidth = 640;
+    private const int ChartHeight = 72;
+    private const double PlotLeft = 8;
+    private const double PlotRight = ChartWidth - 8;
+    private const double PlotTop = 0;
+    private const double PlotBottom = ChartHeight;
+    private const double RingRadius = 30;
+    private static readonly double RingCircumference = 2 * Math.PI * RingRadius;
+    private static readonly int EnvMetricsPollDefault =
+        int.TryParse(Environment.GetEnvironmentVariable("ARRDASH_METRICS_POLL_SECONDS"), out var seconds)
+            ? Math.Clamp(seconds, 1, 60)
+            : 2;
+    private static readonly int EnvMetricsGraphWindowDefault =
+        int.TryParse(Environment.GetEnvironmentVariable("ARRDASH_METRICS_GRAPH_MINUTES"), out var minutes)
+            ? Math.Clamp(minutes, 5, 240)
+            : 15;
+
+    [Parameter] public ServerMetrics? Metrics { get; set; }
+    [Parameter] public DateTimeOffset SampledAt { get; set; }
+
+    private ServerMetrics? _liveMetrics;
+    private ServerMetrics? DisplayMetrics => _liveMetrics ?? Metrics;
+
+    private readonly List<CpuSample> _cpuSamples = [];
+    private readonly double[] _gridLines = [YForPercent(100), YForPercent(50), YForPercent(0)];
+    private CancellationTokenSource _pollCts = new();
+    private int _pollIntervalSeconds = EnvMetricsPollDefault;
+    private int _graphWindowMinutes = EnvMetricsGraphWindowDefault;
+    private double? _displayCpu;
+    private string _linePath = "";
+    private string _areaPath = "";
+    private PlotPoint? _latestPoint;
+    private string _windowStartLabel = "";
+    private HoverState? _hover;
+    private ElementReference _plotRef;
+    private System.Threading.Timer? _scrollTimer;
+    private Task? _pollLoopTask;
+    private IReadOnlyList<LibraryStatItem> _libraryStats = [];
+    private DateTimeOffset _libraryStatsLoadedAt;
+    private bool _libraryStatsLoading;
+
+    private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
+    private string ShellClass => RolledUp ? "server-metrics-bar is-rolled-up" : "server-metrics-bar";
+    private IReadOnlyList<double> SparkSamples =>
+        _cpuSamples.Select(sample => sample.Percent).TakeLast(24).ToList();
+
+    private async Task ToggleRollup() => await Prefs.TogglePanelRollupAsync(PanelId);
+
+    protected override void OnInitialized()
+    {
+        _pollIntervalSeconds = Prefs.GetMetricsPollIntervalSeconds(EnvMetricsPollDefault);
+        _graphWindowMinutes = Prefs.GetMetricsGraphWindowMinutes(EnvMetricsGraphWindowDefault);
+        Prefs.Changed += OnPrefsChanged;
+
+        _scrollTimer = new System.Threading.Timer(_ =>
+            _ = InvokeAsync(() =>
+            {
+                RebuildCpuChart();
+                StateHasChanged();
+            }), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+
+        RestartPollLoop();
+        _ = RefreshLibraryStatsAsync(force: true);
+    }
+
+    private void OnPrefsChanged()
+    {
+        var nextPoll = Prefs.GetMetricsPollIntervalSeconds(EnvMetricsPollDefault);
+        var nextWindow = Prefs.GetMetricsGraphWindowMinutes(EnvMetricsGraphWindowDefault);
+        var pollChanged = nextPoll != _pollIntervalSeconds;
+        var windowChanged = nextWindow != _graphWindowMinutes;
+
+        _pollIntervalSeconds = nextPoll;
+        _graphWindowMinutes = nextWindow;
+
+        if (windowChanged)
+            RebuildCpuChart();
+
+        if (pollChanged)
+            _ = InvokeAsync(RestartPollLoop);
+        else if (windowChanged)
+            _ = InvokeAsync(StateHasChanged);
+
+        _ = RefreshLibraryStatsAsync(force: false);
+    }
+
+    private void RestartPollLoop()
+    {
+        _pollCts.Cancel();
+        _pollCts.Dispose();
+        _pollCts = new CancellationTokenSource();
+        _pollLoopTask = PollLoopAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Metrics is not null)
+            _liveMetrics = Metrics;
+
+        if (Metrics?.CpuPercent is double cpu && SampledAt != default)
+            TryAddSample(SampledAt, cpu);
+
+        _displayCpu ??= Metrics?.CpuPercent ?? _cpuSamples.LastOrDefault()?.Percent;
+        RebuildCpuChart();
+    }
+
+    private async Task RefreshLibraryStatsAsync(bool force)
+    {
+        if (_libraryStatsLoading)
+            return;
+
+        if (!force && _libraryStats.Count > 0 && DateTimeOffset.UtcNow - _libraryStatsLoadedAt < TimeSpan.FromMinutes(10))
+            return;
+
+        _libraryStatsLoading = true;
+        try
+        {
+            var stats = await LibraryStats.GetAsync(CancellationToken.None);
+            _libraryStats = stats;
+            _libraryStatsLoadedAt = DateTimeOffset.UtcNow;
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _libraryStatsLoading = false;
+        }
+    }
+
+    private async Task PollLoopAsync()
+    {
+        PollTick();
+
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_pollIntervalSeconds));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_pollCts.Token))
+            {
+                PollTick();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void PollTick()
+    {
+        var metrics = HostMetrics.Read();
+        if (metrics is null)
+            return;
+
+        _liveMetrics = metrics;
+
+        if (metrics.CpuPercent is double cpu)
+        {
+            TryAddSample(DateTimeOffset.UtcNow, cpu);
+            _displayCpu = cpu;
+        }
+
+        RebuildCpuChart();
+    }
+
+    private void TryAddSample(DateTimeOffset at, double cpu)
+    {
+        var clamped = Math.Clamp(cpu, 0, 100);
+        if (_cpuSamples.Count > 0)
+        {
+            var last = _cpuSamples[^1];
+            if (at - last.At < TimeSpan.FromMilliseconds(400) && Math.Abs(last.Percent - clamped) < 0.05)
+                return;
+        }
+
+        _cpuSamples.Add(new CpuSample(at, clamped));
+    }
+
+    private async Task OnGraphHover(MouseEventArgs e)
+    {
+        var pos = await Js.InvokeAsync<PlotPointer?>("arrdashMetrics.pointerInElement", _plotRef, e.ClientX);
+        if (pos is null || pos.Width <= 0)
+            return;
+
+        UpdateHover(pos.X, pos.Width);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnGraphLeave()
+    {
+        _hover = null;
+    }
+
+    private void UpdateHover(double pixelX, double plotWidth)
+    {
+        var ratio = Math.Clamp(pixelX / plotWidth, 0, 1);
+        var windowEnd = DateTimeOffset.UtcNow;
+        var windowStart = windowEnd.AddMinutes(-_graphWindowMinutes);
+        var span = Math.Max((windowEnd - windowStart).TotalSeconds, 1);
+        var at = windowStart.AddSeconds(ratio * span);
+        var percent = InterpolatePercentAt(at, windowStart, windowEnd);
+        var chartX = PlotLeft + ratio * (PlotRight - PlotLeft);
+
+        _hover = new HoverState(
+            percent,
+            at.ToLocalTime().ToString("HH:mm:ss"),
+            pixelX,
+            chartX,
+            YForPercent(percent));
+    }
+
+    private double InterpolatePercentAt(DateTimeOffset at, DateTimeOffset windowStart, DateTimeOffset windowEnd)
+    {
+        var points = BuildInterpolationSamples(windowEnd);
+        if (points.Count == 0)
+            return _displayCpu ?? 0;
+
+        if (at <= points[0].At)
+            return points[0].Percent;
+
+        if (at >= points[^1].At)
+            return points[^1].Percent;
+
+        for (var i = 1; i < points.Count; i++)
+        {
+            var prev = points[i - 1];
+            var next = points[i];
+            if (at > next.At)
+                continue;
+
+            var span = (next.At - prev.At).TotalSeconds;
+            if (span <= 0)
+                return next.Percent;
+
+            var ratio = (at - prev.At).TotalSeconds / span;
+            return prev.Percent + (next.Percent - prev.Percent) * ratio;
+        }
+
+        return points[^1].Percent;
+    }
+
+    private List<CpuSample> BuildInterpolationSamples(DateTimeOffset windowEnd)
+    {
+        var windowStart = windowEnd.AddMinutes(-_graphWindowMinutes);
+        var points = _cpuSamples
+            .Where(s => s.At >= windowStart)
+            .OrderBy(s => s.At)
+            .ToList();
+
+        if (_displayCpu is double live)
+        {
+            if (points.Count == 0 || points[^1].At < windowEnd.AddSeconds(-1))
+                points.Add(new CpuSample(windowEnd, live));
+            else
+                points[^1] = points[^1] with { At = windowEnd, Percent = live };
+        }
+
+        return points;
+    }
+
+    private void RebuildCpuChart()
+    {
+        var windowEnd = DateTimeOffset.UtcNow;
+        var windowStart = windowEnd.AddMinutes(-_graphWindowMinutes);
+        _windowStartLabel = windowStart.ToLocalTime().ToString(_graphWindowMinutes >= 24 * 60 ? "dd MMM HH:mm" : "HH:mm");
+        _cpuSamples.RemoveAll(s => s.At < windowStart);
+
+        var points = _cpuSamples
+            .Where(s => s.At <= windowEnd)
+            .OrderBy(s => s.At)
+            .Select(s => new PlotPoint(XForTime(s.At, windowStart, windowEnd), YForPercent(s.Percent)))
+            .ToList();
+
+        if (points.Count == 0 && _displayCpu is double current)
+        {
+            var y = YForPercent(current);
+            points.Add(new PlotPoint(PlotLeft, y));
+            points.Add(new PlotPoint(PlotRight, y));
+        }
+        else if (points.Count > 0)
+        {
+            var livePercent = _displayCpu ?? _cpuSamples[^1].Percent;
+            var liveY = YForPercent(livePercent);
+
+            if (points[^1].X >= PlotRight - 0.5)
+                points[^1] = new PlotPoint(PlotRight, liveY);
+            else
+                points.Add(new PlotPoint(PlotRight, liveY));
+        }
+
+        if (points.Count == 0)
+        {
+            _linePath = "";
+            _areaPath = "";
+            _latestPoint = null;
+            return;
+        }
+
+        _linePath = "M " + string.Join(" L ", points.Select(p => Form(p.X, p.Y)));
+        var baseline = YForPercent(0);
+        _areaPath = _linePath +
+                    $" L {Form(points[^1].X, baseline)} L {Form(points[0].X, baseline)} Z";
+        _latestPoint = points[^1];
+    }
+
+    private RenderFragment RingSvg(double usedPercent) => __builder =>
+    {
+        var offset = RingCircumference * (1 - usedPercent / 100d);
+        __builder.OpenElement(0, "svg");
+        __builder.AddAttribute(1, "viewBox", "0 0 100 100");
+        __builder.AddAttribute(2, "class", "usage-ring-svg");
+        __builder.OpenElement(3, "circle");
+        __builder.AddAttribute(4, "cx", "50");
+        __builder.AddAttribute(5, "cy", "50");
+        __builder.AddAttribute(6, "r", RingRadius);
+        __builder.AddAttribute(7, "class", "usage-ring-track");
+        __builder.CloseElement();
+        __builder.OpenElement(8, "circle");
+        __builder.AddAttribute(9, "cx", "50");
+        __builder.AddAttribute(10, "cy", "50");
+        __builder.AddAttribute(11, "r", RingRadius);
+        __builder.AddAttribute(12, "class", "usage-ring-value");
+        __builder.AddAttribute(13, "stroke-dasharray", RingCircumference.ToString(CultureInfo.InvariantCulture));
+        __builder.AddAttribute(14, "stroke-dashoffset", offset.ToString(CultureInfo.InvariantCulture));
+        __builder.AddAttribute(15, "transform", "rotate(-90 50 50)");
+        __builder.CloseElement();
+        __builder.OpenElement(16, "text");
+        __builder.AddAttribute(17, "x", "50");
+        __builder.AddAttribute(18, "y", "50");
+        __builder.AddAttribute(19, "class", "usage-ring-center");
+        __builder.AddContent(20, $"{usedPercent:0.#}%");
+        __builder.CloseElement();
+        __builder.CloseElement();
+    };
+
+    private static string RingStyle(double usedPercent) => $"--ring-color:{UsageColor(usedPercent)}";
+
+    private static string LibraryAccentStyle(string accentColor) => $"--library-accent:{accentColor}";
+
+    private static double XForTime(DateTimeOffset at, DateTimeOffset start, DateTimeOffset end)
+    {
+        var span = Math.Max((end - start).TotalSeconds, 1);
+        var ratio = Math.Clamp((at - start).TotalSeconds / span, 0, 1);
+        return PlotLeft + ratio * (PlotRight - PlotLeft);
+    }
+
+    private static double YForPercent(double percent)
+    {
+        var ratio = Math.Clamp(percent, 0, 100) / 100d;
+        return PlotBottom - ratio * (PlotBottom - PlotTop);
+    }
+
+    private static string Form(double x, double y) =>
+        $"{x.ToString("0.##", CultureInfo.InvariantCulture)},{y.ToString("0.##", CultureInfo.InvariantCulture)}";
+
+    private static string UsageColor(double percent) => percent switch
+    {
+        >= 90 => "#ef4444",
+        >= 75 => "#f59e0b",
+        _ => "#6366f1"
+    };
+
+    public void Dispose()
+    {
+        Prefs.Changed -= OnPrefsChanged;
+        _pollCts.Cancel();
+        _scrollTimer?.Dispose();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return ValueTask.CompletedTask;
+    }
+
+    private sealed record CpuSample(DateTimeOffset At, double Percent);
+    private sealed record PlotPoint(double X, double Y);
+    private sealed record HoverState(double Percent, string TimeLabel, double PixelX, double ChartX, double ChartY);
+    private sealed record PlotPointer(double X, double Width);
+}

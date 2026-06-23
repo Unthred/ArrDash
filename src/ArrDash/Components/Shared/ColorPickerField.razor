@@ -1,0 +1,92 @@
+<div class="@RootClass">
+    <span class="color-picker-label">@Label</span>
+    <div class="color-picker-row">
+        <label class="color-picker-swatch @(IsUsingDefault ? "is-default" : null)" style="@SwatchStyle">
+            <input type="color"
+                   class="color-picker-native"
+                   value="@PickerHex"
+                   @onchange="HandleNativeChange" />
+        </label>
+        @if (AllowDefault)
+        {
+            <MudButton Size="Size.Small"
+                       Variant="Variant.Text"
+                       Class="color-picker-reset"
+                       Disabled="@IsUsingDefault"
+                       OnClick="ResetToDefault">
+                Default
+            </MudButton>
+        }
+    </div>
+    @if (!Inline && !string.IsNullOrWhiteSpace(HelperText))
+    {
+        <span class="color-picker-helper">@HelperText</span>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string DefaultColor { get; set; } = "#6366f1";
+    [Parameter] public bool AllowDefault { get; set; }
+    [Parameter] public bool Inline { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    private string RootClass
+    {
+        get
+        {
+            var parts = new List<string> { "color-picker-field" };
+            if (Inline)
+                parts.Add("color-picker-inline");
+            if (!string.IsNullOrWhiteSpace(Class))
+                parts.Add(Class);
+            return string.Join(' ', parts);
+        }
+    }
+
+    private bool IsUsingDefault => AllowDefault && string.IsNullOrWhiteSpace(Value);
+
+    private string PickerHex => ToPickerHex(Value, DefaultColor);
+
+    private string SwatchStyle => IsUsingDefault
+        ? ""
+        : $"background:{PickerHex}";
+
+    private async Task HandleNativeChange(ChangeEventArgs e)
+    {
+        var hex = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(hex))
+            return;
+
+        await ValueChanged.InvokeAsync(hex);
+    }
+
+    private async Task ResetToDefault() => await ValueChanged.InvokeAsync("");
+
+    private static string ToPickerHex(string? value, string fallback)
+    {
+        var normalized = Normalize(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+            return Normalize(fallback) ?? "#6366f1";
+
+        return normalized;
+    }
+
+    private static string? Normalize(string? value)
+    {
+        var v = (value ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(v))
+            return null;
+
+        if (!v.StartsWith('#'))
+            v = "#" + v;
+
+        if (v.Length == 4)
+            v = $"#{v[1]}{v[1]}{v[2]}{v[2]}{v[3]}{v[3]}";
+
+        return v.Length >= 7 ? v[..7].ToLowerInvariant() : null;
+    }
+}

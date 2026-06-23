@@ -1,0 +1,16 @@
+@using ArrDash.Models
+@using ArrDash.Services
+
+<div class="rollup-library-strip">
+    @foreach (var stat in Stats)
+    {
+        <span class="rollup-library-pill" style="@($"--library-accent:{stat.AccentColor}")">
+            <span class="rollup-library-pill-label">@LibraryStatRollupHelper.RollupLabel(stat)</span>
+            <span class="rollup-library-pill-count">@LibraryStatRollupHelper.RollupCount(stat)</span>
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<LibraryStatItem> Stats { get; set; } = [];
+}

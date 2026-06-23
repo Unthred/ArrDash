@@ -1,0 +1,36 @@
+services:
+  arrdash:
+    build: .
+    image: arrdash:latest
+    container_name: arrdash
+    init: true
+    ports:
+      - "7979:8080"
+    environment:
+      TZ: Europe/London
+      ARRDASH_CONFIG_PATH: /config
+      ARRDASH_HOST_LABEL: Unraid
+      ARRDASH_DISK_PATH: /mnt/user
+      ARRDASH_METRICS_POLL_SECONDS: 2
+      SONARR_URL: https://sonarr.example.com
+      SONARR_API_KEY: ""
+      RADARR_URL: https://radarr.example.com
+      RADARR_API_KEY: ""
+      CHAPTARR_URL: https://chaptarr.example.com
+      CHAPTARR_API_KEY: ""
+      AUDIOBOOKSHELF_URL: https://audiobooks.example.com
+      AUDIOBOOKSHELF_API_KEY: ""
+      LIDARR_URL: https://lidarr.example.com
+      LIDARR_API_KEY: ""
+      SLSKD_URL: https://soulseek.example.com
+      SLSKD_API_KEY: ""
+      PLEX_URL: https://plex.example.com
+      PLEX_TOKEN: ""
+      EMBY_URL: https://emby.example.com
+      EMBY_API_KEY: ""
+      POLL_INTERVAL_SECONDS: 30
+      RECENT_LIMIT: 20
+    volumes:
+      - ./config:/config
+      - /mnt/user:/mnt/user:ro
+    restart: unless-stopped

@@ -1,0 +1,144 @@
+@using ArrDash.Models
+@using ArrDash.Services
+
+<MudPaper Class="@ShellClass" Elevation="0">
+    <div class="panel-header panel-header-rollup" style="--accent:@Accent" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
+        <div class="panel-title-wrap">
+            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="panel-icon" />
+            <div>
+                <div class="panel-title">Now Playing</div>
+                @if (!RolledUp)
+                {
+                    <div class="panel-sub">Live Plex and Emby sessions</div>
+                }
+            </div>
+        </div>
+
+        @if (RolledUp)
+        {
+            <div class="rollup-summary panel-content-rollup">
+                @if (Sessions.Count > 0)
+                {
+                    <SessionMiniPosterStrip Sessions="Sessions" />
+                }
+                <span class="rollup-stat rollup-stat-wide">@BuildRollupText()</span>
+            </div>
+        }
+        else
+        {
+            <div @ondblclick:stopPropagation="true">
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@Sessions.Count active</MudChip>
+            </div>
+        }
+    </div>
+
+    @if (!RolledUp)
+    {
+        @if (Sessions.Count == 0)
+        {
+            <div class="empty-state">
+                <MudIcon Icon="@Icons.Material.Outlined.TvOff" Size="Size.Large" />
+                <div>Nothing playing right now</div>
+            </div>
+        }
+        else
+        {
+            <HorizontalScrollRow>
+                @foreach (var session in Sessions)
+                {
+                    <div class="session-card carousel-card @(Kiosk ? "kiosk-card" : "") @(EnableClickThrough && session.ExternalUrl is not null ? "clickable-card" : "")"
+                         @onclick="@(() => OpenSession(session))">
+                        <div class="poster-frame">
+                            @if (!string.IsNullOrWhiteSpace(session.ThumbnailUrl))
+                            {
+                                <img src="@session.ThumbnailUrl" alt="@session.Title" loading="lazy" />
+                            }
+                            else
+                            {
+                                <div class="poster-fallback">@Initials(session.Title)</div>
+                            }
+                            <div class="server-badge @session.Server.ToString().ToLowerInvariant()">@session.Server</div>
+                        </div>
+                        <div class="session-body">
+                            <div class="session-title">@session.Title</div>
+                            @if (!string.IsNullOrWhiteSpace(session.Subtitle))
+                            {
+                                <div class="session-sub">@session.Subtitle</div>
+                            }
+                            <div class="session-meta">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                                <span>@session.User</span>
+                                @if (!string.IsNullOrWhiteSpace(session.Device))
+                                {
+                                    <span class="dot-sep">•</span>
+                                    <span>@session.Device</span>
+                                }
+                            </div>
+                            <MudProgressLinear Value="@session.ProgressPercent"
+                                               Style="@ProgressStyle"
+                                               Rounded="true"
+                                               Class="mt-3 now-playing-progress" />
+                            <div class="progress-label">@($"{session.ProgressPercent:0.#}%")</div>
+                        </div>
+                    </div>
+                }
+            </HorizontalScrollRow>
+        }
+    }
+</MudPaper>
+
+@code {
+    private const string PanelId = "now-playing";
+
+    [Parameter] public IReadOnlyList<ActiveSession> Sessions { get; set; } = [];
+    [Parameter] public bool Kiosk { get; set; }
+    [Parameter] public string Accent { get; set; } = "#818cf8";
+    [Parameter] public bool EnableClickThrough { get; set; } = true;
+    [Parameter] public ExternalLinkTarget ExternalLinkTarget { get; set; } = ExternalLinkTarget.NewTab;
+    [Parameter] public bool LargeCards { get; set; }
+    [Inject] private ExternalLinkService Links { get; set; } = default!;
+    [Inject] private LayoutPreferencesService Prefs { get; set; } = default!;
+
+    private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
+    private string ShellClass => $"panel-shell now-playing-panel {(LargeCards ? "now-playing-large" : "")}{(RolledUp ? " is-rolled-up" : "")}";
+
+    private string? ProgressStyle => $"--progress-color:{Accent}";
+
+    private async Task ToggleRollup() => await Prefs.TogglePanelRollupAsync(PanelId);
+
+    private string BuildRollupText()
+    {
+        if (Sessions.Count == 0)
+            return "Nothing playing";
+
+        if (Sessions.Count == 1)
+        {
+            var session = Sessions[0];
+            return $"{session.User}: {session.Title} · {session.ProgressPercent:0.#}%";
+        }
+
+        var active = Sessions.Take(3)
+            .Select(s => $"{s.User}: {s.Title} ({s.ProgressPercent:0.#}%)");
+        var summary = string.Join(" · ", active);
+        if (Sessions.Count > 3)
+            summary += $" · +{Sessions.Count - 3} more";
+
+        return $"{Sessions.Count} active · {summary}";
+    }
+
+    private async Task OpenSession(ActiveSession session)
+    {
+        if (!EnableClickThrough || string.IsNullOrWhiteSpace(session.ExternalUrl))
+            return;
+
+        await Links.OpenAsync(session.ExternalUrl, ExternalLinkTarget);
+    }
+
+    private static string Initials(string title)
+    {
+        var parts = title.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant()
+            : title.Length >= 2 ? title[..2].ToUpperInvariant() : "?";
+    }
+}

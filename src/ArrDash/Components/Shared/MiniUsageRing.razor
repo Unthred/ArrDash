@@ -1,0 +1,25 @@
+@using System.Globalization
+
+<div class="mini-usage-ring" style="@($"--ring-color:{Color}")" title="@($"{Label} {Percent:0.#}%")">
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="10" cy="10" r="@Radius" class="mini-usage-ring-track" />
+        <circle cx="10" cy="10" r="@Radius"
+                class="mini-usage-ring-value"
+                stroke-dasharray="@Circumference.ToString(CultureInfo.InvariantCulture)"
+                stroke-dashoffset="@Offset.ToString(CultureInfo.InvariantCulture)"
+                transform="rotate(-90 10 10)" />
+    </svg>
+    <span class="mini-usage-ring-copy">@Label @Detail</span>
+</div>
+
+@code {
+    private const double Radius = 7;
+    private static readonly double Circumference = 2 * Math.PI * Radius;
+
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string Detail { get; set; } = "";
+    [Parameter] public double Percent { get; set; }
+    [Parameter] public string Color { get; set; } = "#6366f1";
+
+    private double Offset => Circumference * (1 - Math.Clamp(Percent, 0, 100) / 100d);
+}

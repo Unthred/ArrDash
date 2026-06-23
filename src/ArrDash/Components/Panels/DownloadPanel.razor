@@ -1,0 +1,265 @@
+@using ArrDash.Models
+@using ArrDash.Services
+
+<MudPaper Class="@ShellClass" Elevation="0">
+    <div class="panel-header panel-header-rollup" style="--accent:@Accent" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
+        <div class="panel-title-wrap">
+            <MudIcon Icon="@Icon" Class="panel-icon" />
+            <div>
+                <div class="panel-title">@Title</div>
+                @if (!RolledUp)
+                {
+                    <div class="panel-sub">@Items.Count recent items</div>
+                }
+            </div>
+        </div>
+
+        @if (RolledUp)
+        {
+            <div class="rollup-summary panel-content-rollup">
+                @if (Items.Count > 0)
+                {
+                    <PanelMiniPosterStrip Items="Items" />
+                }
+                <span class="rollup-stat rollup-stat-wide">@BuildRollupText()</span>
+            </div>
+        }
+        else
+        {
+            <div @ondblclick:stopPropagation="true">
+                <MudToggleGroup T="PanelViewMode" Value="@ViewMode" ValueChanged="OnViewModeChanged" Color="Color.Default" Rounded="true" SelectedClass="segmented-toggle-selected" Class="arrdash-segmented-toggle view-toggle" FixedContent>
+                    <MudToggleItem Value="PanelViewMode.Cards" Text="Cards" />
+                    <MudToggleItem Value="PanelViewMode.Compact" Text="List" />
+                    <MudToggleItem Value="PanelViewMode.Table" Text="Table" />
+                </MudToggleGroup>
+            </div>
+        }
+    </div>
+
+    @if (!RolledUp)
+    {
+    @if (!string.IsNullOrWhiteSpace(NotConfiguredMessage) && Items.Count == 0)
+    {
+        <div class="empty-state">
+            <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Large" />
+            <div>@NotConfiguredMessage</div>
+        </div>
+    }
+    else if (Items.Count == 0)
+    {
+        <div class="empty-state">
+            <MudIcon Icon="@Icons.Material.Outlined.Inbox" Size="Size.Large" />
+            <div>No recent downloads yet</div>
+        </div>
+    }
+    else
+    {
+        @switch (ViewMode)
+        {
+            case PanelViewMode.Table:
+                <MudTable Items="Items" Hover="true" Dense="true" Class="download-table">
+                    <HeaderContent>
+                        <MudTh><MudTableSortLabel SortBy="new Func<DownloadItem, object>(x => x.Title)">Title</MudTableSortLabel></MudTh>
+                        <MudTh><MudTableSortLabel SortBy="new Func<DownloadItem, object>(x => x.Timestamp)">When</MudTableSortLabel></MudTh>
+                        @if (ShowQuality)
+                        {
+                            <MudTh>Quality</MudTh>
+                        }
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Title">
+                            @RenderLinkedTitle(context)
+                            @if (!string.IsNullOrWhiteSpace(context.Subtitle))
+                            {
+                                <div class="table-sub">@context.Subtitle</div>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="When">@FormatTime(context.Timestamp)</MudTd>
+                        @if (ShowQuality)
+                        {
+                            <MudTd DataLabel="Quality">@FormatQuality(context.Quality)</MudTd>
+                        }
+                    </RowTemplate>
+                </MudTable>
+                break;
+
+            case PanelViewMode.Compact:
+                <div class="compact-list">
+                    @foreach (var item in Items)
+                    {
+                        <div class="compact-row">
+                            <div class="compact-title">
+                                @RenderLinkedTitle(item)
+                                @if (!string.IsNullOrWhiteSpace(item.Subtitle))
+                                {
+                                    <div class="compact-sub">@item.Subtitle</div>
+                                }
+                            </div>
+                            <div class="compact-when">@FormatTime(item.Timestamp)</div>
+                        </div>
+                    }
+                </div>
+                break;
+
+            default:
+                <HorizontalScrollRow>
+                    @foreach (var item in Items)
+                    {
+                        <div class="download-card carousel-card @(EnableClickThrough && ResolveUrl(item) is not null ? "clickable-card" : "")"
+                             style="--accent:@Accent"
+                             @onclick="@(() => OpenItem(item))">
+                            <div class="poster-frame">
+                                @if (!string.IsNullOrWhiteSpace(item.PosterUrl))
+                                {
+                                    <img src="@item.PosterUrl" alt="@item.Title" loading="lazy" />
+                                }
+                                else
+                                {
+                                    <div class="poster-fallback">@Initials(item.Title)</div>
+                                }
+                                <PosterQuickLinks Item="item" />
+                            </div>
+                            <div class="download-body download-body-card">
+                                <div class="download-title">@item.Title</div>
+                                @if (!string.IsNullOrWhiteSpace(GetItemSubtitle(item)))
+                                {
+                                    <div class="download-subtitle">@GetItemSubtitle(item)</div>
+                                }
+                                @if (ShowEpisodeBadges && item.MediaType == MediaType.Tv && item.EpisodeNumbers is { Count: > 0 })
+                                {
+                                    <EpisodeBadgeRow Item="item" ShowMissingEpisodes="ShowMissingEpisodes" />
+                                }
+                                <div class="download-meta">
+                                    <span>@FormatTime(item.Timestamp)</span>
+                                </div>
+                                @if (ShowQuality && !string.IsNullOrWhiteSpace(item.Quality))
+                                {
+                                    <div class="quality-line">@FormatQuality(item.Quality)</div>
+                                }
+                                @if (ShowSyncNotes && !string.IsNullOrWhiteSpace(item.StatusNote))
+                                {
+                                    <div class="sync-note">@item.StatusNote</div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </HorizontalScrollRow>
+                break;
+        }
+    }
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string PanelId { get; set; } = "";
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Icon { get; set; } = Icons.Material.Filled.Folder;
+    [Parameter] public string Accent { get; set; } = "#6366f1";
+    [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
+    [Parameter] public PanelViewMode ViewMode { get; set; } = PanelViewMode.Cards;
+    [Parameter] public TimeDisplayFormat TimeFormat { get; set; } = TimeDisplayFormat.Relative;
+    [Parameter] public bool ShowQuality { get; set; } = true;
+    [Parameter] public bool ShowEpisodeBadges { get; set; } = true;
+    [Parameter] public bool ShowMissingEpisodes { get; set; } = true;
+    [Parameter] public bool ShowSyncNotes { get; set; } = true;
+    [Parameter] public bool EnableClickThrough { get; set; } = true;
+    [Parameter] public bool DeepLinkClickThrough { get; set; } = true;
+    [Parameter] public ExternalLinkTarget ExternalLinkTarget { get; set; } = ExternalLinkTarget.NewTab;
+    [Parameter] public bool FriendlyQualityLabels { get; set; } = true;
+    [Parameter] public string? ServiceUrl { get; set; }
+    [Parameter] public string? NotConfiguredMessage { get; set; }
+    [Parameter] public EventCallback<PanelViewMode> ViewModeChanged { get; set; }
+    [Inject] private ExternalLinkService Links { get; set; } = default!;
+    [Inject] private LayoutPreferencesService Prefs { get; set; } = default!;
+
+    private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
+    private string ShellClass => RolledUp ? "panel-shell is-rolled-up" : "panel-shell";
+
+    private async Task ToggleRollup() => await Prefs.TogglePanelRollupAsync(PanelId);
+
+    private string BuildRollupText()
+    {
+        if (Items.Count == 0)
+            return string.IsNullOrWhiteSpace(NotConfiguredMessage) ? "No recent items" : "Not configured";
+
+        var titles = Items.Take(4).Select(i => i.Title);
+        var summary = string.Join(" · ", titles);
+        if (Items.Count > 4)
+            summary += $" · +{Items.Count - 4} more";
+
+        return $"{Items.Count} recent · {summary}";
+    }
+
+    private Task OnViewModeChanged(PanelViewMode mode) => ViewModeChanged.HasDelegate
+        ? ViewModeChanged.InvokeAsync(mode)
+        : Task.CompletedTask;
+
+    private string FormatTime(DateTimeOffset ts) => TimeDisplayHelper.Format(ts, TimeFormat);
+
+    private string FormatQuality(string? quality)
+    {
+        if (string.IsNullOrWhiteSpace(quality))
+            return "—";
+
+        return FriendlyQualityLabels
+            ? QualityDisplayHelper.Format(quality)
+            : quality;
+    }
+
+    private RenderFragment RenderLinkedTitle(DownloadItem item) => builder =>
+    {
+        var url = ResolveUrl(item);
+        if (EnableClickThrough && url is not null)
+            builder.OpenElement(0, "a");
+        else
+            builder.OpenElement(0, "span");
+
+        builder.AddAttribute(1, "class", "item-title-link");
+        if (EnableClickThrough && url is not null)
+        {
+            builder.AddAttribute(2, "href", url);
+            builder.AddAttribute(3, "target", ExternalLinkService.TargetAttribute(ExternalLinkTarget));
+            if (ExternalLinkTarget == ExternalLinkTarget.NewTab)
+                builder.AddAttribute(4, "rel", "noopener noreferrer");
+        }
+
+        builder.AddContent(5, item.Title);
+        builder.CloseElement();
+    };
+
+    private string? ResolveUrl(DownloadItem item)
+    {
+        if (!EnableClickThrough)
+            return null;
+
+        if (DeepLinkClickThrough && !string.IsNullOrWhiteSpace(item.ExternalUrl))
+            return item.ExternalUrl;
+
+        return string.IsNullOrWhiteSpace(ServiceUrl) ? null : ServiceUrl.TrimEnd('/');
+    }
+
+    private async Task OpenItem(DownloadItem item)
+    {
+        var url = ResolveUrl(item);
+        if (url is not null)
+            await Links.OpenAsync(url, ExternalLinkTarget);
+    }
+
+    private static string Initials(string title)
+    {
+        var parts = title.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant()
+            : title.Length >= 2 ? title[..2].ToUpperInvariant() : "?";
+    }
+
+    private string? GetItemSubtitle(DownloadItem item)
+    {
+        if (item.MediaType == MediaType.Tv &&
+            item.SeasonNumber is int season &&
+            season > 0)
+            return DownloadDisplayHelper.FormatSeasonLabel(season);
+
+        return item.Subtitle;
+    }
+}

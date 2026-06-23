@@ -1,0 +1,135 @@
+@inherits LayoutComponentBase
+@inject ThemeService ThemeService
+@inject LayoutPreferencesService Prefs
+@implements IDisposable
+
+<MudThemeProvider @key="_themeKey" Theme="_theme" IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<div class="@RootClass" style="@RootStyle">
+    <CascadingValue Value="_kiosk">
+    <MudLayout Class="arrdash-layout">
+        @if (!_kiosk)
+        {
+            <MudAppBar Elevation="0" Fixed="true" Class="arrdash-appbar glass-bar">
+                <div class="brand-lockup">
+                    <div class="brand-mark">@BrandMark</div>
+                    <div>
+                        <div class="brand-title">ArrDash</div>
+                        <div class="brand-sub">Media activity at a glance</div>
+                    </div>
+                </div>
+                <MudSpacer />
+                <div class="header-actions">
+                    @if (Prefs.IsPreviewActive)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Unsaved preview</MudChip>
+                    }
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined" Class="live-chip">
+                        <span class="pulse-dot"></span> Live
+                    </MudChip>
+                    <MudTooltip Text="Settings">
+                        <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Inherit" Href="/settings" />
+                    </MudTooltip>
+                    <MudTooltip Text="Kiosk mode">
+                        <MudIconButton Icon="@Icons.Material.Filled.Tv" Color="Color.Inherit" OnClick="ToggleKiosk" />
+                    </MudTooltip>
+                </div>
+            </MudAppBar>
+        }
+        else
+        {
+            <div class="kiosk-bar">
+                <div class="brand-title">ArrDash Kiosk</div>
+                <MudSpacer />
+                <MudIconButton Icon="@Icons.Material.Filled.Settings" Color="Color.Inherit" Href="/settings" />
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Inherit" OnClick="ToggleKiosk" />
+            </div>
+        }
+
+        <MudMainContent Class="arrdash-main">
+            @Body
+        </MudMainContent>
+    </MudLayout>
+    </CascadingValue>
+</div>
+
+@code {
+    private MudTheme _theme = ThemeBuilder.Build(new UserLayoutPreferences());
+    private string _themeKey = ThemeBuilder.GetThemeCacheKey(new UserLayoutPreferences());
+    private bool _isDarkMode = true;
+    private bool _kiosk;
+    private string BrandMark = "A";
+    private string RootStyle = "";
+
+    private string RootClass => Prefs.GetRootCssClasses(_kiosk);
+
+    protected override async Task OnInitializedAsync()
+    {
+        ApplyThemeSources();
+        if (Prefs.Current.AutoKioskOnLoad)
+        {
+            _kiosk = true;
+            if (!Prefs.Current.KioskMode)
+                await Prefs.ToggleKioskAsync(true);
+        }
+        else
+        {
+            _kiosk = Prefs.Current.KioskMode;
+        }
+
+        Prefs.Changed += OnPrefsChanged;
+        ThemeService.OnChange += OnThemeChangedInternal;
+        await ThemeService.RegisterSystemListenerAsync();
+        await ApplyThemeAsync();
+    }
+
+    private void ApplyThemeSources()
+    {
+        var source = Prefs.Current;
+        _theme = ThemeBuilder.Build(source);
+        _themeKey = ThemeBuilder.GetThemeCacheKey(source);
+        BrandMark = string.IsNullOrWhiteSpace(source.BrandMark) ? "A" : source.BrandMark;
+        UpdateRootStyle();
+    }
+
+    private void UpdateRootStyle() =>
+        RootStyle = ThemeBuilder.GetRootStyle(Prefs.Current, _isDarkMode);
+
+    private void OnPrefsChanged() => _ = InvokeAsync(async () =>
+    {
+        ApplyThemeSources();
+        await ApplyThemeAsync();
+    });
+
+    private async Task ApplyThemeAsync()
+    {
+        var prefs = Prefs.Current;
+        _isDarkMode = prefs.Theme switch
+        {
+            ThemePreference.Dark => true,
+            ThemePreference.Light => false,
+            _ => await ThemeService.ResolveDarkModeAsync()
+        };
+
+        UpdateRootStyle();
+        StateHasChanged();
+    }
+
+    private void OnThemeChangedInternal() => _ = InvokeAsync(ApplyThemeAsync);
+
+    private async Task ToggleKiosk()
+    {
+        _kiosk = !_kiosk;
+        await Prefs.ToggleKioskAsync(_kiosk);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnChange -= OnThemeChangedInternal;
+        Prefs.Changed -= OnPrefsChanged;
+    }
+}

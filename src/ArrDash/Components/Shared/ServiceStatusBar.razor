@@ -1,0 +1,58 @@
+@using ArrDash.Models
+
+@if (FilteredServices.Count > 0)
+{
+    <MudPaper Class="status-bar" Elevation="0">
+        @foreach (var service in FilteredServices)
+        {
+            var tooltip = GetTooltip(service);
+            <MudTooltip Text="@tooltip" Disabled="@string.IsNullOrWhiteSpace(tooltip)" Placement="Placement.Top">
+                <div class="status-chip @GetChipClass(service)">
+                    <span class="status-dot"></span>
+                    <span class="status-name">@service.Name</span>
+                </div>
+            </MudTooltip>
+        }
+    </MudPaper>
+}
+
+@code {
+    private static readonly HashSet<string> HideVersionKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "sonarr",
+        "radarr",
+        "chaptarr"
+    };
+
+    [Parameter] public IReadOnlyList<ServiceHealth> Services { get; set; } = [];
+    [Parameter] public StatusBarMode Mode { get; set; } = StatusBarMode.All;
+
+    private IReadOnlyList<ServiceHealth> FilteredServices => Mode switch
+    {
+        StatusBarMode.OfflineOnly => Services.Where(s => s.Configured && !s.Online).ToList(),
+        StatusBarMode.Hidden => [],
+        _ => Services
+    };
+
+    private static string GetChipClass(ServiceHealth service)
+    {
+        if (!service.Configured)
+            return "pending";
+
+        return service.Online ? "online" : "offline";
+    }
+
+    private static string? GetTooltip(ServiceHealth service)
+    {
+        if (!service.Configured)
+            return "Not configured";
+
+        if (!service.Online && !string.IsNullOrWhiteSpace(service.Error))
+            return service.Error;
+
+        if (!HideVersionKeys.Contains(service.Key) && !string.IsNullOrWhiteSpace(service.Version))
+            return $"v{service.Version}";
+
+        return null;
+    }
+}

@@ -1,0 +1,33 @@
+@using ArrDash.Models
+
+<div class="panel-mini-poster-strip" aria-hidden="true">
+    @foreach (var session in PreviewSessions)
+    {
+        <div class="mini-poster mini-poster-wide" title="@session.Title">
+            @if (!string.IsNullOrWhiteSpace(session.ThumbnailUrl))
+            {
+                <img src="@session.ThumbnailUrl" alt="" loading="lazy" />
+            }
+            else
+            {
+                <span class="mini-poster-fallback">@Initials(session.Title)</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ActiveSession> Sessions { get; set; } = [];
+    [Parameter] public int MaxItems { get; set; } = 6;
+
+    private IEnumerable<ActiveSession> PreviewSessions =>
+        Sessions.Take(MaxItems);
+
+    private static string Initials(string title)
+    {
+        var parts = title.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant()
+            : title.Length >= 2 ? title[..2].ToUpperInvariant() : "?";
+    }
+}

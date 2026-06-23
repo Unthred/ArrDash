@@ -1,0 +1,41 @@
+@using System.Globalization
+
+<svg viewBox="0 0 @Width @Height" preserveAspectRatio="none" class="cpu-sparkline" aria-hidden="true">
+    @if (!string.IsNullOrEmpty(_path))
+    {
+        <path d="@_path" class="cpu-sparkline-line" />
+    }
+</svg>
+
+@code {
+    [Parameter] public IReadOnlyList<double> Samples { get; set; } = [];
+    [Parameter] public double Width { get; set; } = 72;
+    [Parameter] public double Height { get; set; } = 18;
+
+    private string _path = "";
+
+    protected override void OnParametersSet() =>
+        _path = BuildPath(Samples, Width, Height);
+
+    private static string BuildPath(IReadOnlyList<double> samples, double width, double height)
+    {
+        if (samples.Count == 0)
+            return "";
+
+        var points = samples
+            .Select((percent, index) =>
+            {
+                var x = samples.Count == 1
+                    ? width
+                    : index * width / (samples.Count - 1);
+                var y = height - Math.Clamp(percent, 0, 100) / 100d * height;
+                return (X: x, Y: y);
+            })
+            .ToList();
+
+        return "M " + string.Join(" L ", points.Select(p => Form(p.X, p.Y)));
+    }
+
+    private static string Form(double x, double y) =>
+        $"{x.ToString("0.##", CultureInfo.InvariantCulture)},{y.ToString("0.##", CultureInfo.InvariantCulture)}";
+}
