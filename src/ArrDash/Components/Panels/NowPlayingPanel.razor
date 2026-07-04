@@ -4,6 +4,10 @@
 <MudPaper Class="@ShellClass" Elevation="0">
     <div class="panel-header panel-header-rollup" style="--accent:@Accent" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
         <div class="panel-title-wrap">
+            @if (DragHandle is not null)
+            {
+                @DragHandle
+            }
             <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Class="panel-icon" />
             <div>
                 <div class="panel-title">Now Playing</div>
@@ -20,6 +24,10 @@
                 @if (Sessions.Count > 0)
                 {
                     <SessionMiniPosterStrip Sessions="Sessions" />
+                }
+                @if (TotalBandwidthKbps is int totalBandwidth)
+                {
+                    <span class="rollup-stat rollup-stat-bandwidth">@BitrateDisplayHelper.Format(totalBandwidth)</span>
                 }
                 <span class="rollup-stat rollup-stat-wide">@BuildRollupText()</span>
             </div>
@@ -58,6 +66,28 @@
                                 <div class="poster-fallback">@Initials(session.Title)</div>
                             }
                             <div class="server-badge @session.Server.ToString().ToLowerInvariant()">@session.Server</div>
+                            @if (!string.IsNullOrWhiteSpace(session.Resolution))
+                            {
+                                <div class="session-resolution-badge">@session.Resolution</div>
+                            }
+                            @if (session.IsLocal is not null || session.BandwidthKbps is not null)
+                            {
+                                <div class="session-network-badge">
+                                    @if (session.IsLocal is bool isLocal)
+                                    {
+                                        <MudIcon Icon="@(isLocal ? Icons.Material.Filled.Home : Icons.Material.Filled.Public)" Size="Size.Small" />
+                                        <span>@(isLocal ? "LAN" : "WAN")</span>
+                                    }
+                                    @if (session.BandwidthKbps is int bandwidth)
+                                    {
+                                        @if (session.IsLocal is not null)
+                                        {
+                                            <span class="dot-sep">•</span>
+                                        }
+                                        <span>@BitrateDisplayHelper.Format(bandwidth)</span>
+                                    }
+                                </div>
+                            }
                         </div>
                         <div class="session-body">
                             <div class="session-title">@session.Title</div>
@@ -96,6 +126,7 @@
     [Parameter] public bool EnableClickThrough { get; set; } = true;
     [Parameter] public ExternalLinkTarget ExternalLinkTarget { get; set; } = ExternalLinkTarget.NewTab;
     [Parameter] public bool LargeCards { get; set; }
+    [Parameter] public RenderFragment? DragHandle { get; set; }
     [Inject] private ExternalLinkService Links { get; set; } = default!;
     [Inject] private LayoutPreferencesService Prefs { get; set; } = default!;
 
@@ -105,6 +136,15 @@
     private string? ProgressStyle => $"--progress-color:{Accent}";
 
     private async Task ToggleRollup() => await Prefs.TogglePanelRollupAsync(PanelId);
+
+    private int? TotalBandwidthKbps
+    {
+        get
+        {
+            var total = Sessions.Where(s => s.BandwidthKbps is not null).Sum(s => s.BandwidthKbps!.Value);
+            return total > 0 ? total : null;
+        }
+    }
 
     private string BuildRollupText()
     {

@@ -26,20 +26,27 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
 
             var xml = await response.Content.ReadAsStringAsync(ct);
             var doc = XDocument.Parse(xml);
-            var sessions = doc.Descendants("Video")
+            var sessionElements = doc.Descendants("Video")
                 .Concat(doc.Descendants("Track"))
+                .ToList();
+            var transcodeCount = sessionElements.Count(IsPlexTranscoding);
+            var sessions = sessionElements
                 .Select(MapSession)
                 .Where(s => s is not null)
                 .Cast<ActiveSession>()
                 .ToList();
 
-            return (sessions, new ServiceHealth("plex", "Plex", true, true, null, null));
+            var workload = StreamingWorkloadHelper.FromTranscodeCount(transcodeCount);
+            return (sessions, new ServiceHealth("plex", "Plex", true, true, null, null, workload));
         }
         catch (Exception ex)
         {
             return ([], new ServiceHealth("plex", "Plex", true, false, ex.Message, null));
         }
     }
+
+    private static bool IsPlexTranscoding(XElement el) =>
+        el.Element("TranscodeSession") is not null || el.Descendants("TranscodeSession").Any();
 
     private ActiveSession? MapSession(XElement el)
     {
@@ -66,6 +73,20 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
 
         var type = el.Attribute("type")?.Value ?? "video";
 
+        var media = el.Element("Media");
+        var bitrateKbps = ParseIntOrNull(media?.Attribute("bitrate")?.Value);
+        var resolution = ResolutionDisplayHelper.FromPlexLabel(media?.Attribute("videoResolution")?.Value);
+
+        var sessionInfo = el.Element("Session") ?? el.Descendants("Session").FirstOrDefault();
+        var bandwidthKbps = ParseIntOrNull(sessionInfo?.Attribute("bandwidth")?.Value) ?? bitrateKbps;
+        var location = sessionInfo?.Attribute("location")?.Value;
+        bool? isLocal = location switch
+        {
+            "lan" => true,
+            "wan" => false,
+            _ => player?.Attribute("local")?.Value is { } local ? local == "1" : null
+        };
+
         return new ActiveSession(
             $"plex-{sessionKey}",
             StreamingServer.Plex,
@@ -77,7 +98,11 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
             device,
             thumbUrl,
             null,
-            externalUrl);
+            externalUrl,
+            isLocal,
+            bitrateKbps,
+            bandwidthKbps,
+            resolution);
     }
 
     private static string? BuildSubtitle(XElement el)
@@ -98,6 +123,9 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
 
     private static long ParseLong(string? value) =>
         long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 0;
+
+    private static int? ParseIntOrNull(string? value) =>
+        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : null;
 }
 
 public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor options)
@@ -121,17 +149,22 @@ public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor opti
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
             var sessions = new List<ActiveSession>();
+            var transcodeCount = 0;
             if (doc.RootElement.ValueKind == JsonValueKind.Array)
             {
                 foreach (var session in doc.RootElement.EnumerateArray())
                 {
+                    if (StreamingWorkloadHelper.IsEmbyFamilyTranscoding(session))
+                        transcodeCount++;
+
                     var mapped = MapSession(session);
                     if (mapped is not null)
                         sessions.Add(mapped);
                 }
             }
 
-            return (sessions, new ServiceHealth("emby", "Emby", true, true, null, null));
+            var workload = StreamingWorkloadHelper.FromTranscodeCount(transcodeCount);
+            return (sessions, new ServiceHealth("emby", "Emby", true, true, null, null, workload));
         }
         catch (Exception ex)
         {
@@ -169,6 +202,12 @@ public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor opti
 
         var device = session.TryGetProperty("Client", out var c) ? c.GetString() : null;
 
+        var (bitrateKbps, bandwidthKbps) = ExtractBitrateAndBandwidth(session, item);
+        var resolution = ExtractResolution(item);
+        bool? isLocal = session.TryGetProperty("RemoteEndPoint", out var rep)
+            ? IpAddressHelper.IsPrivate(rep.GetString())
+            : null;
+
         return new ActiveSession(
             $"emby-{id}",
             StreamingServer.Emby,
@@ -180,7 +219,56 @@ public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor opti
             device,
             thumbUrl,
             null,
-            externalUrl);
+            externalUrl,
+            isLocal,
+            bitrateKbps,
+            bandwidthKbps,
+            resolution);
+    }
+
+    private static (int? BitrateKbps, int? BandwidthKbps) ExtractBitrateAndBandwidth(JsonElement session, JsonElement item)
+    {
+        int? sourceBitrateKbps = null;
+        if (item.TryGetProperty("MediaStreams", out var streams) && streams.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var stream in streams.EnumerateArray())
+            {
+                if (stream.TryGetProperty("BitRate", out var br) && br.ValueKind == JsonValueKind.Number)
+                {
+                    var kbps = (int)(br.GetInt64() / 1000);
+                    if (sourceBitrateKbps is null || kbps > sourceBitrateKbps)
+                        sourceBitrateKbps = kbps;
+                }
+            }
+        }
+
+        int? bandwidthKbps = sourceBitrateKbps;
+        if (session.TryGetProperty("TranscodingInfo", out var ti) &&
+            ti.ValueKind == JsonValueKind.Object &&
+            ti.TryGetProperty("Bitrate", out var tb) &&
+            tb.ValueKind == JsonValueKind.Number)
+        {
+            bandwidthKbps = (int)(tb.GetInt64() / 1000);
+        }
+
+        return (sourceBitrateKbps, bandwidthKbps);
+    }
+
+    private static string? ExtractResolution(JsonElement item)
+    {
+        if (!item.TryGetProperty("MediaStreams", out var streams) || streams.ValueKind != JsonValueKind.Array)
+            return null;
+
+        foreach (var stream in streams.EnumerateArray())
+        {
+            if (stream.TryGetProperty("Type", out var typeEl) && typeEl.GetString() == "Video" &&
+                stream.TryGetProperty("Height", out var heightEl) && heightEl.ValueKind == JsonValueKind.Number)
+            {
+                return ResolutionDisplayHelper.FromHeight(heightEl.GetInt32());
+            }
+        }
+
+        return null;
     }
 }
 
@@ -205,17 +293,22 @@ public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor 
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
             var sessions = new List<ActiveSession>();
+            var transcodeCount = 0;
             if (doc.RootElement.ValueKind == JsonValueKind.Array)
             {
                 foreach (var session in doc.RootElement.EnumerateArray())
                 {
+                    if (StreamingWorkloadHelper.IsEmbyFamilyTranscoding(session))
+                        transcodeCount++;
+
                     var mapped = MapSession(session);
                     if (mapped is not null)
                         sessions.Add(mapped);
                 }
             }
 
-            return (sessions, new ServiceHealth("jellyfin", "Jellyfin", true, true, null, null));
+            var workload = StreamingWorkloadHelper.FromTranscodeCount(transcodeCount);
+            return (sessions, new ServiceHealth("jellyfin", "Jellyfin", true, true, null, null, workload));
         }
         catch (Exception ex)
         {
@@ -253,6 +346,12 @@ public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor 
 
         var device = session.TryGetProperty("Client", out var c) ? c.GetString() : null;
 
+        var (bitrateKbps, bandwidthKbps) = ExtractBitrateAndBandwidth(session, item);
+        var resolution = ExtractResolution(item);
+        bool? isLocal = session.TryGetProperty("RemoteEndPoint", out var rep)
+            ? IpAddressHelper.IsPrivate(rep.GetString())
+            : null;
+
         return new ActiveSession(
             $"jellyfin-{id}",
             StreamingServer.Jellyfin,
@@ -264,6 +363,55 @@ public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor 
             device,
             thumbUrl,
             null,
-            externalUrl);
+            externalUrl,
+            isLocal,
+            bitrateKbps,
+            bandwidthKbps,
+            resolution);
+    }
+
+    private static (int? BitrateKbps, int? BandwidthKbps) ExtractBitrateAndBandwidth(JsonElement session, JsonElement item)
+    {
+        int? sourceBitrateKbps = null;
+        if (item.TryGetProperty("MediaStreams", out var streams) && streams.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var stream in streams.EnumerateArray())
+            {
+                if (stream.TryGetProperty("BitRate", out var br) && br.ValueKind == JsonValueKind.Number)
+                {
+                    var kbps = (int)(br.GetInt64() / 1000);
+                    if (sourceBitrateKbps is null || kbps > sourceBitrateKbps)
+                        sourceBitrateKbps = kbps;
+                }
+            }
+        }
+
+        int? bandwidthKbps = sourceBitrateKbps;
+        if (session.TryGetProperty("TranscodingInfo", out var ti) &&
+            ti.ValueKind == JsonValueKind.Object &&
+            ti.TryGetProperty("Bitrate", out var tb) &&
+            tb.ValueKind == JsonValueKind.Number)
+        {
+            bandwidthKbps = (int)(tb.GetInt64() / 1000);
+        }
+
+        return (sourceBitrateKbps, bandwidthKbps);
+    }
+
+    private static string? ExtractResolution(JsonElement item)
+    {
+        if (!item.TryGetProperty("MediaStreams", out var streams) || streams.ValueKind != JsonValueKind.Array)
+            return null;
+
+        foreach (var stream in streams.EnumerateArray())
+        {
+            if (stream.TryGetProperty("Type", out var typeEl) && typeEl.GetString() == "Video" &&
+                stream.TryGetProperty("Height", out var heightEl) && heightEl.ValueKind == JsonValueKind.Number)
+            {
+                return ResolutionDisplayHelper.FromHeight(heightEl.GetInt32());
+            }
+        }
+
+        return null;
     }
 }
