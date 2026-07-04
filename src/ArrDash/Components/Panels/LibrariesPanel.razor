@@ -1,0 +1,133 @@
+@using ArrDash.Models
+@using ArrDash.Services
+@implements IDisposable
+
+<MudPaper Class="@ShellClass" Elevation="0">
+    <div class="panel-header panel-header-rollup" style="--accent:@Accent" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
+        <div class="panel-title-wrap">
+            @if (DragHandle is not null)
+            {
+                @DragHandle
+            }
+            <MudIcon Icon="@Icons.Material.Filled.LibraryBooks" Class="panel-icon" />
+            <div>
+                <div class="panel-title">Libraries</div>
+                @if (!RolledUp)
+                {
+                    <div class="panel-sub">@_stats.Count @(_stats.Count == 1 ? "source" : "sources")</div>
+                }
+            </div>
+        </div>
+
+        @if (RolledUp)
+        {
+            <div class="rollup-summary panel-content-rollup">
+                @if (_stats.Count > 0)
+                {
+                    <RollupLibraryStrip Stats="_stats" />
+                }
+                else
+                {
+                    <span class="rollup-stat rollup-stat-wide">No libraries configured</span>
+                }
+            </div>
+        }
+    </div>
+
+    @if (!RolledUp)
+    {
+        @if (_stats.Count == 0)
+        {
+            <div class="empty-state">
+                <MudIcon Icon="@Icons.Material.Outlined.Inbox" Size="Size.Large" />
+                <div>No library sources configured yet</div>
+            </div>
+        }
+        else
+        {
+            <div class="library-stack-grid">
+                @foreach (var stat in _stats)
+                {
+                    var rowClass = "library-row" + (EnableClickThrough && !string.IsNullOrWhiteSpace(stat.Url) ? " library-row-link" : "");
+                    if (EnableClickThrough && !string.IsNullOrWhiteSpace(stat.Url))
+                    {
+                        <a class="@rowClass" href="@stat.Url" target="@ExternalLinkService.TargetAttribute(ExternalLinkTarget)" rel="@(ExternalLinkTarget == ExternalLinkTarget.NewTab ? "noopener noreferrer" : null)" style="@LibraryAccentStyle(stat.AccentColor)">
+                            <span class="library-row-label">@stat.Label</span>
+                            <span class="library-row-headline">@stat.Headline</span>
+                            @if (!string.IsNullOrWhiteSpace(stat.Detail))
+                            {
+                                <span class="library-row-detail">@stat.Detail</span>
+                            }
+                        </a>
+                    }
+                    else
+                    {
+                        <div class="@rowClass" style="@LibraryAccentStyle(stat.AccentColor)">
+                            <span class="library-row-label">@stat.Label</span>
+                            <span class="library-row-headline">@stat.Headline</span>
+                            @if (!string.IsNullOrWhiteSpace(stat.Detail))
+                            {
+                                <span class="library-row-detail">@stat.Detail</span>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+        }
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string PanelId { get; set; } = "";
+    [Parameter] public string Accent { get; set; } = "#22c55e";
+    [Parameter] public bool EnableClickThrough { get; set; } = true;
+    [Parameter] public ExternalLinkTarget ExternalLinkTarget { get; set; } = ExternalLinkTarget.NewTab;
+    [Parameter] public RenderFragment? DragHandle { get; set; }
+
+    [Inject] private LayoutPreferencesService Prefs { get; set; } = default!;
+    [Inject] private LibraryStatsService LibraryStats { get; set; } = default!;
+
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(10);
+
+    private IReadOnlyList<LibraryStatItem> _stats = [];
+    private DateTimeOffset _statsLoadedAt;
+    private bool _loading;
+
+    private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
+    private string ShellClass => RolledUp ? "panel-shell is-rolled-up" : "panel-shell";
+
+    private async Task ToggleRollup() => await Prefs.TogglePanelRollupAsync(PanelId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Prefs.Changed += OnPrefsChanged;
+        await RefreshAsync(force: true);
+    }
+
+    private void OnPrefsChanged() => _ = RefreshAsync(force: false);
+
+    private async Task RefreshAsync(bool force)
+    {
+        if (_loading)
+            return;
+
+        if (!force && _stats.Count > 0 && DateTimeOffset.UtcNow - _statsLoadedAt < RefreshInterval)
+            return;
+
+        _loading = true;
+        try
+        {
+            _stats = await LibraryStats.GetAsync(CancellationToken.None);
+            _statsLoadedAt = DateTimeOffset.UtcNow;
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string LibraryAccentStyle(string accentColor) => $"--library-accent:{accentColor}";
+
+    public void Dispose() => Prefs.Changed -= OnPrefsChanged;
+}
