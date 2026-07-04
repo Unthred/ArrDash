@@ -57,7 +57,7 @@ builder.Services.AddSingleton<ServiceCredentialsPreviewService>();
 builder.Services.AddSingleton<ServiceConnectionTester>();
 builder.Services.AddSingleton<LayoutPreferencesService>();
 builder.Services.AddSingleton<ThemeService>();
-builder.Services.AddSingleton<ServiceDetailService>();
+builder.Services.AddScoped<ServiceDetailService>();
 builder.Services.AddScoped<ExternalLinkService>();
 builder.Services.AddHostedService<MediaAggregatorService>();
 
@@ -88,7 +88,7 @@ app.MapGet("/api/dashboard", (DashboardState state) => Results.Json(state.Curren
 app.MapGet("/api/services/{serviceKey}/detail", async (string serviceKey, ServiceDetailService details, CancellationToken ct) =>
 {
     var detail = await details.FetchAsync(serviceKey, ct);
-    return detail is null ? Results.NotFound() : Results.Json(detail);
+    return Results.Json(detail);
 });
 app.MapGet("/api/poster/sonarr/{seriesId:int}", (int seriesId, PosterProxyService proxy, CancellationToken ct) =>
     proxy.FetchAsync("sonarr", seriesId, null, ct));

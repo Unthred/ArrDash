@@ -38,7 +38,9 @@
 
     @if (!string.IsNullOrWhiteSpace(SelectedServiceKey))
     {
-        <ServiceDetailPanel ServiceKey="@SelectedServiceKey" OnClose="ClearSelection" />
+        <ServiceDetailPanel ServiceKey="@SelectedServiceKey"
+                            ServiceDisplayName="@SelectedServiceDisplayName"
+                            OnClose="ClearSelection" />
     }
 </div>
 
@@ -71,18 +73,19 @@
         _ => Services
     };
 
+    private string? SelectedServiceDisplayName =>
+        string.IsNullOrWhiteSpace(SelectedServiceKey)
+            ? null
+            : Services.FirstOrDefault(s => string.Equals(s.Key, SelectedServiceKey, StringComparison.OrdinalIgnoreCase))?.Name
+              ?? SelectedServiceKey;
+
     private async Task ToggleService(string key)
     {
         var next = string.Equals(SelectedServiceKey, key, StringComparison.OrdinalIgnoreCase) ? null : key;
-        SelectedServiceKey = next;
         await SelectedServiceKeyChanged.InvokeAsync(next);
     }
 
-    private async Task ClearSelection()
-    {
-        SelectedServiceKey = null;
-        await SelectedServiceKeyChanged.InvokeAsync(null);
-    }
+    private async Task ClearSelection() => await SelectedServiceKeyChanged.InvokeAsync(null);
 
     private async Task OnChipKeyDown(KeyboardEventArgs e, string key)
     {

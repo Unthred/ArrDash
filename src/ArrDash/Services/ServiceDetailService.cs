@@ -33,14 +33,48 @@ public sealed class ServiceDetailService(
             "emby" => await FetchStreamingDetailAsync("emby", emby.FetchSessionsAsync(ct), options.Options.Emby.Url),
             "jellyfin" => await FetchStreamingDetailAsync("jellyfin", jellyfin.FetchSessionsAsync(ct), options.Options.Jellyfin.Url),
             "slskd" => FetchSlskdDetail(),
-            _ => null
+            _ => UnrecognizedDetail(key)
         };
     }
+
+    private static ServiceDetail UnrecognizedDetail(string key)
+    {
+        var label = string.IsNullOrWhiteSpace(key) ? "Service" : key;
+        return new ServiceDetail(
+            key,
+            label,
+            false,
+            false,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            ServiceAttentionLevel.NotConfigured,
+            "Unknown",
+            null,
+            [new ServiceProblem("warning", $"No detail view is available for \"{label}\".")],
+            [],
+            0,
+            false,
+            false,
+            [],
+            [],
+            [],
+            null);
+    }
+
+    private static string DisplayNameForKey(string key) =>
+        key switch
+        {
+            "audiobookshelf" => "AudioBookShelf",
+            "slskd" => "slskd",
+            _ when string.IsNullOrWhiteSpace(key) => "Service",
+            _ => char.ToUpperInvariant(key[0]) + key[1..]
+        };
 
     private static ServiceDetail DisabledDetail(string key) =>
         new(
             key,
-            char.ToUpper(key[0]) + key[1..],
+            DisplayNameForKey(key),
             false,
             false,
             null,

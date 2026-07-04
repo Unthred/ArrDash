@@ -11,9 +11,9 @@
     <MudPaper Class="service-detail-panel" Elevation="0">
         <div class="service-detail-head">
             <div class="service-detail-title-wrap">
+                <MudText Typo="Typo.subtitle1" Class="service-detail-title">@HeaderTitle</MudText>
                 @if (_detail is not null)
                 {
-                    <MudText Typo="Typo.subtitle1" Class="service-detail-title">@_detail.Name</MudText>
                     <MudChip T="string" Size="Size.Small" Class="@AttentionChipClass(_detail.Attention)" Variant="Variant.Filled">
                         @_detail.AttentionLabel
                     </MudChip>
@@ -163,31 +163,52 @@
         }
         else if (!_loading && _error is not null)
         {
-            <MudAlert Severity="Severity.Warning" Dense="true">@_error</MudAlert>
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="service-detail-alert">@_error</MudAlert>
         }
     </MudPaper>
 }
 
 @code {
     [Parameter] public string? ServiceKey { get; set; }
+    [Parameter] public string? ServiceDisplayName { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
     private ServiceDetail? _detail;
     private bool _loading;
     private string? _error;
+    private string? _loadedKey;
     private CancellationTokenSource? _loadCts;
+
+    private string HeaderTitle =>
+        _detail?.Name
+        ?? ServiceDisplayName
+        ?? ServiceKey
+        ?? "Service";
 
     protected override async Task OnParametersSetAsync()
     {
         if (string.IsNullOrWhiteSpace(ServiceKey))
         {
-            _detail = null;
-            _error = null;
-            _loading = false;
+            ResetState();
             return;
         }
 
+        if (string.Equals(ServiceKey, _loadedKey, StringComparison.OrdinalIgnoreCase) &&
+            (_detail is not null || _loading))
+            return;
+
         await LoadAsync(ServiceKey);
+    }
+
+    private void ResetState()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = null;
+        _detail = null;
+        _error = null;
+        _loading = false;
+        _loadedKey = null;
     }
 
     private async Task LoadAsync(string key)
@@ -209,12 +230,18 @@
                 return;
 
             _detail = detail;
+            _loadedKey = key;
             if (detail is null)
-                _error = "Unknown service.";
+                _error = $"Could not load details for {HeaderTitle}.";
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
         {
             _error = ex.Message;
+            _loadedKey = key;
         }
         finally
         {
@@ -224,7 +251,11 @@
         }
     }
 
-    private async Task Close() => await OnClose.InvokeAsync();
+    private async Task Close()
+    {
+        ResetState();
+        await OnClose.InvokeAsync();
+    }
 
     private Task OpenService(string url)
     {
@@ -278,9 +309,5 @@
         return buffer.ToString();
     }
 
-    public void Dispose()
-    {
-        _loadCts?.Cancel();
-        _loadCts?.Dispose();
-    }
+    public void Dispose() => ResetState();
 }
