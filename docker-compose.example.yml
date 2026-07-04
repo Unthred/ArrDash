@@ -14,6 +14,9 @@ services:
       ARRDASH_DISK_PATH: /
       # Unraid example: ARRDASH_HOST_LABEL=Unraid  ARRDASH_DISK_PATH=/mnt/user
       ARRDASH_METRICS_POLL_SECONDS: 2
+      # Host network throughput — interface name to read from /host/proc/1/net/dev
+      # (see the /proc mount below). Unraid example: br0. Adjust to your bridge/NIC name.
+      ARRDASH_NET_INTERFACE: br0
       SONARR_URL: https://sonarr.example.com
       SONARR_API_KEY: ""
       RADARR_URL: https://radarr.example.com
@@ -37,4 +40,14 @@ services:
     volumes:
       - ./config:/config
       - /mnt/user:/mnt/user:ro
+      # Unraid host activity awareness (parity check / mover status). Optional —
+      # feature no-ops if this path isn't mounted/present.
+      - /var/local/emhttp/var.ini:/var/local/emhttp/var.ini:ro
+      # Disk health / SMART temps. Optional, same low-privilege pattern as var.ini.
+      - /var/local/emhttp/disks.ini:/var/local/emhttp/disks.ini:ro
+      # Docker container update/restart visibility + top resource usage. Optional —
+      # grants read access to the whole Docker daemon API, not just ArrDash's own
+      # container. Omit this line if you don't want that exposure; the feature
+      # degrades silently.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped

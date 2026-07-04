@@ -24,7 +24,7 @@ Toolbar: **Save** · **Discard** · **Preview dashboard** · **Show help** (inli
 
 ### Panels
 
-For each panel (Now Playing, Recent TV, Movies, Audiobooks, Music):
+For each panel (Now Playing, Libraries, Recent TV, Movies, Audiobooks, Music):
 
 | Control | Description |
 |---------|-------------|
@@ -64,6 +64,7 @@ Buttons, links, and primary highlights (preset swatches + custom picker).
 Per-panel accent used for headings and panel chrome:
 
 - Now Playing
+- Libraries
 - Recent TV
 - Recent Movies
 - Recent Audiobooks

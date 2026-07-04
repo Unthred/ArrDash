@@ -73,6 +73,25 @@ To show **host** disk on Docker, bind-mount the path you care about and set `ARR
 
 For Unraid, mount the array path read-only and set `ARRDASH_DISK_PATH` to the mount inside the container (e.g. `/mnt/user`).
 
+## Unraid activity environment variables (optional)
+
+Surfaces *why* CPU/memory might be spiking — an active parity check, mover run, or Docker containers mid-update — next to the CPU graph in the server metrics bar. Both inputs below are independently optional: if a path isn't mounted, that part of the feature is silently disabled rather than erroring.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ARRDASH_UNRAID_VAR_INI` | `/var/local/emhttp/var.ini` | Unraid state file for parity-check progress (`mdResync*`) and mover status (`shareMoverActive`) |
+| `ARRDASH_DOCKER_SOCKET` | `/var/run/docker.sock` | Docker API socket, used to detect containers in a `restarting`/`created` state (proxy for "currently updating") |
+
+To enable, bind-mount both read-only in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - /var/local/emhttp/var.ini:/var/local/emhttp/var.ini:ro
+  - /var/run/docker.sock:/var/run/docker.sock:ro
+```
+
+**Note:** mounting `docker.sock`, even read-only, grants the ArrDash container API visibility into your entire Docker daemon (all containers, not just ArrDash's own). Omit that mount if you don't want that exposure — parity/mover status from `var.ini` alone still works without it.
+
 ## appsettings.json
 
 Shipped defaults use placeholder hostnames. Production should set env vars or use Settings:

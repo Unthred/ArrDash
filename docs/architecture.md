@@ -38,7 +38,7 @@ ArrDash/
 ├── src/ArrDash/                 # Main web app
 │   ├── Components/
 │   │   ├── Pages/               # Home (dashboard), Settings, Error
-│   │   ├── Panels/              # DownloadPanel, NowPlayingPanel
+│   │   ├── Panels/              # DownloadPanel, NowPlayingPanel, LibrariesPanel
 │   │   ├── Layout/              # MainLayout (app bar, nav)
 │   │   └── Shared/              # Reusable UI (metrics, status bar, pickers)
 │   ├── Services/
@@ -49,7 +49,8 @@ ArrDash/
 │   │   ├── LayoutPreferencesService.cs
 │   │   ├── ThemeBuilder.cs / ThemeService.cs
 │   │   ├── PosterProxyService.cs
-│   │   └── HostSystemMetricsService.cs
+│   │   ├── HostSystemMetricsService.cs
+│   │   └── UnraidActivityService.cs
 │   ├── Models/                  # DTOs and UserLayoutPreferences
 │   ├── Configuration/           # MediaServiceOptions binding
 │   ├── Hubs/DashboardHub.cs
@@ -120,13 +121,17 @@ Routes are mapped in `Program.cs` under `/api/poster/...` and `/api/thumbnail/..
 
 Reads Linux `/proc/stat` and `/proc/meminfo` (configurable via `ARRDASH_PROC_ROOT`). Disk usage uses `DriveInfo` on `ARRDASH_DISK_PATH`.
 
+### UnraidActivityService
+
+Optional, Unraid-specific. Parses `/var/local/emhttp/var.ini` (path override: `ARRDASH_UNRAID_VAR_INI`) for parity-check progress (`mdResync*`) and mover state (`shareMoverActive`), and queries the Docker API over `/var/run/docker.sock` (path override: `ARRDASH_DOCKER_SOCKET`) for containers in a `restarting`/`created` state as a proxy for "currently updating." Both inputs are independently optional — if the file or socket isn't mounted, that part of the feature silently returns nothing rather than failing. Surfaced in `ServerMetricsBar.razor` next to the CPU graph.
+
 ## UI structure
 
 ### Dashboard (`Home.razor`)
 
 - Hero strip (optional): title, last refresh, manual refresh button
-- Server metrics bar (optional)
-- Panels in user-defined order: Now Playing, Recent TV/Movies/Audiobooks/Music
+- Server metrics bar (optional): CPU/memory/disk, plus Unraid activity note (parity check / mover / container updates) when available
+- Panels in user-defined order: Now Playing, Libraries, Recent TV/Movies/Audiobooks/Music
 - Service status bar (optional)
 
 Connects to SignalR on first render; falls back to HTTP refresh if hub fails.
@@ -144,8 +149,10 @@ Activated via layout query or auto-kiosk setting. Supports panel rotation, scree
 Key types live in `Models/DashboardModels.cs` and `Models/SettingsModels.cs`:
 
 - `DownloadItem` — one recent import/grab with poster, quality, episode metadata, deep links
-- `ActiveSession` — Plex/Emby playback row
+- `ActiveSession` — Plex/Emby/Jellyfin playback row, including LAN/WAN, bitrate, and bandwidth when the upstream API exposes them
 - `ServiceHealth` — status chip data
+- `LibraryStatItem` — one library rollup row (used by the Libraries panel)
+- `UnraidActivity` — parity/mover/container-update state for the server metrics bar
 - `UserLayoutPreferences` — full settings graph (serialized to JSON)
 
 ## Technology choices

@@ -8,6 +8,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Service activity icons on status bar chips — live workload from *arr commands/queue, ABS scans, and streaming transcodes ([#5](https://github.com/Unthred/ArrDash/issues/5))
+- Activity detection counts **active** work only (`started` commands; `importing`/`downloading` queue items — not `importBlocked`) ([#6](https://github.com/Unthred/ArrDash/issues/6))
+- Activity tooltips show data freshness (`Checked Xs ago`) ([#14](https://github.com/Unthred/ArrDash/issues/14))
+- Unraid activity awareness in server metrics — parity check / rebuild progress ring, mover and container restart/update badges, disk health, stuck (D-state) processes, top containers by CPU ([#8](https://github.com/Unthred/ArrDash/issues/8))
+- CPU history sparkline and expanded server metrics bar (iowait, core temps, disk detail drill-down) ([#12](https://github.com/Unthred/ArrDash/issues/12))
+- Hero network throughput rings (↑/↓) from host interface stats ([#11](https://github.com/Unthred/ArrDash/issues/11))
+- VPN status badge in hero strip ([#11](https://github.com/Unthred/ArrDash/issues/11))
+- Libraries panel — library rollups as their own reorderable/hideable/accent-colourable panel ([#9](https://github.com/Unthred/ArrDash/issues/9))
+- Now Playing: per-session LAN/WAN indicator and bandwidth badge on poster; total bandwidth in rolled-up header ([#10](https://github.com/Unthred/ArrDash/issues/10))
+- Dashboard client polling (`/api/dashboard`), Blazor circuit reconnect, drag-to-reorder panels ([#13](https://github.com/Unthred/ArrDash/issues/13))
 - Jellyfin Now Playing support (sessions API, poster proxy, Settings toggle, API keys tab)
 - GitHub workflow: issue template, project board setup, `arrdash-issue-create.sh`, Cursor rules for issue-first development
 - Full documentation set under `docs/`
@@ -16,6 +26,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 - Repository renamed to [Unthred/ArrDash](https://github.com/Unthred/ArrDash) (was `arrdash-blazor`; old URLs redirect)
 - Host metrics: portable defaults (`Host`, disk `/`); Settings overrides for host label and disk path(s); docs for non-Unraid platforms ([#4](https://github.com/Unthred/ArrDash/issues/4))
+- `docker-compose.example.yml`: optional Unraid mounts (`var.ini`, `disks.ini`, `docker.sock`) and `ARRDASH_NET_INTERFACE`
 - Repository visibility: public
 
 ## [Initial]

@@ -30,7 +30,7 @@ Returns the current in-memory `DashboardSnapshot` (same payload pushed over Sign
 | `recentMovies` | array | Recent movies |
 | `recentAudiobooks` | array | Recent audiobooks |
 | `recentMusic` | array | Recent music |
-| `activeSessions` | array | Plex/Emby now playing |
+| `activeSessions` | array | Plex/Emby/Jellyfin now playing |
 | `services` | array | Service health chips |
 | `updatedAt` | ISO 8601 | Last successful collection time |
 | `host` | object? | Server metrics (null if disabled) |
@@ -61,6 +61,20 @@ Returns the current in-memory `DashboardSnapshot` (same payload pushed over Sign
 | `error` | Error message if offline |
 | `version` | App version if reported |
 
+### ActiveSession
+
+| Field | Description |
+|-------|-------------|
+| `id` | Stable row id, prefixed by server (`plex-`, `emby-`, `jellyfin-`) |
+| `server` | Enum: Plex, Emby, Jellyfin |
+| `user`, `title`, `subtitle`, `device` | Display text |
+| `mediaType` | Upstream media type string |
+| `progressPercent` | 0–100 |
+| `thumbnailUrl`, `externalUrl` | Same-origin poster proxy / deep link |
+| `isLocal` | `true` = LAN, `false` = WAN, `null` if the upstream API didn't expose enough to tell |
+| `bitrateKbps` | Source media bitrate in kbps, if known |
+| `bandwidthKbps` | Actual current stream bandwidth in kbps (transcode output rate when transcoding, else same as `bitrateKbps`) |
+
 ### ServerMetrics (`host`)
 
 | Field | Description |
@@ -69,6 +83,8 @@ Returns the current in-memory `DashboardSnapshot` (same payload pushed over Sign
 | `cpuPercent` | Current CPU usage |
 | `memoryUsedPercent`, `memoryUsedBytes`, `memoryTotalBytes` | RAM |
 | `diskUsedPercent`, `diskUsedBytes`, `diskTotalBytes` | Disk for `ARRDASH_DISK_PATH` |
+
+Unraid activity (parity check / mover / container updates) is not part of the snapshot payload — it's polled directly by `ServerMetricsBar.razor` via `UnraidActivityService`, independent of the main collection cycle.
 
 ## Poster and thumbnail proxy
 
