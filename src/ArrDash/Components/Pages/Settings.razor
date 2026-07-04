@@ -88,18 +88,41 @@
             </MudPaper>
 
             <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-section-title">Service status</div>
+                <div class="settings-grid-2">
+                    <SettingField Text="@SettingsHelpTexts.StatusBar">
+                        <MudSelect T="StatusBarMode" @bind-Value="_statusBarMode" @bind-Value:after="ScheduleLivePreviewNow" Label="Status bar" Variant="Variant.Outlined">
+                            <MudSelectItem Value="StatusBarMode.All">All services</MudSelectItem>
+                            <MudSelectItem Value="StatusBarMode.OfflineOnly">Offline only</MudSelectItem>
+                            <MudSelectItem Value="StatusBarMode.Hidden">Hidden</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.StatusBarAlignment">
+                        <MudSelect T="StatusBarAlignment" @bind-Value="_statusBarAlignment" @bind-Value:after="ScheduleLivePreviewNow" Label="Status bar layout" Variant="Variant.Outlined">
+                            <MudSelectItem Value="StatusBarAlignment.Left">Left aligned</MudSelectItem>
+                            <MudSelectItem Value="StatusBarAlignment.Right">Right aligned</MudSelectItem>
+                            <MudSelectItem Value="StatusBarAlignment.SpacedEvenly">Spaced evenly</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.PollInterval">
+                        <MudNumericField @bind-Value="_pollIntervalSeconds" @bind-Value:after="ScheduleLivePreviewNow" Label="Poll interval (sec)" Variant="Variant.Outlined" Min="0" Max="3600" HelperText="0 = env default" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ManualRefreshOnly">
+                        <MudSwitch @bind-Value="_manualRefreshOnly" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Manual refresh only" />
+                    </SettingField>
+                </div>
+            </MudPaper>
+
+            <MudPaper Class="settings-section compact" Elevation="0">
                 <div class="settings-section-title">Panels</div>
                 <SettingSectionHelp Text="@SettingsHelpTexts.PanelOrder" />
                 <div class="panel-order-compact">
                     @for (var i = 0; i < _panelOrder.Count; i++)
                     {
                         var panelId = _panelOrder[i];
-                        var index = i;
                         <div class="panel-order-row">
                             <MudText Class="panel-order-label">@PanelCatalog.LabelFor(panelId)</MudText>
                             <div class="panel-order-actions">
-                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowUp" Disabled="@(index == 0)" OnClick="@(() => MovePanel(index, -1))" Size="Size.Small" />
-                                <MudIconButton Icon="@Icons.Material.Filled.KeyboardArrowDown" Disabled="@(index == _panelOrder.Count - 1)" OnClick="@(() => MovePanel(index, 1))" Size="Size.Small" />
                                 <MudSwitch @bind-Value="_panelHidden[panelId]" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Hide" />
                                 <MudSelect T="PanelViewMode" @bind-Value="_panelViewModes[panelId]" @bind-Value:after="ScheduleLivePreviewNow" Label="View" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense" Class="panel-view-select">
                                     <MudSelectItem Value="PanelViewMode.Cards">Cards</MudSelectItem>
@@ -347,19 +370,6 @@
                         </SettingField>
                     </div>
                     <div class="settings-field-stack">
-                        <SettingField Text="@SettingsHelpTexts.PollInterval">
-                            <MudNumericField @bind-Value="_pollIntervalSeconds" @bind-Value:after="ScheduleLivePreviewNow" Label="Poll interval (sec)" Variant="Variant.Outlined" Min="0" Max="3600" HelperText="0 = env default" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.ManualRefreshOnly">
-                            <MudSwitch @bind-Value="_manualRefreshOnly" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Manual refresh only" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.StatusBar">
-                            <MudSelect T="StatusBarMode" @bind-Value="_statusBarMode" @bind-Value:after="ScheduleLivePreviewNow" Label="Status bar" Variant="Variant.Outlined">
-                                <MudSelectItem Value="StatusBarMode.All">All services</MudSelectItem>
-                                <MudSelectItem Value="StatusBarMode.OfflineOnly">Offline only</MudSelectItem>
-                                <MudSelectItem Value="StatusBarMode.Hidden">Hidden</MudSelectItem>
-                            </MudSelect>
-                        </SettingField>
                         <SettingField Text="@SettingsHelpTexts.StartupPage">
                             <MudSelect T="StartupPage" @bind-Value="_startupPage" @bind-Value:after="ScheduleLivePreviewNow" Label="Startup page" Variant="Variant.Outlined">
                                 <MudSelectItem Value="StartupPage.Dashboard">Dashboard</MudSelectItem>
@@ -513,6 +523,7 @@
     private int _pollIntervalSeconds;
     private bool _manualRefreshOnly;
     private StatusBarMode _statusBarMode = StatusBarMode.All;
+    private StatusBarAlignment _statusBarAlignment = StatusBarAlignment.Left;
     private StartupPage _startupPage = StartupPage.Dashboard;
     private bool _autoKioskOnLoad;
     private bool _kioskHideHero = true;
@@ -687,6 +698,7 @@
         _pollIntervalSeconds = prefs.PollIntervalSeconds;
         _manualRefreshOnly = prefs.ManualRefreshOnly;
         _statusBarMode = prefs.StatusBarMode;
+        _statusBarAlignment = prefs.StatusBarAlignment;
         _startupPage = prefs.StartupPage;
         _autoKioskOnLoad = prefs.AutoKioskOnLoad;
         _kioskHideHero = prefs.KioskHideHero;
@@ -791,16 +803,6 @@
     {
         if (!_revealedKeys.Add(key))
             _revealedKeys.Remove(key);
-    }
-
-    private void MovePanel(int index, int delta)
-    {
-        var target = index + delta;
-        if (target < 0 || target >= _panelOrder.Count)
-            return;
-
-        (_panelOrder[index], _panelOrder[target]) = (_panelOrder[target], _panelOrder[index]);
-        ScheduleLivePreviewNow();
     }
 
     private void SyncDraftFromForm()
@@ -983,6 +985,7 @@
         p.PollIntervalSeconds = Math.Clamp(_pollIntervalSeconds, 0, 3600);
         p.ManualRefreshOnly = _manualRefreshOnly;
         p.StatusBarMode = _statusBarMode;
+        p.StatusBarAlignment = _statusBarAlignment;
         p.StartupPage = _startupPage;
         p.AutoKioskOnLoad = _autoKioskOnLoad;
         p.KioskHideHero = _kioskHideHero;

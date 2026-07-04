@@ -2,6 +2,34 @@ using ArrDash.Models;
 
 namespace ArrDash.Services;
 
+public static class ResolutionDisplayHelper
+{
+    public static string? FromHeight(int? height) => height switch
+    {
+        null or <= 0 => null,
+        >= 2160 => "4K",
+        >= 1440 => "1440p",
+        >= 1080 => "1080p",
+        >= 720 => "720p",
+        >= 480 => "480p",
+        _ => $"{height}p"
+    };
+
+    public static string? FromPlexLabel(string? videoResolution)
+    {
+        if (string.IsNullOrWhiteSpace(videoResolution))
+            return null;
+
+        return videoResolution.ToLowerInvariant() switch
+        {
+            "4k" => "4K",
+            "sd" => "SD",
+            _ when int.TryParse(videoResolution, out var height) => FromHeight(height),
+            _ => videoResolution
+        };
+    }
+}
+
 public static class ByteDisplayHelper
 {
     public static string Format(long bytes)
@@ -42,6 +70,14 @@ public static class ByteDisplayHelper
 
         return $"{used.ToString(format, System.Globalization.CultureInfo.InvariantCulture)}/{totalSize.ToString(format, System.Globalization.CultureInfo.InvariantCulture)} {units[unit]}";
     }
+}
+
+public static class BitrateDisplayHelper
+{
+    public static string Format(int kbps) =>
+        kbps >= 1000
+            ? $"{kbps / 1000d:0.#} Mbps"
+            : $"{kbps} Kbps";
 }
 
 public static class CountDisplayHelper

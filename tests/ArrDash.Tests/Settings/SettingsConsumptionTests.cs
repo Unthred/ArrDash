@@ -83,6 +83,40 @@ public class SettingsConsumptionTests
         Assert.Contains("StartupPage.Settings", home);
     }
 
+    [Fact]
+    public void StatusBarAlignment_controls_chip_layout_in_service_status_bar()
+    {
+        var bar = ReadComponent("Shared/ServiceStatusBar.razor");
+
+        Assert.Contains("[Parameter] public StatusBarAlignment Alignment", bar);
+        Assert.Contains("status-bar-align-left", bar);
+        Assert.Contains("status-bar-align-right", bar);
+        Assert.Contains("status-bar-align-spaced", bar);
+    }
+
+    [Fact]
+    public void Home_subscribes_to_server_side_dashboard_state_updates()
+    {
+        var home = ReadComponent("Pages/Home.razor");
+
+        Assert.Contains("State.Changed += OnDashboardStateChanged", home);
+        Assert.Contains("CircuitNotifier.CircuitConnected += OnCircuitConnected", home);
+        Assert.Contains("[JSInvokable]", home);
+        Assert.Contains("SyncFromServerState", home);
+        Assert.DoesNotMatch(@"HubConnectionBuilder", home);
+    }
+
+    [Fact]
+    public void App_bootstraps_blazor_reconnect_and_dashboard_poll_scripts()
+    {
+        var app = File.ReadAllText(Path.Combine(FindProjectRoot(), "src", "ArrDash", "Components", "App.razor"));
+
+        Assert.Contains("autostart=\"false\"", app);
+        Assert.Contains("js/reconnect.js", app);
+        Assert.Contains("js/dashboard-poll.js", app);
+        Assert.Contains("arrdashReconnect.startBlazor()", app);
+    }
+
     private static string ReadComponent(string relativePath) =>
         File.ReadAllText(Path.Combine(ComponentsRoot, relativePath));
 

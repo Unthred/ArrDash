@@ -11,7 +11,7 @@ public static class SettingsHelpTexts
     public const string ShowEpisodeBadges = "Shows the episode number row on TV cards (Cards view). Turn off to hide season episode badges entirely.";
     public const string ShowMissingEpisodes = "When episode badges are on, missing episodes get a dashed highlight. Click a dashed badge to trigger a Sonarr search.";
     public const string ShowSyncNotes = "Shows Chaptarr ↔ AudioBookShelf sync notes on merged audiobook cards.";
-    public const string PanelOrder = "Reorder panels with the arrows. Hide removes a panel from the dashboard. View switches between cards, compact list, or table.";
+    public const string PanelOrder = "Drag panels by the handle on the dashboard to reorder them. Hide removes a panel from the dashboard. View switches between cards, compact list, or table.";
 
     public const string Theme = "Light, dark, or follow your browser / system preference.";
     public const string Density = "Comfortable adds more spacing; compact fits more on screen.";
@@ -63,6 +63,7 @@ public static class SettingsHelpTexts
     public const string PollInterval = "How often the dashboard refreshes data from *arr and media servers. 0 uses the server default.";
     public const string ManualRefreshOnly = "Stops automatic polling — refresh only when you use the refresh control.";
     public const string StatusBar = "Service health chips at the top — show all, offline only, or hide entirely.";
+    public const string StatusBarAlignment = "How service chips are laid out in the status bar — left, right, or evenly spaced across the row.";
     public const string StartupPage = "Which page opens when you visit ArrDash.";
 
     public const string AutoKioskOnLoad = "Enters full-screen kiosk mode automatically when the dashboard loads.";

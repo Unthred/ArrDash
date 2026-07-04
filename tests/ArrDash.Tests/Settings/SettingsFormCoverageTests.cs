@@ -60,6 +60,7 @@ public class SettingsFormCoverageTests
         yield return [nameof(UserLayoutPreferences.PollIntervalSeconds)];
         yield return [nameof(UserLayoutPreferences.ManualRefreshOnly)];
         yield return [nameof(UserLayoutPreferences.StatusBarMode)];
+        yield return [nameof(UserLayoutPreferences.StatusBarAlignment)];
         yield return [nameof(UserLayoutPreferences.StartupPage)];
         yield return [nameof(UserLayoutPreferences.AutoKioskOnLoad)];
         yield return [nameof(UserLayoutPreferences.KioskHideHero)];

@@ -4,6 +4,10 @@
 <MudPaper Class="@ShellClass" Elevation="0">
     <div class="panel-header panel-header-rollup" style="--accent:@Accent" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
         <div class="panel-title-wrap">
+            @if (DragHandle is not null)
+            {
+                @DragHandle
+            }
             <MudIcon Icon="@Icon" Class="panel-icon" />
             <div>
                 <div class="panel-title">@Title</div>
@@ -155,6 +159,7 @@
     [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter, EditorRequired] public string Icon { get; set; } = Icons.Material.Filled.Folder;
     [Parameter] public string Accent { get; set; } = "#6366f1";
+    [Parameter] public RenderFragment? DragHandle { get; set; }
     [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
     [Parameter] public PanelViewMode ViewMode { get; set; } = PanelViewMode.Cards;
     [Parameter] public TimeDisplayFormat TimeFormat { get; set; } = TimeDisplayFormat.Relative;

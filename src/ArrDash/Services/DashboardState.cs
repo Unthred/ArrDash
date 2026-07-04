@@ -8,6 +8,8 @@ public sealed class DashboardState
     private readonly object _lock = new();
     private DashboardSnapshot _snapshot = Empty();
 
+    public event Action<DashboardSnapshot>? Changed;
+
     public DashboardSnapshot Current
     {
         get
@@ -19,8 +21,14 @@ public sealed class DashboardState
 
     public void Update(DashboardSnapshot snapshot)
     {
+        Action<DashboardSnapshot>? handlers;
         lock (_lock)
+        {
             _snapshot = snapshot;
+            handlers = Changed;
+        }
+
+        handlers?.Invoke(snapshot);
     }
 
     public static DashboardSnapshot Empty() => new(
@@ -288,6 +296,7 @@ public sealed class LayoutPreferencesService(IWebHostEnvironment env, ILogger<La
         Density = p.Density,
         HideHeroStrip = p.HideHeroStrip,
         StatusBarMode = p.StatusBarMode,
+        StatusBarAlignment = p.StatusBarAlignment,
         TimeFormat = p.TimeFormat,
         RecentWindowMode = p.RecentWindowMode,
         RecentDays = p.RecentDays,

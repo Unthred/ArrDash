@@ -77,6 +77,13 @@ public enum StatusBarMode
     Hidden
 }
 
+public enum StatusBarAlignment
+{
+    Left,
+    Right,
+    SpacedEvenly
+}
+
 public enum KioskRotateMode
 {
     Off,
@@ -131,6 +138,7 @@ public static class PanelCatalog
     public static readonly (string Id, string Label, string DefaultAccent)[] All =
     [
         ("now-playing", "Now Playing", "#818cf8"),
+        ("libraries", "Libraries", "#22c55e"),
         ("recent-tv", "Recent TV", "#35c5f4"),
         ("recent-movies", "Recent Movies", "#f5c518"),
         ("recent-audiobooks", "Recent Audiobooks", "#00d2be"),

@@ -2,11 +2,12 @@
 @inject DashboardState State
 @inject LayoutPreferencesService Prefs
 @inject DashboardRefreshService RefreshService
+@inject DashboardCircuitNotifier CircuitNotifier
+@inject MediaServiceOptionsAccessor OptionsAccessor
 @inject NavigationManager Nav
-@using Microsoft.AspNetCore.SignalR.Client
-@implements IAsyncDisposable
 @implements IDisposable
 @inject IJSRuntime Js
+@using Microsoft.JSInterop
 
 <PageTitle>ArrDash</PageTitle>
 
@@ -26,6 +27,10 @@
                 <h1 class="hero-title">@_display.Title</h1>
                 <p class="hero-copy">@_display.Subtitle</p>
             </div>
+            <div class="hero-status">
+                <NetworkSpeedGraph />
+                <VpnStatusBadge />
+            </div>
             <div class="hero-meta">
                 <MudText Typo="Typo.caption" Class="muted">Last refresh</MudText>
                 <MudText Typo="Typo.body2">@FormatUpdated(_snapshot.UpdatedAt)</MudText>
@@ -36,9 +41,9 @@
         </section>
     }
 
-    @if (Prefs.Current.ShowServerMetrics && _snapshot.Host is not null)
+    @if (Prefs.Current.ShowServerMetrics)
     {
-        <ServerMetricsBar Metrics="_snapshot.Host" SampledAt="_snapshot.UpdatedAt" />
+        <ServerMetricsBar Metrics="_snapshot.Host" SampledAt="_snapshot.UpdatedAt" Services="_snapshot.Services" />
     }
 
     @foreach (var panelId in VisiblePanels)
@@ -48,6 +53,10 @@
             continue;
         }
 
+        <div class="dashboard-panel-wrap @(_dragOverPanel == panelId ? "dashboard-panel-drag-over" : "")"
+             @ondragover="@(() => OnPanelDragOver(panelId))" @ondragover:preventDefault="true"
+             @ondragleave="@(() => OnPanelDragLeave(panelId))"
+             @ondrop="@(() => OnPanelDropAsync(panelId))">
         @switch (panelId)
         {
             case "now-playing":
@@ -56,7 +65,17 @@
                                    Accent="@Prefs.GetPanelAccent(panelId, "#818cf8")"
                                    EnableClickThrough="@Prefs.Current.EnableClickThrough"
                                    ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
-                                   LargeCards="@(Kiosk && Prefs.Current.KioskLargeNowPlaying)" />
+                                   LargeCards="@(Kiosk && Prefs.Current.KioskLargeNowPlaying)">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </NowPlayingPanel>
+                break;
+            case "libraries":
+                <LibrariesPanel PanelId="libraries"
+                                 Accent="@Prefs.GetPanelAccent(panelId, "#22c55e")"
+                                 EnableClickThrough="@Prefs.Current.EnableClickThrough"
+                                 ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </LibrariesPanel>
                 break;
             case "recent-tv":
                 <DownloadPanel PanelId="recent-tv" Title="Recent TV" Icon="@Icons.Material.Filled.LiveTv"
@@ -68,7 +87,9 @@
                                ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
                                FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
                                ServiceUrl="@OptionsAccessor.Options.Sonarr.Url"
-                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))" />
+                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </DownloadPanel>
                 break;
             case "recent-movies":
                 <DownloadPanel PanelId="recent-movies" Title="Recent Movies" Icon="@Icons.Material.Filled.Movie"
@@ -80,7 +101,9 @@
                                ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
                                FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
                                ServiceUrl="@OptionsAccessor.Options.Radarr.Url"
-                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))" />
+                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </DownloadPanel>
                 break;
             case "recent-audiobooks":
                 <DownloadPanel PanelId="recent-audiobooks" Title="Recent Audiobooks" Icon="@Icons.Material.Filled.Headphones"
@@ -93,7 +116,9 @@
                                FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
                                ServiceUrl="@OptionsAccessor.Options.Chaptarr.Url"
                                ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))"
-                               NotConfiguredMessage="@AudiobookPanelMessage()" />
+                               NotConfiguredMessage="@AudiobookPanelMessage()">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </DownloadPanel>
                 break;
             case "recent-music":
                 <DownloadPanel PanelId="recent-music" Title="Recent Music" Icon="@Icons.Material.Filled.MusicNote"
@@ -106,29 +131,33 @@
                                FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
                                ServiceUrl="@OptionsAccessor.Options.Lidarr.Url"
                                ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))"
-                               NotConfiguredMessage="@MusicNotConfiguredMessage()" />
+                               NotConfiguredMessage="@MusicNotConfiguredMessage()">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </DownloadPanel>
                 break;
         }
+        </div>
     }
 
-    @if (Prefs.Current.StatusBarMode != StatusBarMode.Hidden)
+    @if (Prefs.Current.StatusBarMode != StatusBarMode.Hidden && !Prefs.Current.ShowServerMetrics)
     {
-        <ServiceStatusBar Services="_snapshot.Services" Mode="Prefs.Current.StatusBarMode" />
+        <ServiceStatusBar Services="_snapshot.Services" SampledAt="_snapshot.UpdatedAt" Mode="Prefs.Current.StatusBarMode" Alignment="Prefs.Current.StatusBarAlignment" />
     }
 </div>
 
 @code {
-    [Inject] private MediaServiceOptionsAccessor OptionsAccessor { get; set; } = default!;
-
     private DashboardSnapshot _snapshot = DashboardState.Empty();
-    private HubConnection? _hub;
     private DashboardDisplaySettings _display = new("Your media universe", "", PosterSize.Medium, PosterPlacement.Left, new Dictionary<string, string>());
     private System.Threading.Timer? _rotateTimer;
     private System.Threading.Timer? _screensaverTimer;
     private System.Threading.Timer? _refreshLabelTimer;
+    private System.Threading.Timer? _snapshotSyncTimer;
+    private DotNetObjectReference<Home>? _dotNetRef;
     private int _rotateIndex;
     private DateTime _lastActivity = DateTime.UtcNow;
     private bool _screensaverActive;
+    private string? _draggingPanel;
+    private string? _dragOverPanel;
     [CascadingParameter] public bool Kiosk { get; set; }
 
     private IReadOnlyList<string> VisiblePanels => Prefs.GetVisiblePanelOrder();
@@ -141,8 +170,11 @@
     {
         _snapshot = State.Current;
         _display = Prefs.GetDisplaySettings();
+        State.Changed += OnDashboardStateChanged;
+        CircuitNotifier.CircuitConnected += OnCircuitConnected;
         Prefs.Changed += OnPrefsChanged;
         ConfigureRefreshLabelTimer();
+        ConfigureSnapshotSyncTimer();
         ApplyStartupPagePreference();
     }
 
@@ -154,40 +186,99 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (!firstRender)
+            return;
 
-        _snapshot = State.Current;
         ConfigureKioskTimers();
-        StateHasChanged();
 
-        _hub = new HubConnectionBuilder()
-            .WithUrl(Nav.ToAbsoluteUri("/hubs/dashboard"))
-            .WithAutomaticReconnect()
-            .Build();
+        _dotNetRef ??= DotNetObjectReference.Create(this);
+        await StartBrowserPollAsync();
 
-        _hub.On<DashboardSnapshot>("DashboardUpdated", snapshot =>
-        {
-            _snapshot = snapshot;
-            UpdateScreensaverState();
-            return InvokeAsync(StateHasChanged);
-        });
+        if (Prefs.Current.ManualRefreshOnly)
+            return;
 
-        _hub.Reconnected += _ =>
-        {
-            _snapshot = State.Current;
-            return InvokeAsync(StateHasChanged);
-        };
-
-        try
-        {
-            await _hub.StartAsync();
-            _snapshot = State.Current;
-            StateHasChanged();
-        }
-        catch
-        {
+        var pollSeconds = Prefs.GetPollIntervalSeconds(OptionsAccessor.Options.PollIntervalSeconds);
+        if (DateTimeOffset.UtcNow - _snapshot.UpdatedAt > TimeSpan.FromSeconds(pollSeconds + 5))
             await RefreshNow();
-        }
+    }
+
+    [JSInvokable]
+    public Task SyncFromServerState()
+    {
+        _snapshot = State.Current;
+        UpdateScreensaverState();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task StartBrowserPollAsync()
+    {
+        if (_dotNetRef is null)
+            return;
+
+        var pollSeconds = Prefs.GetPollIntervalSeconds(OptionsAccessor.Options.PollIntervalSeconds);
+        await Js.InvokeVoidAsync("arrdashPoll.start", _dotNetRef, Prefs.Current.ManualRefreshOnly, pollSeconds);
+    }
+
+    private void OnDashboardStateChanged(DashboardSnapshot snapshot)
+    {
+        _snapshot = snapshot;
+        UpdateScreensaverState();
+        RequestRender();
+    }
+
+    private void OnCircuitConnected()
+    {
+        _snapshot = State.Current;
+        UpdateScreensaverState();
+        RequestRender();
+
+        if (Prefs.Current.ManualRefreshOnly)
+            return;
+
+        var pollSeconds = Prefs.GetPollIntervalSeconds(OptionsAccessor.Options.PollIntervalSeconds);
+        if (DateTimeOffset.UtcNow - _snapshot.UpdatedAt > TimeSpan.FromSeconds(pollSeconds + 5))
+            _ = InvokeAsync(RefreshNow);
+    }
+
+    private void RequestRender()
+    {
+        _ = InvokeAsync(() =>
+        {
+            StateHasChanged();
+            return Task.CompletedTask;
+        });
+    }
+
+    private void ConfigureSnapshotSyncTimer()
+    {
+        _snapshotSyncTimer?.Dispose();
+        _snapshotSyncTimer = null;
+        if (Prefs.Current.ManualRefreshOnly)
+            return;
+
+        var pollSeconds = Prefs.GetPollIntervalSeconds(OptionsAccessor.Options.PollIntervalSeconds);
+        var tickSeconds = Math.Clamp(pollSeconds / 2, 5, 30);
+        _snapshotSyncTimer = new System.Threading.Timer(_ =>
+            _ = InvokeAsync(async () =>
+            {
+                var latest = State.Current;
+                var stale = DateTimeOffset.UtcNow - latest.UpdatedAt >
+                            TimeSpan.FromSeconds(pollSeconds + 10);
+
+                if (stale)
+                {
+                    await RefreshNow();
+                    return;
+                }
+
+                if (latest.UpdatedAt == _snapshot.UpdatedAt)
+                    return;
+
+                _snapshot = latest;
+                UpdateScreensaverState();
+                StateHasChanged();
+            }), null, TimeSpan.FromSeconds(tickSeconds), TimeSpan.FromSeconds(tickSeconds));
     }
 
     private void ConfigureRefreshLabelTimer()
@@ -270,8 +361,10 @@
         ApplyStartupPagePreference();
         ConfigureKioskTimers();
         ConfigureRefreshLabelTimer();
+        ConfigureSnapshotSyncTimer();
         _ = InvokeAsync(async () =>
         {
+            await StartBrowserPollAsync();
             await RefreshNow();
             StateHasChanged();
         });
@@ -332,18 +425,76 @@
         StateHasChanged();
     }
 
+    private void OnPanelDragStart(string panelId) => _draggingPanel = panelId;
+
+    private void OnPanelDragEnd()
+    {
+        _draggingPanel = null;
+        _dragOverPanel = null;
+    }
+
+    private void OnPanelDragOver(string panelId)
+    {
+        if (_draggingPanel is not null && _draggingPanel != panelId)
+            _dragOverPanel = panelId;
+    }
+
+    private void OnPanelDragLeave(string panelId)
+    {
+        if (_dragOverPanel == panelId)
+            _dragOverPanel = null;
+    }
+
+    private async Task OnPanelDropAsync(string targetPanelId)
+    {
+        var draggedPanelId = _draggingPanel;
+        _draggingPanel = null;
+        _dragOverPanel = null;
+
+        if (draggedPanelId is null || draggedPanelId == targetPanelId)
+            return;
+
+        var visible = VisiblePanels.ToList();
+        var oldIndex = visible.IndexOf(draggedPanelId);
+        var newIndex = visible.IndexOf(targetPanelId);
+        if (oldIndex < 0 || newIndex < 0)
+            return;
+
+        visible.RemoveAt(oldIndex);
+        visible.Insert(newIndex, draggedPanelId);
+
+        var hidden = PanelCatalog.DefaultOrder.Where(id => !visible.Contains(id));
+        await Prefs.UpdatePanelOrderAsync(visible.Concat(hidden).ToList());
+    }
+
+    private RenderFragment BuildDragHandle(string panelId) => builder =>
+    {
+        if (Kiosk)
+            return;
+
+        builder.OpenComponent<PanelDragHandle>(0);
+        builder.AddAttribute(1, "OnDragStart", EventCallback.Factory.Create(this, () => OnPanelDragStart(panelId)));
+        builder.AddAttribute(2, "OnDragEnd", EventCallback.Factory.Create(this, OnPanelDragEnd));
+        builder.CloseComponent();
+    };
+
     public void Dispose()
     {
+        State.Changed -= OnDashboardStateChanged;
+        CircuitNotifier.CircuitConnected -= OnCircuitConnected;
         Prefs.Changed -= OnPrefsChanged;
         _rotateTimer?.Dispose();
         _screensaverTimer?.Dispose();
         _refreshLabelTimer?.Dispose();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        Dispose();
-        if (_hub is not null)
-            await _hub.DisposeAsync();
+        _snapshotSyncTimer?.Dispose();
+        try
+        {
+            _ = Js.InvokeVoidAsync("arrdashPoll.stop");
+        }
+        catch
+        {
+            // Circuit may already be gone during teardown.
+        }
+        _dotNetRef?.Dispose();
     }
 }

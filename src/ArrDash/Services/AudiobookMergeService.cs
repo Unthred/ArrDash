@@ -72,7 +72,7 @@ public static class AudiobookMergeService
             if (merged.Any(x => x.Source == MediaSource.Chaptarr && ItemsMatch(x, libraryItem)))
                 continue;
 
-            merged.Add(libraryItem with { StatusNote = AbsNoRecentChaptarrNote });
+            merged.Add(libraryItem with { StatusNote = null });
         }
 
         return merged
