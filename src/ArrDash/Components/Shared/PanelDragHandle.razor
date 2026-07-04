@@ -1,0 +1,22 @@
+@inject IJSRuntime Js
+
+<div class="dashboard-panel-handle" draggable="true" @ref="_handleRef"
+     @ondragstart="OnDragStart" @ondragstart:stopPropagation="true"
+     @ondragend="OnDragEnd"
+     @onclick:stopPropagation="true" @ondblclick:stopPropagation="true"
+     title="Drag to reorder">
+    <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" />
+</div>
+
+@code {
+    [Parameter] public EventCallback OnDragStart { get; set; }
+    [Parameter] public EventCallback OnDragEnd { get; set; }
+
+    private ElementReference _handleRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await Js.InvokeVoidAsync("arrdashDrag.attachGhost", _handleRef);
+    }
+}

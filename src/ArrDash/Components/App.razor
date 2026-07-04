@@ -11,11 +11,16 @@
 </head>
 <body>
     <Routes @rendermode="InteractiveServer" />
-    <script src="_framework/blazor.web.js"></script>
+    <script src="_framework/blazor.web.js" autostart="false"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="js/reconnect.js"></script>
+    <script src="js/dashboard-poll.js"></script>
     <script src="js/theme.js"></script>
     <script src="js/carousel.js"></script>
     <script src="js/metrics.js"></script>
     <script src="js/links.js"></script>
+    <script src="js/vpn.js"></script>
+    <script src="js/drag.js"></script>
+    <script>arrdashReconnect.startBlazor();</script>
 </body>
 </html>
