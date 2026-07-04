@@ -92,7 +92,28 @@ public sealed record ActiveSession(
     string? Device,
     string? ThumbnailUrl,
     DateTimeOffset? StartedAt,
-    string? ExternalUrl = null);
+    string? ExternalUrl = null,
+    bool? IsLocal = null,
+    int? BitrateKbps = null,
+    int? BandwidthKbps = null,
+    string? Resolution = null);
+
+public enum ServiceWorkloadKind
+{
+    None,
+    Searching,
+    Importing,
+    Downloading,
+    Scanning,
+    Syncing,
+    Transcoding,
+    Matching
+}
+
+public sealed record ServiceWorkload(
+    ServiceWorkloadKind Kind,
+    string Label,
+    int? Count = null);
 
 public sealed record ServiceHealth(
     string Key,
@@ -100,17 +121,82 @@ public sealed record ServiceHealth(
     bool Configured,
     bool Online,
     string? Error,
-    string? Version);
+    string? Version,
+    ServiceWorkload? Workload = null);
 
 public sealed record ServerMetrics(
     string Label,
     double? CpuPercent,
+    double? IoWaitPercent,
     double MemoryUsedPercent,
     long MemoryUsedBytes,
     long MemoryTotalBytes,
     double DiskUsedPercent,
     long DiskUsedBytes,
     long DiskTotalBytes);
+
+public sealed record DiskInfo(
+    string Name,
+    string? Type,
+    double? TempCelsius,
+    bool SpunDown,
+    string? FilesystemType,
+    long? SizeBytes,
+    long? UsedBytes,
+    long? FreeBytes,
+    bool Rotational,
+    string? Status,
+    int NumErrors,
+    double? BusyPercent);
+
+public sealed record DiskHealthSummary(
+    bool AllHealthy,
+    IReadOnlyList<string> UnhealthyDisks,
+    double? HottestTempCelsius,
+    string? HottestDiskName,
+    IReadOnlyList<DiskInfo> AllDisks);
+
+public sealed record ContainerUsage(string Name, double CpuPercent, double CpuCores, double MemoryUsedPercent);
+
+public sealed record CpuCoreTemp(string Label, double TempCelsius);
+
+public sealed record CoreUsage(int Index, double Percent);
+
+public sealed record CpuSample(DateTimeOffset At, double Percent, double IoWaitPercent);
+
+public sealed record NetworkThroughput(long RxBytesPerSecond, long TxBytesPerSecond);
+
+public enum StuckProcessKind
+{
+    DockerContainer,
+    SystemProcess,
+    KernelWorker
+}
+
+public sealed record StuckProcess(
+    int Pid,
+    string DisplayName,
+    StuckProcessKind Kind,
+    string ProcessName,
+    string? ContainerName,
+    string? CommandLine);
+
+public sealed record UnraidActivity(
+    bool ParityCheckRunning,
+    double? ParityCheckPercent,
+    string ParityCheckLabel,
+    bool MoverRunning,
+    DateTimeOffset? MoverStartedAt,
+    IReadOnlyList<string> RestartingContainers,
+    IReadOnlyList<string> RecentlyUpdatedContainers,
+    DiskHealthSummary? DiskHealth,
+    IReadOnlyList<ContainerUsage> TopContainers,
+    TimeSpan? Uptime,
+    double? CpuTemperatureCelsius,
+    IReadOnlyList<CpuCoreTemp> CpuCoreTemps,
+    NetworkThroughput? Network,
+    bool IsUnraidHost,
+    IReadOnlyList<StuckProcess> StuckProcesses);
 
 public sealed record LibraryStatItem(
     string Key,
@@ -153,6 +239,7 @@ public sealed class UserLayoutPreferences
     public List<string> PanelOrder { get; set; } =
     [
         "now-playing",
+        "libraries",
         "recent-tv",
         "recent-movies",
         "recent-audiobooks",
@@ -164,6 +251,7 @@ public sealed class UserLayoutPreferences
     public Dictionary<string, string> PanelAccentColors { get; set; } = new()
     {
         ["now-playing"] = "#818cf8",
+        ["libraries"] = "#22c55e",
         ["recent-tv"] = "#35c5f4",
         ["recent-movies"] = "#f5c518",
         ["recent-audiobooks"] = "#00d2be",
@@ -173,6 +261,7 @@ public sealed class UserLayoutPreferences
     public LayoutDensity Density { get; set; } = LayoutDensity.Comfortable;
     public bool HideHeroStrip { get; set; }
     public StatusBarMode StatusBarMode { get; set; } = StatusBarMode.All;
+    public StatusBarAlignment StatusBarAlignment { get; set; } = StatusBarAlignment.Left;
     public TimeDisplayFormat TimeFormat { get; set; } = TimeDisplayFormat.Relative;
     public RecentWindowMode RecentWindowMode { get; set; } = RecentWindowMode.ItemCount;
     public int RecentDays { get; set; } = 30;
