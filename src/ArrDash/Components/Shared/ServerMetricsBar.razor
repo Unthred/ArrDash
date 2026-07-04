@@ -5,17 +5,21 @@
 @implements IDisposable
 @implements IAsyncDisposable
 @inject HostSystemMetricsService HostMetrics
+@inject CpuHistoryService CpuHistory
+@inject UnraidActivityService UnraidActivityService
 @inject LayoutPreferencesService Prefs
-@inject LibraryStatsService LibraryStats
 @inject IJSRuntime Js
 
-@if (DisplayMetrics is not null)
-{
-    <MudPaper Class="@ShellClass" Elevation="0">
+<MudPaper Class="@ShellClass" Elevation="0">
+        @if (Prefs.Current.StatusBarMode != StatusBarMode.Hidden && Services.Count > 0)
+        {
+            <ServiceStatusBar Services="Services" SampledAt="SampledAt" Mode="Prefs.Current.StatusBarMode" Alignment="Prefs.Current.StatusBarAlignment" />
+        }
+
         <div class="server-metrics-head panel-header-rollup" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
             <div class="server-metrics-title-wrap">
                 <MudIcon Icon="@Icons.Material.Filled.Memory" Size="Size.Small" />
-                <span class="server-metrics-label">@DisplayMetrics.Label</span>
+                <span class="server-metrics-label">@EffectiveMetrics.Label</span>
             </div>
 
             @if (RolledUp)
@@ -23,20 +27,30 @@
                 <div class="rollup-summary server-metrics-rollup">
                     <div class="rollup-metrics-group">
                         <CpuSparkline Samples="SparkSamples" />
-                        <span class="rollup-stat rollup-stat-cpu">CPU @($"{_displayCpu ?? DisplayMetrics.CpuPercent ?? 0:0.#}%")</span>
+                        <span class="rollup-stat rollup-stat-cpu">CPU @CpuHeadline()</span>
                     </div>
                     <MiniUsageRing Label="Mem"
-                                   Detail="@ByteDisplayHelper.FormatUsedTotal(DisplayMetrics.MemoryUsedBytes, DisplayMetrics.MemoryTotalBytes)"
-                                   Percent="DisplayMetrics.MemoryUsedPercent"
-                                   Color="@UsageColor(DisplayMetrics.MemoryUsedPercent)" />
+                                   Detail="@MemoryDetailLabel()"
+                                   Percent="EffectiveMetrics.MemoryUsedPercent"
+                                   Color="@UsageColor(EffectiveMetrics.MemoryUsedPercent)" />
                     <MiniUsageRing Label="Disk"
-                                   Detail="@ByteDisplayHelper.FormatUsedTotal(DisplayMetrics.DiskUsedBytes, DisplayMetrics.DiskTotalBytes)"
-                                   Percent="DisplayMetrics.DiskUsedPercent"
-                                   Color="@UsageColor(DisplayMetrics.DiskUsedPercent)" />
-                    @if (_libraryStats.Count > 0)
+                                   Detail="@DiskDetailLabel()"
+                                   Percent="EffectiveMetrics.DiskUsedPercent"
+                                   Color="@UsageColor(EffectiveMetrics.DiskUsedPercent)" />
+                    @if (ShowUnraidActivitySections)
                     {
-                        <RollupLibraryStrip Stats="_libraryStats" />
+                        <MiniUsageRing Label="@ParityRollupLabel()"
+                                       Detail="@ParityRollupDetail()"
+                                       Percent="@(_unraidActivity?.ParityCheckPercent ?? 0)"
+                                       Color="#f59e0b" />
                     }
+                    <MiniUsageRing Label="CPU°"
+                                   Detail="@CpuTempDetailLabel()"
+                                   Percent="@CpuTempRingPercent()"
+                                   Color="@UsageColor(CpuTempRingPercent())" />
+                    <span class="rollup-stat" title="@DiskRollupTooltip()">Disks @DiskRollupLabel()</span>
+                    <span class="rollup-stat" title="@TopContainerRollupTooltip()">Top @TopContainerRollupLabel()</span>
+                    <span class="rollup-stat">Up @UptimeRollupLabel()</span>
                 </div>
             }
         </div>
@@ -44,12 +58,28 @@
         @if (!RolledUp)
         {
         <div class="server-metrics-body">
-            <div class="cpu-live-graph">
+            <div class="cpu-live-graph metrics-column metrics-column-cpu">
                 <div class="cpu-live-head">
                     <span class="cpu-live-title">CPU usage</span>
-                    @if (_displayCpu is not null)
+                    <div class="cpu-live-window-toggle">
+                        @foreach (var minutes in GraphWindowChoices)
+                        {
+                            <button type="button"
+                                    class="cpu-live-window-btn @(_graphWindowMinutes == minutes ? "cpu-live-window-btn-active" : "")"
+                                    @onclick="@(() => SelectGraphWindow(minutes))">@minutes m</button>
+                        }
+                    </div>
+                    @if (_displayCpu is not null || HostMetricsLoading)
                     {
-                        <span class="cpu-live-now">@($"{_displayCpu:0.#}%")</span>
+                        <span class="cpu-live-now">@CpuHeadline()</span>
+                    }
+                </div>
+                <div class="cpu-live-iowait-row @(_displayIoWait is double clickableIoWait && clickableIoWait >= 2 ? "cpu-live-iowait-row-clickable" : "")"
+                     title="System-wide CPU iowait — time cores spent blocked waiting for any storage (array, cache, FUSE). Not the same as how full a disk is. Click to inspect per-disk I/O."
+                     @onclick="@(async () => { if (_displayIoWait is double iw && iw >= 2) await ToggleDetail("disks"); })">
+                    @if (_displayIoWait is double iowait && iowait >= 2)
+                    {
+                        <span>Waiting on disk @($"{iowait:0.#}%")</span>
                     }
                 </div>
                 <div class="cpu-live-chart-row">
@@ -81,6 +111,10 @@
                             {
                                 <path d="@_linePath" class="cpu-line" />
                             }
+                            @if (!string.IsNullOrEmpty(_ioWaitLinePath))
+                            {
+                                <path d="@_ioWaitLinePath" class="cpu-iowait-line" />
+                            }
                             @if (_hover is { } hover)
                             {
                                 <line x1="@hover.ChartX" y1="@PlotTop" x2="@hover.ChartX" y2="@PlotBottom" class="cpu-hover-line" />
@@ -95,6 +129,10 @@
                         {
                             <div class="cpu-graph-tooltip" style="left: @(tip.PixelX.ToString(CultureInfo.InvariantCulture))px">
                                 <span class="cpu-graph-tooltip-value">@($"{tip.Percent:0.#}%")</span>
+                                @if (tip.IoWaitPercent >= 2)
+                                {
+                                    <span class="cpu-graph-tooltip-value cpu-graph-tooltip-iowait">@($"IO {tip.IoWaitPercent:0.#}%")</span>
+                                }
                                 <span class="cpu-graph-tooltip-time">@tip.TimeLabel</span>
                             </div>
                         }
@@ -106,66 +144,304 @@
                 </div>
             </div>
 
-            <div class="usage-stack">
-                <div class="usage-row" style="@RingStyle(DisplayMetrics.MemoryUsedPercent)">
-                    @RingSvg(DisplayMetrics.MemoryUsedPercent)
-                    <div class="usage-row-copy">
-                        <div class="usage-row-title">Memory</div>
-                        <div class="usage-row-used">@ByteDisplayHelper.Format(DisplayMetrics.MemoryUsedBytes) used</div>
-                        <div class="usage-row-total">@ByteDisplayHelper.Format(DisplayMetrics.MemoryTotalBytes - DisplayMetrics.MemoryUsedBytes) free · @ByteDisplayHelper.Format(DisplayMetrics.MemoryTotalBytes) total</div>
-                    </div>
-                </div>
-                <div class="usage-stack-divider" aria-hidden="true"></div>
-                <div class="usage-row" style="@RingStyle(DisplayMetrics.DiskUsedPercent)">
-                    @RingSvg(DisplayMetrics.DiskUsedPercent)
-                    <div class="usage-row-copy">
-                        <div class="usage-row-title">Disk</div>
-                        <div class="usage-row-used">@ByteDisplayHelper.Format(DisplayMetrics.DiskUsedBytes) used</div>
-                        <div class="usage-row-total">@ByteDisplayHelper.Format(DisplayMetrics.DiskTotalBytes - DisplayMetrics.DiskUsedBytes) free · @ByteDisplayHelper.Format(DisplayMetrics.DiskTotalBytes) total</div>
-                    </div>
-                </div>
-            </div>
+            <div class="metrics-column-splitter" aria-hidden="true"></div>
 
-            @if (_libraryStats.Count > 0)
+            <div class="server-metrics-scroll">
+            @if (_selectedDetail is not null)
             {
-                <div class="library-stack">
-                    <div class="library-stack-head">Libraries</div>
-                    <div class="library-stack-grid">
-                    @foreach (var stat in _libraryStats)
-                    {
-                        var rowClass = "library-row" + (Prefs.Current.EnableClickThrough && !string.IsNullOrWhiteSpace(stat.Url) ? " library-row-link" : "");
-                        if (Prefs.Current.EnableClickThrough && !string.IsNullOrWhiteSpace(stat.Url))
+                <div class="metrics-detail-panel">
+                    <div class="metrics-detail-head">
+                        <span class="metrics-detail-title">@DetailTitle(_selectedDetail)</span>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => ToggleDetail(_selectedDetail))" />
+                    </div>
+                    <div class="metrics-detail-body">
+                        @if (_selectedDetail == "disks")
                         {
-                            <a class="@rowClass" href="@stat.Url" target="@ExternalLinkService.TargetAttribute(Prefs.Current.ExternalLinkTarget)" rel="@(Prefs.Current.ExternalLinkTarget == ExternalLinkTarget.NewTab ? "noopener noreferrer" : null)" style="@LibraryAccentStyle(stat.AccentColor)">
-                                <span class="library-row-label">@stat.Label</span>
-                                <span class="library-row-headline">@stat.Headline</span>
-                                @if (!string.IsNullOrWhiteSpace(stat.Detail))
-                                {
-                                    <span class="library-row-detail">@stat.Detail</span>
-                                }
-                            </a>
+                            <div class="metrics-detail-hint">@DiskDetailIntro()</div>
+                        }
+                        @if (_selectedDetail == "stuck")
+                        {
+                            <div class="metrics-detail-hint">@StuckDetailIntro()</div>
+                        }
+                        @if (_unraidActivity is null)
+                        {
+                            <div class="metrics-detail-empty">@LoadingLabel</div>
                         }
                         else
                         {
-                            <div class="@rowClass" style="@LibraryAccentStyle(stat.AccentColor)">
-                                <span class="library-row-label">@stat.Label</span>
-                                <span class="library-row-headline">@stat.Headline</span>
-                                @if (!string.IsNullOrWhiteSpace(stat.Detail))
+                        @switch (_selectedDetail)
+                        {
+                            case "memory":
+                                if (_unraidActivity!.TopContainers.Count == 0)
                                 {
-                                    <span class="library-row-detail">@stat.Detail</span>
+                                    <div class="metrics-detail-empty">No container data</div>
                                 }
-                            </div>
+                                foreach (var container in TopByMemory(_unraidActivity))
+                                {
+                                    <div class="metrics-detail-row">
+                                        <span class="metrics-detail-row-label">@container.Name</span>
+                                        <div class="metrics-detail-bar-track">
+                                            <div class="metrics-detail-bar" style="width:@(Math.Clamp(container.MemoryUsedPercent, 0, 100).ToString("0.#", CultureInfo.InvariantCulture))%; background:#22c55e"></div>
+                                        </div>
+                                        <span class="metrics-detail-row-value">@container.MemoryUsedPercent.ToString("0.#")%</span>
+                                    </div>
+                                }
+                                break;
+                            case "top-cpu":
+                                if (_unraidActivity!.TopContainers.Count == 0)
+                                {
+                                    <div class="metrics-detail-empty">No container data</div>
+                                }
+                                foreach (var container in TopByCpu(_unraidActivity))
+                                {
+                                    <div class="metrics-detail-row" title="@CoreUsageTooltip(container)">
+                                        <span class="metrics-detail-row-label">@container.Name</span>
+                                        <div class="metrics-detail-bar-track">
+                                            <div class="metrics-detail-bar" style="width:@(Math.Clamp(container.CpuPercent, 0, 100).ToString("0.#", CultureInfo.InvariantCulture))%; background:#f5c518"></div>
+                                        </div>
+                                        <span class="metrics-detail-row-value">@container.CpuPercent.ToString("0.#")%</span>
+                                    </div>
+                                }
+                                break;
+                            case "cpu-temp":
+                                if (_coreUsage.Count == 0)
+                                {
+                                    <div class="metrics-detail-empty">Collecting core usage…</div>
+                                }
+                                foreach (var coreId in MergedCoreIds(_unraidActivity!))
+                                {
+                                    <div class="metrics-detail-row">
+                                        <span class="metrics-detail-row-label">Core @coreId</span>
+                                        <span class="metrics-detail-row-value">@(CoreTempFor(_unraidActivity!, coreId) is double ct ? $"{ct:0.#}°C" : "—")</span>
+                                        <div class="metrics-detail-bar-track">
+                                            @if (CoreUsageFor(coreId) is double pct)
+                                            {
+                                                <div class="metrics-detail-bar" style="width:@(Math.Clamp(pct, 0, 100).ToString("0.#", CultureInfo.InvariantCulture))%; background:@CoreBarColor(pct)"></div>
+                                            }
+                                        </div>
+                                        <span class="metrics-detail-row-value">@(CoreUsageFor(coreId) is double p ? $"{p:0.#}%" : "—")</span>
+                                    </div>
+                                }
+                                break;
+                            case "disks":
+                                if (_unraidActivity!.DiskHealth is not { AllDisks.Count: > 0 })
+                                {
+                                    <div class="metrics-detail-empty">No disk data</div>
+                                }
+                                else
+                                {
+                                    foreach (var disk in _unraidActivity.DiskHealth.AllDisks.OrderByDescending(d => d.BusyPercent ?? -1))
+                                    {
+                                        <div class="metrics-detail-disk">
+                                            <div class="metrics-detail-disk-line">
+                                                <span class="metrics-detail-disk-name @(disk.BusyPercent is double busyName && busyName >= 50 ? "metrics-detail-disk-name-busy" : "")">@disk.Name</span>
+                                                <span class="metrics-detail-disk-capacity-label">Capacity</span>
+                                                <div class="metrics-detail-bar-track">
+                                                    @if (disk.SizeBytes is long size and > 0 && disk.UsedBytes is long used)
+                                                    {
+                                                        <div class="metrics-detail-bar" style="width:@((used * 100.0 / size).ToString("0.#", CultureInfo.InvariantCulture))%; background:#35c5f4"></div>
+                                                    }
+                                                </div>
+                                                <span class="metrics-detail-disk-fraction">@DiskUsageFraction(disk)</span>
+                                            </div>
+                                            <div class="metrics-detail-disk-meta">
+                                                @DiskMetaLine(disk)
+                                                <span class="metrics-detail-disk-busy"> · @DiskIoBusyLabel(disk)</span>
+                                                @if (disk.NumErrors > 0)
+                                                {
+                                                    <span class="metrics-detail-disk-error"> · @disk.NumErrors errors</span>
+                                                }
+                                                @if (disk.Status is { } st && st != "DISK_OK")
+                                                {
+                                                    <span class="metrics-detail-disk-error"> · @st</span>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                }
+                                break;
+                            case "stuck":
+                                if (_unraidActivity!.StuckProcesses.Count == 0)
+                                {
+                                    <div class="metrics-detail-empty">Nothing is blocked on storage right now — that's good.</div>
+                                }
+                                foreach (var stuck in _unraidActivity.StuckProcesses)
+                                {
+                                    <div class="metrics-detail-stuck-row">
+                                        <div class="metrics-detail-stuck-head">
+                                            <span class="metrics-detail-stuck-kind @StuckKindClass(stuck.Kind)">@StuckProcessDisplay.KindLabel(stuck.Kind)</span>
+                                            <span class="metrics-detail-stuck-severity">@StuckProcessDisplay.ExpectedSeverity(stuck.Kind)</span>
+                                        </div>
+                                        <div class="metrics-detail-stuck-copy">
+                                            <span class="metrics-detail-stuck-name">@stuck.DisplayName</span>
+                                            @if (ShowInnerProcessName(stuck))
+                                            {
+                                                <span class="metrics-detail-stuck-process">Process inside container: @stuck.ProcessName</span>
+                                            }
+                                            <span class="metrics-detail-stuck-meta">PID @stuck.Pid · @StuckProcessDisplay.KindGuidance(stuck.Kind)</span>
+                                            @if (!string.IsNullOrWhiteSpace(stuck.CommandLine))
+                                            {
+                                                <span class="metrics-detail-stuck-cmd" title="@stuck.CommandLine">@stuck.CommandLine</span>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                                break;
                         }
-                    }
+                        }
                     </div>
                 </div>
             }
+            else
+            {
+                <div class="usage-stack metrics-column">
+                    <div class="usage-row usage-row-clickable" style="@RingStyle(EffectiveMetrics.MemoryUsedPercent)" @onclick="@(() => ToggleDetail("memory"))">
+                        @RingSvg(EffectiveMetrics.MemoryUsedPercent)
+                        <div class="usage-row-copy">
+                            <div class="usage-row-title">Memory</div>
+                            <div class="usage-row-used">@MemoryUsedLabel()</div>
+                            <div class="usage-row-total">@MemoryTotalLabel()</div>
+                        </div>
+                    </div>
+                    <div class="usage-stack-divider" aria-hidden="true"></div>
+                    <div class="usage-row @(ShowUnraidActivitySections ? "usage-row-clickable" : "")" style="@RingStyle(EffectiveMetrics.DiskUsedPercent)" @onclick="@(async () => { if (ShowUnraidActivitySections) await ToggleDetail("disks"); })">
+                        @RingSvg(EffectiveMetrics.DiskUsedPercent)
+                        <div class="usage-row-copy">
+                            <div class="usage-row-title">Disk@(ShowUnraidActivitySections ? $" · {DiskRollupLabel()}" : "")</div>
+                            <div class="usage-row-used">@DiskUsedLabel()</div>
+                            <div class="usage-row-total">@DiskTotalLabel()</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-column-splitter" aria-hidden="true"></div>
+
+                <div class="usage-stack usage-stack-compact metrics-column">
+                    <div class="usage-row usage-row-clickable" style="@CpuTempRingStyle()" @onclick="@(() => ToggleDetail("cpu-temp"))">
+                        @if (_unraidActivity?.CpuTemperatureCelsius is double tempPercent)
+                        {
+                            @RingSvg(Math.Clamp(tempPercent / 90 * 100, 0, 100))
+                        }
+                        else
+                        {
+                            <div class="activity-icon-box activity-icon-box-idle">
+                                <MudIcon Icon="@Icons.Material.Filled.Thermostat" Size="Size.Large" />
+                            </div>
+                        }
+                        <div class="usage-row-copy">
+                            <div class="usage-row-title">CPU</div>
+                            <div class="usage-row-used">@CpuTempDetailLabel()</div>
+                        </div>
+                    </div>
+                    <div class="usage-stack-divider" aria-hidden="true"></div>
+                    <div class="usage-row usage-row-clickable" @onclick="@(() => ToggleDetail("top-cpu"))" title="@TopContainerRollupTooltip()">
+                        <div class="activity-icon-box activity-icon-box-idle">
+                            <MudIcon Icon="@Icons.Material.Filled.Speed" Size="Size.Large" />
+                        </div>
+                        <div class="usage-row-copy">
+                            <div class="usage-row-title">Top CPU</div>
+                            <div class="usage-row-used">@TopContainerRollupLabel()</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metrics-column-splitter" aria-hidden="true"></div>
+
+                <div class="usage-stack usage-stack-compact metrics-column">
+                    <div class="usage-row" title="@ContainerListTooltip(_unraidActivity?.RestartingContainers ?? EmptyContainerNames)">
+                        <div class="activity-icon-box @((_unraidActivity?.RestartingContainers.Count ?? 0) > 0 ? "" : "activity-icon-box-idle")">
+                            <MudIcon Icon="@Icons.Material.Filled.Autorenew" Size="Size.Large" Class="@((_unraidActivity?.RestartingContainers.Count ?? 0) > 0 ? "activity-icon-spin" : "")" />
+                        </div>
+                        <div class="usage-row-copy">
+                            <div class="usage-row-title">Restarting</div>
+                            <div class="usage-row-used">@RestartingLabel()</div>
+                        </div>
+                    </div>
+                    <div class="usage-stack-divider" aria-hidden="true"></div>
+                    <div class="usage-row" title="@ContainerListTooltip(_unraidActivity?.RecentlyUpdatedContainers ?? EmptyContainerNames)">
+                        <div class="activity-icon-box @((_unraidActivity?.RecentlyUpdatedContainers.Count ?? 0) > 0 ? "activity-icon-box-updated" : "activity-icon-box-idle")">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" />
+                        </div>
+                        <div class="usage-row-copy">
+                            <div class="usage-row-title">Updated</div>
+                            <div class="usage-row-used">@UpdatedContainersLabel()</div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (ShowUnraidActivitySections)
+                {
+                    <div class="metrics-column-splitter" aria-hidden="true"></div>
+
+                    <div class="usage-stack usage-stack-compact metrics-column">
+                        <div class="usage-row">
+                            <div class="activity-icon-box @((_unraidActivity?.MoverRunning ?? false) ? "" : "activity-icon-box-idle")">
+                                @if (_unraidActivity?.MoverRunning == true)
+                                {
+                                    <div class="mover-spinner" style="--tile-color:#818cf8"></div>
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.DriveFileMove" Size="Size.Large" />
+                                }
+                            </div>
+                            <div class="usage-row-copy">
+                                <div class="usage-row-title">Mover</div>
+                                <div class="usage-row-used">@MoverLabel()</div>
+                            </div>
+                        </div>
+                        <div class="usage-stack-divider" aria-hidden="true"></div>
+                        <div class="usage-row" style="@ParityRingStyle()">
+                            @if (_unraidActivity is { ParityCheckRunning: true })
+                            {
+                                @RingSvg(_unraidActivity.ParityCheckPercent ?? 0)
+                            }
+                            else
+                            {
+                                <div class="activity-icon-box activity-icon-box-idle">
+                                    <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Large" />
+                                </div>
+                            }
+                            <div class="usage-row-copy">
+                                <div class="usage-row-title">@ParityRollupLabel()</div>
+                                <div class="usage-row-used">@ParityStatusLabel()</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="metrics-column-splitter" aria-hidden="true"></div>
+
+                <div class="usage-stack usage-stack-compact metrics-column">
+                    <div class="usage-row">
+                        <div class="activity-icon-box activity-icon-box-idle">
+                            <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Large" />
+                        </div>
+                        <div class="usage-row-copy">
+                            <div class="usage-row-title">Uptime</div>
+                            <div class="usage-row-used">@UptimeRollupLabel()</div>
+                        </div>
+                    </div>
+                    <div class="usage-stack-divider" aria-hidden="true"></div>
+                    <div class="usage-row usage-row-clickable" @onclick="@(() => ToggleDetail("stuck"))" title="Processes blocked waiting on storage — open for details">
+                        <div class="activity-icon-box @((_unraidActivity?.StuckProcesses.Count ?? 0) > 0 ? "activity-icon-box-alert" : "activity-icon-box-idle")">
+                            <MudIcon Icon="@Icons.Material.Filled.HourglassBottom" Size="Size.Large" />
+                        </div>
+                        <div class="usage-row-copy">
+                            <div class="usage-row-title">Blocked on storage</div>
+                            <div class="usage-row-used">@StuckProcessesLabel()</div>
+                        </div>
+                    </div>
+                </div>
+            }
+            </div>
         </div>
         }
     </MudPaper>
-}
 
 @code {
+    [Parameter] public IReadOnlyList<ServiceHealth> Services { get; set; } = [];
+
     private const string PanelId = "server-metrics";
     private const int ChartWidth = 640;
     private const int ChartHeight = 72;
@@ -183,20 +459,45 @@
         int.TryParse(Environment.GetEnvironmentVariable("ARRDASH_METRICS_GRAPH_MINUTES"), out var minutes)
             ? Math.Clamp(minutes, 5, 240)
             : 15;
-
     [Parameter] public ServerMetrics? Metrics { get; set; }
     [Parameter] public DateTimeOffset SampledAt { get; set; }
 
     private ServerMetrics? _liveMetrics;
+    private ServerMetrics EffectiveMetrics => DisplayMetrics ?? PlaceholderMetrics;
+    private ServerMetrics PlaceholderMetrics => new(
+        HostSystemMetricsService.ResolveLabel(Prefs.Current),
+        null,
+        null,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0);
     private ServerMetrics? DisplayMetrics => _liveMetrics ?? Metrics;
+    private bool HostMetricsLoading => DisplayMetrics is null;
+    private bool ActivityLoading => _unraidActivity is null;
+    private bool ShowUnraidActivitySections => _unraidActivity?.IsUnraidHost != false;
+    private const string LoadingLabel = "Loading…";
+    private static readonly IReadOnlyList<string> EmptyContainerNames = [];
 
-    private readonly List<CpuSample> _cpuSamples = [];
     private readonly double[] _gridLines = [YForPercent(100), YForPercent(50), YForPercent(0)];
+    private IReadOnlyList<CoreUsage> _coreUsage = [];
+    private string? _selectedDetail;
     private CancellationTokenSource _pollCts = new();
     private int _pollIntervalSeconds = EnvMetricsPollDefault;
     private int _graphWindowMinutes = EnvMetricsGraphWindowDefault;
+    private static readonly int[] GraphWindowChoices = [5, 10, 15];
+
+    private void SelectGraphWindow(int minutes)
+    {
+        _graphWindowMinutes = minutes;
+        RebuildCpuChart();
+    }
     private double? _displayCpu;
+    private double? _displayIoWait;
     private string _linePath = "";
+    private string _ioWaitLinePath = "";
     private string _areaPath = "";
     private PlotPoint? _latestPoint;
     private string _windowStartLabel = "";
@@ -204,14 +505,15 @@
     private ElementReference _plotRef;
     private System.Threading.Timer? _scrollTimer;
     private Task? _pollLoopTask;
-    private IReadOnlyList<LibraryStatItem> _libraryStats = [];
-    private DateTimeOffset _libraryStatsLoadedAt;
-    private bool _libraryStatsLoading;
+    private static readonly TimeSpan UnraidActivityRefreshInterval = TimeSpan.FromSeconds(5);
+    private UnraidActivity? _unraidActivity;
+    private DateTimeOffset _unraidActivityLoadedAt;
+    private bool _unraidActivityLoading;
 
     private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
     private string ShellClass => RolledUp ? "server-metrics-bar is-rolled-up" : "server-metrics-bar";
     private IReadOnlyList<double> SparkSamples =>
-        _cpuSamples.Select(sample => sample.Percent).TakeLast(24).ToList();
+        CpuHistory.GetSamples(TimeSpan.FromMinutes(2)).Select(sample => sample.Percent).TakeLast(24).ToList();
 
     private async Task ToggleRollup() => await Prefs.TogglePanelRollupAsync(PanelId);
 
@@ -222,14 +524,17 @@
         Prefs.Changed += OnPrefsChanged;
 
         _scrollTimer = new System.Threading.Timer(_ =>
+        {
             _ = InvokeAsync(() =>
             {
                 RebuildCpuChart();
                 StateHasChanged();
-            }), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+            });
+            _ = RefreshUnraidActivityAsync(force: false);
+        }, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
 
         RestartPollLoop();
-        _ = RefreshLibraryStatsAsync(force: true);
+        _ = RefreshUnraidActivityAsync(force: true);
     }
 
     private void OnPrefsChanged()
@@ -249,8 +554,6 @@
             _ = InvokeAsync(RestartPollLoop);
         else if (windowChanged)
             _ = InvokeAsync(StateHasChanged);
-
-        _ = RefreshLibraryStatsAsync(force: false);
     }
 
     private void RestartPollLoop()
@@ -261,39 +564,381 @@
         _pollLoopTask = PollLoopAsync();
     }
 
+    private async Task RefreshUnraidActivityAsync(bool force)
+    {
+        if (_unraidActivityLoading)
+            return;
+
+        if (!force && DateTimeOffset.UtcNow - _unraidActivityLoadedAt < UnraidActivityRefreshInterval)
+            return;
+
+        _unraidActivityLoading = true;
+        try
+        {
+            var activity = await UnraidActivityService.ReadAsync(CancellationToken.None);
+            _unraidActivity = activity;
+            _unraidActivityLoadedAt = DateTimeOffset.UtcNow;
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _unraidActivityLoading = false;
+        }
+    }
+
+    private static string ParityShortLabel(UnraidActivity activity) =>
+        activity.ParityCheckLabel == "Disk rebuild" ? "Rebuild" : "Parity";
+
+    private string CpuHeadline()
+    {
+        if (HostMetricsLoading && _displayCpu is null && EffectiveMetrics.CpuPercent is null)
+            return "—";
+
+        return $"{_displayCpu ?? EffectiveMetrics.CpuPercent ?? 0:0.#}%";
+    }
+
+    private string MemoryDetailLabel() =>
+        HostMetricsLoading ? LoadingLabel : ByteDisplayHelper.FormatUsedTotal(EffectiveMetrics.MemoryUsedBytes, EffectiveMetrics.MemoryTotalBytes);
+
+    private string DiskDetailLabel() =>
+        HostMetricsLoading ? LoadingLabel : ByteDisplayHelper.FormatUsedTotal(EffectiveMetrics.DiskUsedBytes, EffectiveMetrics.DiskTotalBytes);
+
+    private string MemoryUsedLabel() =>
+        HostMetricsLoading ? LoadingLabel : $"{ByteDisplayHelper.Format(EffectiveMetrics.MemoryUsedBytes)} used";
+
+    private string MemoryTotalLabel()
+    {
+        if (HostMetricsLoading)
+            return LoadingLabel;
+
+        return $"{ByteDisplayHelper.Format(EffectiveMetrics.MemoryTotalBytes - EffectiveMetrics.MemoryUsedBytes)} free · {ByteDisplayHelper.Format(EffectiveMetrics.MemoryTotalBytes)} total";
+    }
+
+    private string DiskUsedLabel() =>
+        HostMetricsLoading ? LoadingLabel : $"{ByteDisplayHelper.Format(EffectiveMetrics.DiskUsedBytes)} used";
+
+    private string DiskTotalLabel()
+    {
+        if (HostMetricsLoading)
+            return LoadingLabel;
+
+        return $"{ByteDisplayHelper.Format(EffectiveMetrics.DiskTotalBytes - EffectiveMetrics.DiskUsedBytes)} free · {ByteDisplayHelper.Format(EffectiveMetrics.DiskTotalBytes)} total";
+    }
+
+    private string ParityRollupLabel() =>
+        _unraidActivity is { } activity ? ParityShortLabel(activity) : "Parity";
+
+    private string ParityRollupDetail()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        if (_unraidActivity is { ParityCheckRunning: true, ParityCheckPercent: double percent })
+            return $"{percent:0.#}%";
+
+        return "Idle";
+    }
+
+    private string ParityStatusLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        if (_unraidActivity is { ParityCheckRunning: true, ParityCheckPercent: double percent })
+            return $"{percent:0.#}% complete";
+
+        if (_unraidActivity is { ParityCheckRunning: true })
+            return "In progress";
+
+        return "Idle";
+    }
+
+    private string? ParityRingStyle() =>
+        _unraidActivity is { ParityCheckRunning: true } ? RingStyle("#f59e0b") : null;
+
+    private string CpuTempDetailLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        return _unraidActivity?.CpuTemperatureCelsius is double temp ? $"{temp:0.#}°C" : "—";
+    }
+
+    private double CpuTempRingPercent() =>
+        _unraidActivity?.CpuTemperatureCelsius is double temp ? Math.Clamp(temp / 90 * 100, 0, 100) : 0;
+
+    private string? CpuTempRingStyle() =>
+        _unraidActivity?.CpuTemperatureCelsius is double temp ? RingStyle(Math.Clamp(temp / 90 * 100, 0, 100)) : null;
+
+    private string DiskRollupLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        return DiskHealthStatus(_unraidActivity?.DiskHealth);
+    }
+
+    private string? DiskRollupTooltip() =>
+        _unraidActivity?.DiskHealth is { } health ? DiskTempsTooltip(health) : null;
+
+    private string TopContainerRollupLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        if (_unraidActivity?.TopContainers is { Count: > 0 } top)
+            return $"{top[0].Name} {top[0].CpuPercent:0.#}%";
+
+        return "None";
+    }
+
+    private string? TopContainerRollupTooltip() =>
+        _unraidActivity?.TopContainers is { Count: > 0 } top ? TopContainersTooltip(top) : null;
+
+    private string UptimeRollupLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        return _unraidActivity?.Uptime is { } uptime ? FormatUptime(uptime) : "—";
+    }
+
+    private string RestartingLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        return _unraidActivity?.RestartingContainers is { Count: > 0 } names
+            ? ContainerSummary(names)
+            : "None";
+    }
+
+    private string UpdatedContainersLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        return _unraidActivity?.RecentlyUpdatedContainers is { Count: > 0 } names
+            ? ContainerSummary(names)
+            : "None";
+    }
+
+    private string MoverLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        return _unraidActivity is { MoverRunning: true }
+            ? $"Running {FormatElapsed(_unraidActivity.MoverStartedAt)}"
+            : "Idle";
+    }
+
+    private string StuckProcessesLabel()
+    {
+        if (ActivityLoading)
+            return LoadingLabel;
+
+        return _unraidActivity?.StuckProcesses is { Count: > 0 } stuck
+            ? $"{stuck.Count} blocked"
+            : "None";
+    }
+
+    private string DiskDetailIntro()
+    {
+        var iowait = _displayIoWait is double iw ? $"System iowait right now: {iw:0.#}%." : "System iowait: collecting…";
+        return $"{iowait} Blue bars are how full each disk is (capacity), not I/O wait. Per-disk I/O load is listed separately — it may not match iowait when load is on cache, parity, or the FUSE user share.";
+    }
+
+    private static string StuckDetailIntro() =>
+        "These processes are frozen waiting for a disk read or write to finish (Linux \"D\" state). " +
+        "They cannot respond until storage catches up — and you usually cannot kill them from here while blocked. " +
+        "Use the type and guidance below: stop Docker containers from Unraid, or wait for parity/mover/array I/O to finish.";
+
+    private static string StuckKindClass(StuckProcessKind kind) => kind switch
+    {
+        StuckProcessKind.DockerContainer => "metrics-detail-stuck-kind-docker",
+        StuckProcessKind.KernelWorker => "metrics-detail-stuck-kind-kernel",
+        _ => "metrics-detail-stuck-kind-system"
+    };
+
+    private static bool ShowInnerProcessName(StuckProcess stuck) =>
+        stuck.Kind == StuckProcessKind.DockerContainer &&
+        !string.Equals(stuck.ProcessName, stuck.DisplayName, StringComparison.OrdinalIgnoreCase);
+
+    private string DiskIoBusyLabel(DiskInfo disk)
+    {
+        if (disk.BusyPercent is double busy)
+            return $"{busy:0.#}% I/O busy";
+
+        return "I/O busy —";
+    }
+
+    private static string FormatElapsed(DateTimeOffset? startedAt)
+    {
+        if (startedAt is not DateTimeOffset started)
+            return "";
+
+        var elapsed = DateTimeOffset.UtcNow - started;
+        if (elapsed.TotalMinutes < 1)
+            return $"{Math.Max((int)elapsed.TotalSeconds, 0)}s";
+        if (elapsed.TotalHours < 1)
+            return $"{(int)elapsed.TotalMinutes}m {elapsed.Seconds}s";
+        return $"{(int)elapsed.TotalHours}h {elapsed.Minutes}m";
+    }
+
+    private static string ContainerSummary(IReadOnlyList<string> names) =>
+        names.Count == 1 ? names[0] : $"{names[0]} +{names.Count - 1}";
+
+    private static string ContainerListTooltip(IReadOnlyList<string> names) =>
+        names.Count > 0 ? string.Join(", ", names) : "None";
+
+    private async Task ToggleDetail(string key)
+    {
+        var opening = _selectedDetail != key;
+        _selectedDetail = opening ? key : null;
+
+        // Drilling into Top CPU/Memory should never show data older than the click that opened
+        // it, even though the ambient tile is fine reading from the short-lived cache.
+        if (opening && key is "memory" or "top-cpu")
+        {
+            UnraidActivityService.InvalidateTopContainerCache();
+            await RefreshUnraidActivityAsync(force: true);
+        }
+    }
+
+    private static string DetailTitle(string key) => key switch
+    {
+        "memory" => "What's using memory",
+        "disks" => "Array disks",
+        "cpu-temp" => "CPU",
+        "top-cpu" => "Top processes",
+        "stuck" => "Blocked on storage",
+        _ => ""
+    };
+
+    private static IEnumerable<ContainerUsage> TopByMemory(UnraidActivity activity) =>
+        activity.TopContainers.OrderByDescending(c => c.MemoryUsedPercent).Take(10);
+
+    private static IEnumerable<ContainerUsage> TopByCpu(UnraidActivity activity) =>
+        activity.TopContainers.OrderByDescending(c => c.CpuPercent).Take(10);
+
+    private IEnumerable<int> MergedCoreIds(UnraidActivity activity)
+    {
+        var ids = new SortedSet<int>(_coreUsage.Select(c => c.Index));
+        foreach (var temp in activity.CpuCoreTemps)
+        {
+            if (ParseCoreId(temp.Label) is int id)
+                ids.Add(id);
+        }
+
+        return ids;
+    }
+
+    private double? CoreUsageFor(int coreId) =>
+        _coreUsage.FirstOrDefault(c => c.Index == coreId)?.Percent;
+
+    private static double? CoreTempFor(UnraidActivity activity, int coreId) =>
+        activity.CpuCoreTemps.FirstOrDefault(t => ParseCoreId(t.Label) == coreId)?.TempCelsius;
+
+    private static int? ParseCoreId(string label)
+    {
+        const string prefix = "Core ";
+        return label.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) &&
+            int.TryParse(label[prefix.Length..], out var id)
+            ? id
+            : null;
+    }
+
+    private static string CoreBarColor(double percent)
+    {
+        if (percent < 50) return "#22c55e";
+        if (percent < 80) return "#f59e0b";
+        return "#ef4444";
+    }
+
+    private static string DiskHealthStatus(DiskHealthSummary? health)
+    {
+        if (health is null)
+            return "?";
+
+        return health.AllHealthy
+            ? "OK"
+            : health.UnhealthyDisks.Count == 1 ? "1 issue" : $"{health.UnhealthyDisks.Count} issues";
+    }
+
+    private static string DiskMetaLine(DiskInfo disk)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(disk.Type))
+            parts.Add(disk.Type);
+
+        parts.Add(disk.Rotational ? "HDD" : "SSD");
+
+        if (!string.IsNullOrWhiteSpace(disk.FilesystemType))
+            parts.Add(disk.FilesystemType);
+
+        parts.Add(disk.TempCelsius is double dt ? $"{dt:0}°C" : (disk.SpunDown ? "Spun down" : "Temp unknown"));
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string DiskUsageFraction(DiskInfo disk)
+    {
+        if (disk.SizeBytes is long size and > 0 && disk.UsedBytes is long used)
+            return $"{ByteDisplayHelper.Format(used)} / {ByteDisplayHelper.Format(size)}";
+
+        return disk.SizeBytes is long sizeOnly ? ByteDisplayHelper.Format(sizeOnly) : "Size unknown";
+    }
+
+    private static string DiskTempsTooltip(DiskHealthSummary? health)
+    {
+        if (health is null || health.AllDisks.Count == 0)
+            return "";
+
+        return string.Join(", ", health.AllDisks.Select(d =>
+            d.TempCelsius is double t ? $"{d.Name}: {t:0}°C" : $"{d.Name}: spun down"));
+    }
+
+    private static string TopContainersTooltip(IReadOnlyList<ContainerUsage> containers)
+    {
+        if (containers.Count == 0)
+            return "";
+
+        return string.Join("\n", containers.Select(c => $"{c.Name}: {c.CpuPercent:0.#}% CPU, {c.MemoryUsedPercent:0.#}% mem"));
+    }
+
+    private static string CoreUsageTooltip(ContainerUsage container) =>
+        $"Using {container.CpuCores:0.#} of the box's {Environment.ProcessorCount} cores";
+
+    private static string CoreTempsTooltip(IReadOnlyList<CpuCoreTemp> coreTemps)
+    {
+        if (coreTemps.Count == 0)
+            return "";
+
+        return string.Join(", ", coreTemps.Select(c => $"{c.Label}: {c.TempCelsius:0.#}°C"));
+    }
+
+    private static string FormatUptime(TimeSpan uptime)
+    {
+        if (uptime.TotalDays >= 1)
+            return $"{(int)uptime.TotalDays}d {uptime.Hours}h";
+        if (uptime.TotalHours >= 1)
+            return $"{(int)uptime.TotalHours}h {uptime.Minutes}m";
+        return $"{(int)uptime.TotalMinutes}m";
+    }
+
     protected override void OnParametersSet()
     {
         if (Metrics is not null)
             _liveMetrics = Metrics;
 
-        if (Metrics?.CpuPercent is double cpu && SampledAt != default)
-            TryAddSample(SampledAt, cpu);
-
-        _displayCpu ??= Metrics?.CpuPercent ?? _cpuSamples.LastOrDefault()?.Percent;
+        _displayCpu ??= Metrics?.CpuPercent ?? LatestHistoryPercent();
         RebuildCpuChart();
     }
 
-    private async Task RefreshLibraryStatsAsync(bool force)
-    {
-        if (_libraryStatsLoading)
-            return;
-
-        if (!force && _libraryStats.Count > 0 && DateTimeOffset.UtcNow - _libraryStatsLoadedAt < TimeSpan.FromMinutes(10))
-            return;
-
-        _libraryStatsLoading = true;
-        try
-        {
-            var stats = await LibraryStats.GetAsync(CancellationToken.None);
-            _libraryStats = stats;
-            _libraryStatsLoadedAt = DateTimeOffset.UtcNow;
-            await InvokeAsync(StateHasChanged);
-        }
-        finally
-        {
-            _libraryStatsLoading = false;
-        }
-    }
+    private double? LatestHistoryPercent() =>
+        CpuHistory.GetSamples(TimeSpan.FromMinutes(1)).LastOrDefault()?.Percent;
 
     private async Task PollLoopAsync()
     {
@@ -315,6 +960,8 @@
 
     private void PollTick()
     {
+        _coreUsage = HostMetrics.ReadPerCoreUsage();
+
         var metrics = HostMetrics.Read();
         if (metrics is null)
             return;
@@ -322,25 +969,12 @@
         _liveMetrics = metrics;
 
         if (metrics.CpuPercent is double cpu)
-        {
-            TryAddSample(DateTimeOffset.UtcNow, cpu);
             _displayCpu = cpu;
-        }
+
+        if (metrics.IoWaitPercent is double ioWait)
+            _displayIoWait = ioWait;
 
         RebuildCpuChart();
-    }
-
-    private void TryAddSample(DateTimeOffset at, double cpu)
-    {
-        var clamped = Math.Clamp(cpu, 0, 100);
-        if (_cpuSamples.Count > 0)
-        {
-            var last = _cpuSamples[^1];
-            if (at - last.At < TimeSpan.FromMilliseconds(400) && Math.Abs(last.Percent - clamped) < 0.05)
-                return;
-        }
-
-        _cpuSamples.Add(new CpuSample(at, clamped));
     }
 
     private async Task OnGraphHover(MouseEventArgs e)
@@ -365,28 +999,30 @@
         var windowStart = windowEnd.AddMinutes(-_graphWindowMinutes);
         var span = Math.Max((windowEnd - windowStart).TotalSeconds, 1);
         var at = windowStart.AddSeconds(ratio * span);
-        var percent = InterpolatePercentAt(at, windowStart, windowEnd);
+        var points = BuildInterpolationSamples(windowEnd);
+        var percent = InterpolateAt(points, at, s => s.Percent, _displayCpu ?? 0);
+        var ioWait = InterpolateAt(points, at, s => s.IoWaitPercent, _displayIoWait ?? 0);
         var chartX = PlotLeft + ratio * (PlotRight - PlotLeft);
 
         _hover = new HoverState(
             percent,
+            ioWait,
             at.ToLocalTime().ToString("HH:mm:ss"),
             pixelX,
             chartX,
             YForPercent(percent));
     }
 
-    private double InterpolatePercentAt(DateTimeOffset at, DateTimeOffset windowStart, DateTimeOffset windowEnd)
+    private static double InterpolateAt(List<CpuSample> points, DateTimeOffset at, Func<CpuSample, double> selector, double fallback)
     {
-        var points = BuildInterpolationSamples(windowEnd);
         if (points.Count == 0)
-            return _displayCpu ?? 0;
+            return fallback;
 
         if (at <= points[0].At)
-            return points[0].Percent;
+            return selector(points[0]);
 
         if (at >= points[^1].At)
-            return points[^1].Percent;
+            return selector(points[^1]);
 
         for (var i = 1; i < points.Count; i++)
         {
@@ -397,29 +1033,26 @@
 
             var span = (next.At - prev.At).TotalSeconds;
             if (span <= 0)
-                return next.Percent;
+                return selector(next);
 
             var ratio = (at - prev.At).TotalSeconds / span;
-            return prev.Percent + (next.Percent - prev.Percent) * ratio;
+            return selector(prev) + (selector(next) - selector(prev)) * ratio;
         }
 
-        return points[^1].Percent;
+        return selector(points[^1]);
     }
 
     private List<CpuSample> BuildInterpolationSamples(DateTimeOffset windowEnd)
     {
-        var windowStart = windowEnd.AddMinutes(-_graphWindowMinutes);
-        var points = _cpuSamples
-            .Where(s => s.At >= windowStart)
-            .OrderBy(s => s.At)
-            .ToList();
+        var points = CpuHistory.GetSamples(TimeSpan.FromMinutes(_graphWindowMinutes)).ToList();
 
         if (_displayCpu is double live)
         {
+            var liveIoWait = _displayIoWait ?? points.LastOrDefault()?.IoWaitPercent ?? 0;
             if (points.Count == 0 || points[^1].At < windowEnd.AddSeconds(-1))
-                points.Add(new CpuSample(windowEnd, live));
+                points.Add(new CpuSample(windowEnd, live, liveIoWait));
             else
-                points[^1] = points[^1] with { At = windowEnd, Percent = live };
+                points[^1] = points[^1] with { At = windowEnd, Percent = live, IoWaitPercent = liveIoWait };
         }
 
         return points;
@@ -430,35 +1063,15 @@
         var windowEnd = DateTimeOffset.UtcNow;
         var windowStart = windowEnd.AddMinutes(-_graphWindowMinutes);
         _windowStartLabel = windowStart.ToLocalTime().ToString(_graphWindowMinutes >= 24 * 60 ? "dd MMM HH:mm" : "HH:mm");
-        _cpuSamples.RemoveAll(s => s.At < windowStart);
 
-        var points = _cpuSamples
-            .Where(s => s.At <= windowEnd)
-            .OrderBy(s => s.At)
-            .Select(s => new PlotPoint(XForTime(s.At, windowStart, windowEnd), YForPercent(s.Percent)))
-            .ToList();
+        var historySamples = CpuHistory.GetSamples(TimeSpan.FromMinutes(_graphWindowMinutes));
 
-        if (points.Count == 0 && _displayCpu is double current)
-        {
-            var y = YForPercent(current);
-            points.Add(new PlotPoint(PlotLeft, y));
-            points.Add(new PlotPoint(PlotRight, y));
-        }
-        else if (points.Count > 0)
-        {
-            var livePercent = _displayCpu ?? _cpuSamples[^1].Percent;
-            var liveY = YForPercent(livePercent);
-
-            if (points[^1].X >= PlotRight - 0.5)
-                points[^1] = new PlotPoint(PlotRight, liveY);
-            else
-                points.Add(new PlotPoint(PlotRight, liveY));
-        }
-
+        var points = BuildChartPoints(historySamples, windowStart, windowEnd, s => s.Percent, _displayCpu);
         if (points.Count == 0)
         {
             _linePath = "";
             _areaPath = "";
+            _ioWaitLinePath = "";
             _latestPoint = null;
             return;
         }
@@ -468,6 +1081,39 @@
         _areaPath = _linePath +
                     $" L {Form(points[^1].X, baseline)} L {Form(points[0].X, baseline)} Z";
         _latestPoint = points[^1];
+
+        var ioPoints = BuildChartPoints(historySamples, windowStart, windowEnd, s => s.IoWaitPercent, _displayIoWait);
+        _ioWaitLinePath = ioPoints.Count > 0 ? "M " + string.Join(" L ", ioPoints.Select(p => Form(p.X, p.Y))) : "";
+    }
+
+    private List<PlotPoint> BuildChartPoints(
+        IReadOnlyList<CpuSample> historySamples, DateTimeOffset windowStart, DateTimeOffset windowEnd,
+        Func<CpuSample, double> selector, double? displayValue)
+    {
+        var points = historySamples
+            .Where(s => s.At <= windowEnd)
+            .OrderBy(s => s.At)
+            .Select(s => new PlotPoint(XForTime(s.At, windowStart, windowEnd), YForPercent(selector(s))))
+            .ToList();
+
+        if (points.Count == 0 && displayValue is double current)
+        {
+            var y = YForPercent(current);
+            points.Add(new PlotPoint(PlotLeft, y));
+            points.Add(new PlotPoint(PlotRight, y));
+        }
+        else if (points.Count > 0)
+        {
+            var liveValue = displayValue ?? selector(historySamples[^1]);
+            var liveY = YForPercent(liveValue);
+
+            if (points[^1].X >= PlotRight - 0.5)
+                points[^1] = new PlotPoint(PlotRight, liveY);
+            else
+                points.Add(new PlotPoint(PlotRight, liveY));
+        }
+
+        return points;
     }
 
     private RenderFragment RingSvg(double usedPercent) => __builder =>
@@ -502,7 +1148,7 @@
 
     private static string RingStyle(double usedPercent) => $"--ring-color:{UsageColor(usedPercent)}";
 
-    private static string LibraryAccentStyle(string accentColor) => $"--library-accent:{accentColor}";
+    private static string RingStyle(string color) => $"--ring-color:{color}";
 
     private static double XForTime(DateTimeOffset at, DateTimeOffset start, DateTimeOffset end)
     {
@@ -540,8 +1186,7 @@
         return ValueTask.CompletedTask;
     }
 
-    private sealed record CpuSample(DateTimeOffset At, double Percent);
     private sealed record PlotPoint(double X, double Y);
-    private sealed record HoverState(double Percent, string TimeLabel, double PixelX, double ChartX, double ChartY);
+    private sealed record HoverState(double Percent, double IoWaitPercent, string TimeLabel, double PixelX, double ChartX, double ChartY);
     private sealed record PlotPointer(double X, double Width);
 }

@@ -1,6 +1,6 @@
 @using System.Globalization
 
-<div class="mini-usage-ring" style="@($"--ring-color:{Color}")" title="@($"{Label} {Percent:0.#}%")">
+<div class="mini-usage-ring @Class" style="@($"--ring-color:{Color}")" title="@($"{Label} {Percent:0.#}%")">
     <svg viewBox="0 0 20 20" aria-hidden="true">
         <circle cx="10" cy="10" r="@Radius" class="mini-usage-ring-track" />
         <circle cx="10" cy="10" r="@Radius"
@@ -20,6 +20,7 @@
     [Parameter] public string Detail { get; set; } = "";
     [Parameter] public double Percent { get; set; }
     [Parameter] public string Color { get; set; } = "#6366f1";
+    [Parameter] public string Class { get; set; } = "";
 
     private double Offset => Circumference * (1 - Math.Clamp(Percent, 0, 100) / 100d);
 }
