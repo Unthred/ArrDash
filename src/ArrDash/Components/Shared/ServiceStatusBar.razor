@@ -14,7 +14,8 @@
                     <div class="status-chip @GetChipClass(service) @(isSelected ? "is-selected" : "")"
                          role="button"
                          tabindex="0"
-                         @onclick="@(() => ToggleService(service.Key))"
+                         @onclick="@(() => SelectService(service.Key))"
+                         @onclick:stopPropagation="true"
                          @onkeydown="@(e => OnChipKeyDown(e, service.Key))">
                         <span class="status-dot"></span>
                         <span class="status-name">@service.Name</span>
@@ -38,7 +39,8 @@
 
     @if (!string.IsNullOrWhiteSpace(SelectedServiceKey))
     {
-        <ServiceDetailPanel ServiceKey="@SelectedServiceKey"
+        <ServiceDetailPanel @key="@SelectedServiceKey"
+                            ServiceKey="@SelectedServiceKey"
                             ServiceDisplayName="@SelectedServiceDisplayName"
                             OnClose="ClearSelection" />
     }
@@ -79,10 +81,15 @@
             : Services.FirstOrDefault(s => string.Equals(s.Key, SelectedServiceKey, StringComparison.OrdinalIgnoreCase))?.Name
               ?? SelectedServiceKey;
 
-    private async Task ToggleService(string key)
+    private async Task SelectService(string key)
     {
-        var next = string.Equals(SelectedServiceKey, key, StringComparison.OrdinalIgnoreCase) ? null : key;
-        await SelectedServiceKeyChanged.InvokeAsync(next);
+        if (string.Equals(SelectedServiceKey, key, StringComparison.OrdinalIgnoreCase))
+        {
+            await SelectedServiceKeyChanged.InvokeAsync(null);
+            return;
+        }
+
+        await SelectedServiceKeyChanged.InvokeAsync(key);
     }
 
     private async Task ClearSelection() => await SelectedServiceKeyChanged.InvokeAsync(null);
@@ -90,23 +97,36 @@
     private async Task OnChipKeyDown(KeyboardEventArgs e, string key)
     {
         if (e.Key is "Enter" or " ")
-            await ToggleService(key);
+            await SelectService(key);
     }
 
     private static bool NeedsAttentionBadge(ServiceHealth service) =>
-        !service.Online && service.Configured;
+        service.Attention == ServiceAttentionLevel.NeedsAttention;
 
     private static string GetChipClass(ServiceHealth service)
     {
         if (!service.Configured)
             return "pending";
 
-        return service.Online ? "online" : "offline";
+        if (!service.Online)
+            return "offline";
+
+        if (service.Attention == ServiceAttentionLevel.NeedsAttention)
+            return "attention";
+
+        return "online";
     }
 
     private static string? GetTooltip(ServiceHealth service, DateTimeOffset? sampledAt)
     {
         var parts = new List<string> { "Click for details" };
+
+        if (!string.IsNullOrWhiteSpace(service.AttentionLabel) &&
+            service.Attention is ServiceAttentionLevel.NeedsAttention or ServiceAttentionLevel.Offline)
+            parts.Add(service.AttentionLabel);
+
+        if (service.AttentionCount is int issueCount and > 0)
+            parts.Add($"{issueCount} library item{(issueCount == 1 ? "" : "s")} with issues");
 
         if (service.Workload is { Kind: not ServiceWorkloadKind.None } workload)
         {

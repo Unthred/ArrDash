@@ -2774,6 +2774,12 @@ html {
 .status-chip.online .status-dot { background: #22c55e; }
 .status-chip.offline .status-dot { background: #ef4444; }
 .status-chip.pending .status-dot { background: #94a3b8; }
+.status-chip.attention .status-dot { background: #f59e0b; }
+
+.status-chip.attention {
+    border-color: color-mix(in srgb, #f59e0b 55%, var(--mud-palette-divider));
+    background: color-mix(in srgb, #f59e0b 8%, var(--mud-palette-surface));
+}
 
 .status-name {
     font-weight: 600;
@@ -2793,8 +2799,12 @@ html {
 }
 
 .status-attention-icon {
-    color: #ef4444;
+    color: #f59e0b;
     font-size: 0.95rem;
+}
+
+.status-chip.offline .status-attention-icon {
+    color: #ef4444;
 }
 
 .service-status-wrap {
@@ -2807,8 +2817,36 @@ html {
 .service-detail-panel {
     border: 1px solid var(--mud-palette-divider);
     border-radius: 12px;
-    padding: 12px 14px;
+    padding: 10px 12px 8px;
     background: color-mix(in srgb, var(--mud-palette-surface) 92%, var(--mud-palette-background));
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.service-detail-tabs {
+    margin-top: 4px;
+}
+
+.service-detail-tabs .mud-tabs-toolbar {
+    overflow: visible;
+}
+
+.service-detail-tabs .mud-tab {
+    min-height: 40px;
+    text-transform: none;
+}
+
+.service-detail-tab-panel {
+    max-height: 200px;
+    overflow-y: auto;
+    padding-top: 8px !important;
+}
+
+.service-detail-overview-row {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 4px 0;
 }
 
 .service-detail-head {
@@ -2816,7 +2854,7 @@ html {
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 
 .service-detail-title-wrap {

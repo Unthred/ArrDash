@@ -47,119 +47,120 @@
 
         @if (_detail is not null)
         {
-            @if (_detail.ConnectionError is { } connErr && !_detail.Online)
-            {
-                <MudAlert Severity="Severity.Error" Dense="true" Class="service-detail-alert">@connErr</MudAlert>
-            }
-
-            @if (_detail.Workload is { Kind: not ServiceWorkloadKind.None } workload)
-            {
-                <section class="service-detail-section">
-                    <MudText Typo="Typo.overline">Now</MudText>
-                    <MudText Typo="Typo.body2">@workload.Label</MudText>
-                </section>
-            }
-
-            @if (_detail.Problems.Count > 0)
-            {
-                <section class="service-detail-section">
-                    <MudText Typo="Typo.overline">Problems</MudText>
-                    @foreach (var problem in _detail.Problems)
+            <MudTabs Class="service-detail-tabs" Rounded="true" MinimumTabWidth="64" PanelClass="service-detail-tab-panel">
+                <MudTabPanel Text="Overview" Icon="@Icons.Material.Filled.Info">
+                    @if (_detail.ConnectionError is { } connErr && !_detail.Online)
                     {
-                        <MudAlert Severity="@ProblemSeverity(problem)" Dense="true" Class="service-detail-alert">
-                            @problem.Message
-                            @if (!string.IsNullOrWhiteSpace(problem.Url))
-                            {
-                                <MudLink Href="@problem.Url" Target="_blank" Class="ml-2">Wiki</MudLink>
-                            }
-                        </MudAlert>
+                        <MudAlert Severity="Severity.Error" Dense="true" Class="service-detail-alert">@connErr</MudAlert>
                     }
-                </section>
-            }
 
-            @if (_detail.QueueStates.Count > 0 || _detail.QueueTotal > 0)
-            {
-                <section class="service-detail-section">
-                    <MudText Typo="Typo.overline">Queue (@_detail.QueueTotal total)</MudText>
-                    <div class="service-detail-queue-grid">
-                        @foreach (var state in _detail.QueueStates)
+                    @if (_detail.Workload is { Kind: not ServiceWorkloadKind.None } workload)
+                    {
+                        <div class="service-detail-overview-row">
+                            <MudText Typo="Typo.caption" Class="muted">Now</MudText>
+                            <MudText Typo="Typo.body2">@workload.Label</MudText>
+                        </div>
+                    }
+
+                    @if (_detail.QueueTotal > 0)
+                    {
+                        <div class="service-detail-overview-row">
+                            <MudText Typo="Typo.caption" Class="muted">Queue</MudText>
+                            <MudText Typo="Typo.body2">@_detail.QueueTotal total</MudText>
+                        </div>
+                    }
+
+                    @if (IsIdleOnline)
+                    {
+                        <MudText Typo="Typo.body2" Class="muted service-detail-empty">No active work or recent issues reported.</MudText>
+                    }
+                </MudTabPanel>
+
+                @if (_detail.Problems.Count > 0)
+                {
+                    <MudTabPanel Text="@($"Problems ({_detail.Problems.Count})")" Icon="@Icons.Material.Filled.WarningAmber">
+                        @foreach (var problem in _detail.Problems)
                         {
-                            <div class="service-detail-queue-row @QueueRowClass(state.State)">
-                                <span class="service-detail-queue-state">@FormatQueueState(state.State)</span>
-                                <span class="service-detail-queue-count">@state.Count</span>
+                            <MudAlert Severity="@ProblemSeverity(problem)" Dense="true" Class="service-detail-alert">
+                                @problem.Message
+                                @if (!string.IsNullOrWhiteSpace(problem.Url))
+                                {
+                                    <MudLink Href="@problem.Url" Target="_blank" Class="ml-2">Wiki</MudLink>
+                                }
+                            </MudAlert>
+                        }
+                    </MudTabPanel>
+                }
+
+                @if (_detail.QueueStates.Count > 0 || _detail.QueueTotal > 0)
+                {
+                    <MudTabPanel Text="@QueueTabLabel" Icon="@Icons.Material.Filled.Queue">
+                        <div class="service-detail-queue-grid">
+                            @foreach (var state in _detail.QueueStates)
+                            {
+                                <div class="service-detail-queue-row @QueueRowClass(state.State)">
+                                    <span class="service-detail-queue-state">@FormatQueueState(state.State)</span>
+                                    <span class="service-detail-queue-count">@state.Count</span>
+                                </div>
+                            }
+                        </div>
+                    </MudTabPanel>
+                }
+
+                @if (_detail.Commands.Count > 0)
+                {
+                    <MudTabPanel Text="@($"Commands ({_detail.Commands.Count})")" Icon="@Icons.Material.Filled.Terminal">
+                        @foreach (var command in _detail.Commands)
+                        {
+                            <div class="service-detail-row">
+                                <span class="service-detail-row-title">@HumanizeCommand(command.Name)</span>
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@command.Status</MudChip>
                             </div>
                         }
-                    </div>
-                </section>
-            }
+                    </MudTabPanel>
+                }
 
-            @if (_detail.Commands.Count > 0)
-            {
-                <section class="service-detail-section">
-                    <MudText Typo="Typo.overline">Commands</MudText>
-                    @foreach (var command in _detail.Commands)
-                    {
-                        <div class="service-detail-row">
-                            <span class="service-detail-row-title">@HumanizeCommand(command.Name)</span>
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@command.Status</MudChip>
-                        </div>
-                    }
-                </section>
-            }
-
-            @if (_detail.Sessions.Count > 0)
-            {
-                <section class="service-detail-section">
-                    <MudText Typo="Typo.overline">Sessions (@_detail.Sessions.Count)</MudText>
-                    @foreach (var session in _detail.Sessions)
-                    {
-                        <div class="service-detail-row">
-                            <div>
-                                <div class="service-detail-row-title">@session.Title</div>
-                                @if (!string.IsNullOrWhiteSpace(session.Detail))
+                @if (_detail.Sessions.Count > 0)
+                {
+                    <MudTabPanel Text="@($"Sessions ({_detail.Sessions.Count})")" Icon="@Icons.Material.Filled.PlayCircle">
+                        @foreach (var session in _detail.Sessions)
+                        {
+                            <div class="service-detail-row">
+                                <div>
+                                    <div class="service-detail-row-title">@session.Title</div>
+                                    @if (!string.IsNullOrWhiteSpace(session.Detail))
+                                    {
+                                        <div class="service-detail-row-sub muted">@session.Detail</div>
+                                    }
+                                </div>
+                                @if (session.BandwidthKbps is int bw)
                                 {
-                                    <div class="service-detail-row-sub muted">@session.Detail</div>
+                                    <span class="service-detail-row-meta">@BitrateDisplayHelper.Format(bw)</span>
+                                }
+                                @if (session.IsLocal is bool local)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@(local ? "LAN" : "WAN")</MudChip>
                                 }
                             </div>
-                            @if (session.BandwidthKbps is int bw)
-                            {
-                                <span class="service-detail-row-meta">@BitrateDisplayHelper.Format(bw)</span>
-                            }
-                            @if (session.IsLocal is bool local)
-                            {
-                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@(local ? "LAN" : "WAN")</MudChip>
-                            }
-                        </div>
-                    }
-                </section>
-            }
+                        }
+                    </MudTabPanel>
+                }
 
-            @if (_detail.RecentActivity.Count > 0)
-            {
-                <section class="service-detail-section">
-                    <MudText Typo="Typo.overline">Recent activity</MudText>
-                    @foreach (var item in _detail.RecentActivity)
-                    {
-                        <div class="service-detail-row">
-                            <div>
-                                <div class="service-detail-row-title">@item.Title</div>
-                                <div class="service-detail-row-sub muted">@item.EventLabel · @TimeDisplayHelper.FormatRelative(item.At)</div>
+                @if (_detail.RecentActivity.Count > 0)
+                {
+                    <MudTabPanel Text="Activity" Icon="@Icons.Material.Filled.History">
+                        @foreach (var item in _detail.RecentActivity)
+                        {
+                            <div class="service-detail-row">
+                                <div>
+                                    <div class="service-detail-row-title">@item.Title</div>
+                                    <div class="service-detail-row-sub muted">@item.EventLabel · @TimeDisplayHelper.FormatRelative(item.At)</div>
+                                </div>
                             </div>
-                        </div>
-                    }
-                </section>
-            }
-
-            @if (_detail is { Workload: null or { Kind: ServiceWorkloadKind.None },
-                     Problems.Count: 0,
-                     QueueStates.Count: 0,
-                     Commands.Count: 0,
-                     Sessions.Count: 0,
-                     RecentActivity.Count: 0,
-                     Online: true })
-            {
-                <MudText Typo="Typo.body2" Class="muted service-detail-empty">No active work or recent issues reported.</MudText>
-            }
+                        }
+                    </MudTabPanel>
+                }
+            </MudTabs>
         }
         else if (!_loading && _error is not null)
         {
@@ -176,7 +177,7 @@
     private ServiceDetail? _detail;
     private bool _loading;
     private string? _error;
-    private string? _loadedKey;
+    private int _loadGeneration;
     private CancellationTokenSource? _loadCts;
 
     private string HeaderTitle =>
@@ -185,34 +186,21 @@
         ?? ServiceKey
         ?? "Service";
 
-    protected override async Task OnParametersSetAsync()
+    private bool IsIdleOnline =>
+        _detail is { Online: true, Workload: null or { Kind: ServiceWorkloadKind.None }, Problems.Count: 0, QueueStates.Count: 0, Commands.Count: 0, Sessions.Count: 0, RecentActivity.Count: 0 };
+
+    private string QueueTabLabel =>
+        _detail?.QueueTotal > 0 ? $"Queue ({_detail.QueueTotal})" : "Queue";
+
+    protected override async Task OnInitializedAsync()
     {
-        if (string.IsNullOrWhiteSpace(ServiceKey))
-        {
-            ResetState();
-            return;
-        }
-
-        if (string.Equals(ServiceKey, _loadedKey, StringComparison.OrdinalIgnoreCase) &&
-            (_detail is not null || _loading))
-            return;
-
-        await LoadAsync(ServiceKey);
-    }
-
-    private void ResetState()
-    {
-        _loadCts?.Cancel();
-        _loadCts?.Dispose();
-        _loadCts = null;
-        _detail = null;
-        _error = null;
-        _loading = false;
-        _loadedKey = null;
+        if (!string.IsNullOrWhiteSpace(ServiceKey))
+            await LoadAsync(ServiceKey);
     }
 
     private async Task LoadAsync(string key)
     {
+        var generation = ++_loadGeneration;
         _loadCts?.Cancel();
         _loadCts?.Dispose();
         _loadCts = new CancellationTokenSource();
@@ -221,33 +209,35 @@
         _loading = true;
         _error = null;
         _detail = null;
-        await InvokeAsync(StateHasChanged);
 
         try
         {
             var detail = await DetailService.FetchAsync(key, ct);
-            if (ct.IsCancellationRequested)
+            if (generation != _loadGeneration || ct.IsCancellationRequested)
                 return;
 
             _detail = detail;
-            _loadedKey = key;
             if (detail is null)
                 _error = $"Could not load details for {HeaderTitle}.";
         }
-        catch (Exception ex) when (ex is OperationCanceledException)
+        catch (OperationCanceledException)
         {
             return;
         }
         catch (Exception ex)
         {
+            if (generation != _loadGeneration)
+                return;
+
             _error = ex.Message;
-            _loadedKey = key;
         }
         finally
         {
-            if (!ct.IsCancellationRequested)
+            if (generation == _loadGeneration)
+            {
                 _loading = false;
-            await InvokeAsync(StateHasChanged);
+                await InvokeAsync(StateHasChanged);
+            }
         }
     }
 
@@ -261,6 +251,17 @@
     {
         _ = ExternalLink.OpenAsync(url, Prefs.Current.ExternalLinkTarget);
         return Task.CompletedTask;
+    }
+
+    private void ResetState()
+    {
+        _loadGeneration++;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = null;
+        _detail = null;
+        _error = null;
+        _loading = false;
     }
 
     private static Severity ProblemSeverity(ServiceProblem problem) =>

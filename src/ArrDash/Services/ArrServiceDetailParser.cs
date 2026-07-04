@@ -30,9 +30,9 @@ public static class ArrServiceDetailParser
         if (queueHasWarnings)
             problems.Add(new ServiceProblem("warning", "Download queue reports warnings"));
 
-        var blockedEntry = queueStates.FirstOrDefault(s =>
-            string.Equals(s.State, "importBlocked", StringComparison.OrdinalIgnoreCase));
-        var blockedCount = blockedEntry.Count;
+        var blockedCount = queueStates
+            .FirstOrDefault(s => string.Equals(s.State, "importBlocked", StringComparison.OrdinalIgnoreCase))
+            ?.Count ?? 0;
         if (blockedCount > 0)
         {
             problems.Add(new ServiceProblem("warning",
@@ -125,7 +125,8 @@ public static class ArrServiceDetailParser
         string? version,
         string? connectionError,
         ServiceWorkload? workload,
-        IReadOnlyList<ServiceRecentActivity>? recentActivity = null)
+        IReadOnlyList<ServiceRecentActivity>? recentActivity = null,
+        IReadOnlyList<ServiceProblem>? additionalProblems = null)
     {
         if (!configured)
             return NotConfigured(key, name);
@@ -133,6 +134,8 @@ public static class ArrServiceDetailParser
         var problems = new List<ServiceProblem>();
         if (!online && !string.IsNullOrWhiteSpace(connectionError))
             problems.Add(new ServiceProblem("error", connectionError));
+        if (additionalProblems is not null)
+            problems.AddRange(additionalProblems);
 
         var attention = DetermineAttention(online, problems, workload, blockedQueue: false);
 
@@ -336,7 +339,7 @@ public static class ArrServiceDetailParser
                 ? parsed
                 : DateTimeOffset.UtcNow;
 
-            items.Add(new ServiceRecentActivity(title, HumanizeEvent(eventType!), date));
+            items.Add(new ServiceRecentActivity(HistoryTitleFormatter.Format(rec), HumanizeEvent(eventType!), date));
             if (items.Count >= limit)
                 break;
         }
@@ -356,6 +359,36 @@ public static class ArrServiceDetailParser
             return count;
 
         return 0;
+    }
+
+    public static int CountImportBlocked(JsonElement? queue)
+    {
+        if (queue is null)
+            return 0;
+
+        return BuildQueueBreakdown(queue)
+            .FirstOrDefault(s => string.Equals(s.State, "importBlocked", StringComparison.OrdinalIgnoreCase))
+            ?.Count ?? 0;
+    }
+
+    public static ServiceAttentionLevel DetermineAttentionFromSnapshot(
+        bool online,
+        JsonElement? health,
+        JsonElement? queueStatus,
+        JsonElement? queue,
+        ServiceWorkload? workload)
+    {
+        if (!online)
+            return ServiceAttentionLevel.Offline;
+
+        var problems = ParseHealthProblems(health);
+        if (ReadQueueFlag(queueStatus, "errors"))
+            problems.Add(new ServiceProblem("error", "Download queue reports errors"));
+        if (ReadQueueFlag(queueStatus, "warnings"))
+            problems.Add(new ServiceProblem("warning", "Download queue reports warnings"));
+
+        var blockedCount = CountImportBlocked(queue);
+        return DetermineAttention(true, problems, workload, blockedCount > 0);
     }
 
     private static bool ReadQueueFlag(JsonElement? queueStatus, string property)

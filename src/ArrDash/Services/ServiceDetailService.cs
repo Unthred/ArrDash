@@ -12,7 +12,6 @@ public sealed class ServiceDetailService(
     PlexClient plex,
     EmbyClient emby,
     JellyfinClient jellyfin,
-    AudiobookShelfActivityTracker absActivity,
     MediaServiceOptionsAccessor options,
     LayoutPreferencesService prefs)
 {
@@ -28,7 +27,7 @@ public sealed class ServiceDetailService(
             "radarr" => await radarr.FetchServiceDetailAsync(ct),
             "lidarr" => await lidarr.FetchServiceDetailAsync(ct),
             "chaptarr" => await chaptarr.FetchServiceDetailAsync(ct),
-            "audiobookshelf" => await FetchAudiobookShelfDetailAsync(ct),
+            "audiobookshelf" => await audiobookShelf.FetchServiceDetailAsync(ct),
             "plex" => await FetchStreamingDetailAsync("plex", plex.FetchSessionsAsync(ct), options.Options.Plex.Url),
             "emby" => await FetchStreamingDetailAsync("emby", emby.FetchSessionsAsync(ct), options.Options.Emby.Url),
             "jellyfin" => await FetchStreamingDetailAsync("jellyfin", jellyfin.FetchSessionsAsync(ct), options.Options.Jellyfin.Url),
@@ -92,42 +91,6 @@ public sealed class ServiceDetailService(
             [],
             [],
             null);
-
-    private async Task<ServiceDetail> FetchAudiobookShelfDetailAsync(CancellationToken ct)
-    {
-        const string key = "audiobookshelf";
-        const string name = "AudioBookShelf";
-
-        if (!audiobookShelf.IsConfigured)
-            return ArrServiceDetailParser.NotConfigured(key, name);
-
-        try
-        {
-            var (_, health) = await audiobookShelf.FetchRecentAsync(1, ct);
-            var workload = absActivity.GetCurrentWorkload();
-            var recent = await audiobookShelf.FetchRecentAsync(8, ct);
-
-            var recentActivity = recent.Items
-                .Select(i => new ServiceRecentActivity(i.Title, i.Event.ToString(), i.Timestamp))
-                .ToList();
-
-            return ArrServiceDetailParser.BuildSimpleDetail(
-                key,
-                name,
-                options.Options.AudiobookShelf.Url,
-                health.Configured,
-                health.Online,
-                health.Version,
-                health.Error,
-                workload ?? health.Workload,
-                recentActivity);
-        }
-        catch (Exception ex)
-        {
-            return ArrServiceDetailParser.BuildSimpleDetail(
-                key, name, options.Options.AudiobookShelf.Url, true, false, null, ex.Message, null);
-        }
-    }
 
     private static async Task<ServiceDetail> FetchStreamingDetailAsync(
         string key,

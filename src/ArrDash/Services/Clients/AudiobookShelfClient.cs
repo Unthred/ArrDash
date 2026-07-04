@@ -14,6 +14,52 @@ public sealed class AudiobookShelfClient(
 
     public bool IsConfigured => Abs.IsConfigured;
 
+    public async Task<ServiceDetail> FetchServiceDetailAsync(CancellationToken ct)
+    {
+        const string key = "audiobookshelf";
+        const string name = "AudioBookShelf";
+
+        if (!IsConfigured)
+            return ArrServiceDetailParser.NotConfigured(key, name);
+
+        try
+        {
+            var libraries = await GetLibrariesAsync(ct);
+            var issueCountTask = FetchIssueCountAsync(libraries, ct);
+            var recentTask = FetchRecentItemsAsync(libraries, 8, ct);
+            var versionTask = GetVersionAsync(ct);
+            await Task.WhenAll(issueCountTask, recentTask, versionTask);
+
+            var issueCount = await issueCountTask;
+            var recentItems = await recentTask;
+            var workload = activityTracker.GetCurrentWorkload();
+            var recentActivity = recentItems
+                .Select(i => new ServiceRecentActivity(i.Title, "Added", i.Timestamp))
+                .ToList();
+
+            IReadOnlyList<ServiceProblem>? problems = issueCount > 0
+                ? [AudiobookShelfIssueHelper.IssueSummaryProblem(issueCount)]
+                : null;
+
+            return ArrServiceDetailParser.BuildSimpleDetail(
+                key,
+                name,
+                Abs.Url.TrimEnd('/'),
+                true,
+                true,
+                await versionTask,
+                null,
+                workload,
+                recentActivity,
+                problems);
+        }
+        catch (Exception ex)
+        {
+            return ArrServiceDetailParser.BuildSimpleDetail(
+                key, name, Abs.Url.TrimEnd('/'), true, false, null, ex.Message, null);
+        }
+    }
+
     public async Task<(IReadOnlyList<DownloadItem> Items, ServiceHealth Health)> FetchRecentAsync(
         int limit,
         CancellationToken ct)
@@ -28,22 +74,24 @@ public sealed class AudiobookShelfClient(
                 return ([], new ServiceHealth("audiobookshelf", "AudioBookShelf", true, true, null, null));
 
             var fetchSize = Math.Clamp(limit * 2, limit, 100);
-            var tasks = libraries.Select(lib => FetchLibraryItemsAsync(lib.Id, fetchSize, ct));
-            var batches = await Task.WhenAll(tasks);
+            var issueCountTask = FetchIssueCountAsync(libraries, ct);
+            var itemsTask = FetchRecentItemsAsync(libraries, fetchSize, ct);
+            var versionTask = GetVersionAsync(ct);
+            await Task.WhenAll(issueCountTask, itemsTask, versionTask);
 
-            var items = batches
-                .SelectMany(x => x)
-                .OrderByDescending(x => x.Timestamp)
-                .Take(limit)
-                .ToList();
-
-            var version = await GetVersionAsync(ct);
+            var items = (await itemsTask).Take(limit).ToList();
+            var issueCount = await issueCountTask;
             var workload = activityTracker.GetCurrentWorkload();
-            return (items, new ServiceHealth("audiobookshelf", "AudioBookShelf", true, true, null, version, workload));
+            var health = ServiceHealthSnapshot.WithAttention(
+                new ServiceHealth("audiobookshelf", "AudioBookShelf", true, true, null, await versionTask),
+                workload);
+
+            return (items, AudiobookShelfIssueHelper.ApplyIssueAttention(health, issueCount));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth("audiobookshelf", "AudioBookShelf", true, false, ex.Message, null));
+            return ([], ServiceHealthSnapshot.WithAttention(
+                new ServiceHealth("audiobookshelf", "AudioBookShelf", true, false, ex.Message, null)));
         }
     }
 
@@ -95,6 +143,49 @@ public sealed class AudiobookShelfClient(
         using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
 
         return doc.RootElement.TryGetProperty("total", out var total) ? total.GetInt64() : 0;
+    }
+
+    private async Task<IReadOnlyList<DownloadItem>> FetchRecentItemsAsync(
+        IReadOnlyList<(string Id, string Name, string MediaType)> libraries,
+        int limit,
+        CancellationToken ct)
+    {
+        if (libraries.Count == 0)
+            return [];
+
+        var tasks = libraries.Select(lib => FetchLibraryItemsAsync(lib.Id, limit, ct));
+        var batches = await Task.WhenAll(tasks);
+        return batches
+            .SelectMany(x => x)
+            .OrderByDescending(x => x.Timestamp)
+            .Take(limit)
+            .ToList();
+    }
+
+    private async Task<int> FetchIssueCountAsync(
+        IReadOnlyList<(string Id, string Name, string MediaType)> libraries,
+        CancellationToken ct)
+    {
+        if (libraries.Count == 0)
+            return 0;
+
+        var tasks = libraries.Select(async library =>
+        {
+            using var response = await SendAsync(
+                $"/api/libraries/{library.Id}/items?filter=issues&limit=1&minified=1",
+                ct);
+            if (!response.IsSuccessStatusCode)
+                return 0;
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            return doc.RootElement.TryGetProperty("total", out var totalEl) && totalEl.TryGetInt32(out var total)
+                ? total
+                : 0;
+        });
+
+        var counts = await Task.WhenAll(tasks);
+        return counts.Sum();
     }
 
     private async Task<IReadOnlyList<(string Id, string Name, string MediaType)>> GetLibrariesAsync(CancellationToken ct)

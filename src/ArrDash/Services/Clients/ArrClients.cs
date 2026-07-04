@@ -69,13 +69,16 @@ public abstract class ArrClientBase
                 }
             }
 
-            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
+            var (version, workload, attention) = await FetchVersionAndSnapshotAsync(ct);
             return (items.Take(limit).ToList(),
-                WithWorkload(new ServiceHealth(Source.ToString().ToLowerInvariant(), Source.ToString(), true, true, null, version), workload));
+                ApplySnapshot(new ServiceHealth(Source.ToString().ToLowerInvariant(), Source.ToString(), true, true, null, version), workload, attention));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth(Source.ToString().ToLowerInvariant(), Source.ToString(), true, false, ex.Message, null));
+            return ([], ApplySnapshot(
+                new ServiceHealth(Source.ToString().ToLowerInvariant(), Source.ToString(), true, false, ex.Message, null),
+                null,
+                ServiceAttentionLevel.Offline));
         }
     }
 
@@ -149,56 +152,61 @@ public abstract class ArrClientBase
         return doc.RootElement.Clone();
     }
 
-    protected async Task<ServiceWorkload?> FetchArrWorkloadAsync(CancellationToken ct)
+    protected async Task<(ServiceWorkload? Workload, ServiceAttentionLevel Attention)> FetchArrSnapshotAsync(CancellationToken ct)
     {
         if (!IsConfigured)
-            return null;
+            return (null, ServiceAttentionLevel.NotConfigured);
 
         try
         {
             var commandsTask = GetJsonAsync($"/api/{ApiVersion}/command", ct);
             var queueStatusTask = GetJsonAsync($"/api/{ApiVersion}/queue/status", ct);
-            await Task.WhenAll(commandsTask, queueStatusTask);
+            var healthTask = GetJsonAsync($"/api/{ApiVersion}/health", ct);
+            await Task.WhenAll(commandsTask, queueStatusTask, healthTask);
 
             var commands = await commandsTask;
             var queueStatus = await queueStatusTask;
+            var health = await healthTask;
 
             JsonElement? queue = null;
-            if (ReadQueueTotalCount(queueStatus) > 0)
+            if (ArrServiceDetailParser.ReadQueueTotalCount(queueStatus) > 0)
                 queue = await GetJsonAsync($"/api/{ApiVersion}/queue?pageSize=50", ct);
 
-            return ArrActivityDetector.Detect(commands, queueStatus, queue);
+            var workload = ArrActivityDetector.Detect(commands, queueStatus, queue);
+            var attention = ArrServiceDetailParser.DetermineAttentionFromSnapshot(
+                true,
+                health,
+                queueStatus,
+                queue,
+                workload);
+
+            return (workload, attention);
         }
         catch
         {
-            return null;
+            return (null, ServiceAttentionLevel.Offline);
         }
     }
 
-    private static int ReadQueueTotalCount(JsonElement? queueStatus)
-    {
-        if (queueStatus is not { } status)
-            return 0;
-
-        if (status.TryGetProperty("totalCount", out var totalEl) && totalEl.TryGetInt32(out var total))
-            return total;
-
-        if (status.TryGetProperty("count", out var countEl) && countEl.TryGetInt32(out var count))
-            return count;
-
-        return 0;
-    }
-
-    protected static ServiceHealth WithWorkload(ServiceHealth health, ServiceWorkload? workload) =>
-        health with { Workload = workload };
-
-    protected async Task<(string? Version, ServiceWorkload? Workload)> FetchVersionAndWorkloadAsync(CancellationToken ct)
+    protected async Task<(string? Version, ServiceWorkload? Workload, ServiceAttentionLevel Attention)> FetchVersionAndSnapshotAsync(CancellationToken ct)
     {
         var versionTask = GetVersionAsync(ct);
-        var workloadTask = FetchArrWorkloadAsync(ct);
-        await Task.WhenAll(versionTask, workloadTask);
-        return (await versionTask, await workloadTask);
+        var snapshotTask = FetchArrSnapshotAsync(ct);
+        await Task.WhenAll(versionTask, snapshotTask);
+        var (workload, attention) = await snapshotTask;
+        return (await versionTask, workload, attention);
     }
+
+    protected static ServiceHealth ApplySnapshot(
+        ServiceHealth health,
+        ServiceWorkload? workload,
+        ServiceAttentionLevel attention) =>
+        health with
+        {
+            Workload = workload,
+            Attention = attention,
+            AttentionLabel = ArrServiceDetailParser.AttentionLabelFor(attention)
+        };
 
     public virtual async Task<ServiceDetail> FetchServiceDetailAsync(CancellationToken ct)
     {
@@ -442,13 +450,16 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
             foreach (var entry in deduped.Where(e => !consumed.Contains(e.EpisodeId)))
                 items.Add(BuildDownloadItem([entry], seriesLookup, episodeLookup, seriesEpisodes, null));
 
-            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
+            var (version, workload, attention) = await FetchVersionAndSnapshotAsync(ct);
             return (items.OrderByDescending(i => i.Timestamp).Take(limit).ToList(),
-                WithWorkload(new ServiceHealth("sonarr", "Sonarr", true, true, null, version), workload));
+                ApplySnapshot(new ServiceHealth("sonarr", "Sonarr", true, true, null, version), workload, attention));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth("sonarr", "Sonarr", true, false, ex.Message, null));
+            return ([], ApplySnapshot(
+                new ServiceHealth("sonarr", "Sonarr", true, false, ex.Message, null),
+                null,
+                ServiceAttentionLevel.Offline));
         }
     }
 
@@ -962,12 +973,15 @@ public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor op
                 .Take(limit)
                 .ToList();
 
-            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
-            return (items, WithWorkload(new ServiceHealth("radarr", "Radarr", true, true, null, version), workload));
+            var (version, workload, attention) = await FetchVersionAndSnapshotAsync(ct);
+            return (items, ApplySnapshot(new ServiceHealth("radarr", "Radarr", true, true, null, version), workload, attention));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth("radarr", "Radarr", true, false, ex.Message, null));
+            return ([], ApplySnapshot(
+                new ServiceHealth("radarr", "Radarr", true, false, ex.Message, null),
+                null,
+                ServiceAttentionLevel.Offline));
         }
     }
 
@@ -1150,12 +1164,15 @@ public sealed class LidarrClient(HttpClient http, MediaServiceOptionsAccessor op
                 .Take(limit)
                 .ToList();
 
-            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
-            return (items, WithWorkload(new ServiceHealth("lidarr", "Lidarr", true, true, null, version), workload));
+            var (version, workload, attention) = await FetchVersionAndSnapshotAsync(ct);
+            return (items, ApplySnapshot(new ServiceHealth("lidarr", "Lidarr", true, true, null, version), workload, attention));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth("lidarr", "Lidarr", true, false, ex.Message, null));
+            return ([], ApplySnapshot(
+                new ServiceHealth("lidarr", "Lidarr", true, false, ex.Message, null),
+                null,
+                ServiceAttentionLevel.Offline));
         }
     }
 
@@ -1319,12 +1336,15 @@ public sealed class ChaptarrClient(HttpClient http, MediaServiceOptionsAccessor 
                 .Take(limit)
                 .ToList();
 
-            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
-            return (items, WithWorkload(new ServiceHealth("chaptarr", "Chaptarr", true, true, null, version), workload));
+            var (version, workload, attention) = await FetchVersionAndSnapshotAsync(ct);
+            return (items, ApplySnapshot(new ServiceHealth("chaptarr", "Chaptarr", true, true, null, version), workload, attention));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth("chaptarr", "Chaptarr", true, false, ex.Message, null));
+            return ([], ApplySnapshot(
+                new ServiceHealth("chaptarr", "Chaptarr", true, false, ex.Message, null),
+                null,
+                ServiceAttentionLevel.Offline));
         }
     }
 

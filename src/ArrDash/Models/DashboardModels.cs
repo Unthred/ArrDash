@@ -122,7 +122,10 @@ public sealed record ServiceHealth(
     bool Online,
     string? Error,
     string? Version,
-    ServiceWorkload? Workload = null);
+    ServiceWorkload? Workload = null,
+    ServiceAttentionLevel Attention = ServiceAttentionLevel.Healthy,
+    string? AttentionLabel = null,
+    int? AttentionCount = null);
 
 public enum ServiceAttentionLevel
 {

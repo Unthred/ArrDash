@@ -37,11 +37,11 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
                 .ToList();
 
             var workload = StreamingWorkloadHelper.FromTranscodeCount(transcodeCount);
-            return (sessions, new ServiceHealth("plex", "Plex", true, true, null, null, workload));
+            return (sessions, ServiceHealthSnapshot.WithAttention(new ServiceHealth("plex", "Plex", true, true, null, null), workload));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth("plex", "Plex", true, false, ex.Message, null));
+            return ([], ServiceHealthSnapshot.WithAttention(new ServiceHealth("plex", "Plex", true, false, ex.Message, null)));
         }
     }
 
@@ -164,11 +164,11 @@ public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor opti
             }
 
             var workload = StreamingWorkloadHelper.FromTranscodeCount(transcodeCount);
-            return (sessions, new ServiceHealth("emby", "Emby", true, true, null, null, workload));
+            return (sessions, ServiceHealthSnapshot.WithAttention(new ServiceHealth("emby", "Emby", true, true, null, null), workload));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth("emby", "Emby", true, false, ex.Message, null));
+            return ([], ServiceHealthSnapshot.WithAttention(new ServiceHealth("emby", "Emby", true, false, ex.Message, null)));
         }
     }
 
@@ -308,11 +308,11 @@ public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor 
             }
 
             var workload = StreamingWorkloadHelper.FromTranscodeCount(transcodeCount);
-            return (sessions, new ServiceHealth("jellyfin", "Jellyfin", true, true, null, null, workload));
+            return (sessions, ServiceHealthSnapshot.WithAttention(new ServiceHealth("jellyfin", "Jellyfin", true, true, null, null), workload));
         }
         catch (Exception ex)
         {
-            return ([], new ServiceHealth("jellyfin", "Jellyfin", true, false, ex.Message, null));
+            return ([], ServiceHealthSnapshot.WithAttention(new ServiceHealth("jellyfin", "Jellyfin", true, false, ex.Message, null)));
         }
     }
 
