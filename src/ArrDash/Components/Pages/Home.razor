@@ -46,8 +46,8 @@
         <ServerMetricsBar Metrics="_snapshot.Host"
                           SampledAt="_snapshot.UpdatedAt"
                           Services="_snapshot.Services"
-                          SelectedServiceKey="_selectedServiceKey"
-                          SelectedServiceKeyChanged="OnServiceSelected" />
+                          SelectedServiceKey="@_selectedServiceKey"
+                          SelectedServiceKeyChanged="@OnServiceSelected" />
     }
 
     @foreach (var panelId in VisiblePanels)
@@ -149,8 +149,8 @@
                           SampledAt="_snapshot.UpdatedAt"
                           Mode="Prefs.Current.StatusBarMode"
                           Alignment="Prefs.Current.StatusBarAlignment"
-                          SelectedServiceKey="_selectedServiceKey"
-                          SelectedServiceKeyChanged="OnServiceSelected" />
+                          SelectedServiceKey="@_selectedServiceKey"
+                          SelectedServiceKeyChanged="@OnServiceSelected" />
     }
 </div>
 
