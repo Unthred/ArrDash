@@ -1,0 +1,60 @@
+@implements IDisposable
+@inject IJSRuntime Js
+
+<span class="vpn-status-badge @StatusClass" title="@Tooltip">
+    <MudIcon Icon="@Icons.Material.Filled.VpnLock" Size="Size.Small" />
+    @StatusLabel
+</span>
+
+@code {
+    [Parameter] public string StatusUrl { get; set; } = "https://vpn.yeradonkey.com/api/status";
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(20);
+
+    private bool? _connected;
+    private System.Threading.Timer? _timer;
+
+    private string StatusClass => _connected switch
+    {
+        true => "vpn-status-on",
+        false => "vpn-status-off",
+        _ => "vpn-status-unknown"
+    };
+
+    private string StatusLabel => _connected switch
+    {
+        true => "VPN",
+        false => "No VPN",
+        _ => "VPN ?"
+    };
+
+    private string Tooltip => _connected switch
+    {
+        true => "This connection is routed through the VPN allowlist",
+        false => "This connection is not in the VPN allowlist",
+        _ => "Could not reach VPN status service"
+    };
+
+    protected override void OnInitialized()
+    {
+        _timer = new System.Threading.Timer(async _ => await PollAsync(), null, TimeSpan.Zero, PollInterval);
+    }
+
+    private async Task PollAsync()
+    {
+        bool? connected;
+        try
+        {
+            connected = await Js.InvokeAsync<bool?>("arrdashVpn.checkStatus", StatusUrl, 4000);
+        }
+        catch
+        {
+            connected = null;
+        }
+
+        _connected = connected;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}
