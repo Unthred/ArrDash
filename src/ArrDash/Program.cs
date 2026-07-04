@@ -3,6 +3,8 @@ using ArrDash.Configuration;
 using ArrDash.Hubs;
 using ArrDash.Services;
 using ArrDash.Services.Clients;
+using Microsoft.AspNetCore.Components.Server.Circuits;
+using Microsoft.AspNetCore.Components.Server;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +14,11 @@ BindEnvironmentOverrides(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.Configure<CircuitOptions>(options =>
+{
+    options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(5);
+});
 
 builder.Services.AddMudServices();
 builder.Services.AddSignalR();
@@ -31,8 +38,15 @@ builder.Services.AddSingleton<ServiceSecretsStore>();
 builder.Services.AddSingleton<MediaServiceOptionsAccessor>();
 builder.Services.AddSingleton<PosterProxyService>();
 builder.Services.AddSingleton<HostSystemMetricsService>();
+builder.Services.AddSingleton<CpuHistoryService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<CpuHistoryService>());
+builder.Services.AddSingleton<UnraidActivityService>();
+builder.Services.AddSingleton<AudiobookShelfActivityTracker>();
+builder.Services.AddHostedService<AudiobookShelfActivityHostedService>();
 builder.Services.AddSingleton<LibraryStatsService>();
 builder.Services.AddSingleton<DashboardState>();
+builder.Services.AddSingleton<DashboardCircuitNotifier>();
+builder.Services.AddScoped<CircuitHandler, DashboardCircuitHandler>();
 builder.Services.AddSingleton<DashboardCollector>();
 builder.Services.AddSingleton<DashboardRefreshService>();
 builder.Services.AddSingleton<IDashboardRefresher>(sp => sp.GetRequiredService<DashboardRefreshService>());

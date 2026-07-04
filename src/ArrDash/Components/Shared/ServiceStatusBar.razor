@@ -1,15 +1,23 @@
 @using ArrDash.Models
+@using ArrDash.Services
+@using MudBlazor
 
 @if (FilteredServices.Count > 0)
 {
-    <MudPaper Class="status-bar" Elevation="0">
+    <MudPaper Class="@BarClass" Elevation="0">
         @foreach (var service in FilteredServices)
         {
-            var tooltip = GetTooltip(service);
+            var tooltip = GetTooltip(service, SampledAt);
             <MudTooltip Text="@tooltip" Disabled="@string.IsNullOrWhiteSpace(tooltip)" Placement="Placement.Top">
                 <div class="status-chip @GetChipClass(service)">
                     <span class="status-dot"></span>
                     <span class="status-name">@service.Name</span>
+                    @if (service.Workload is { Kind: not ServiceWorkloadKind.None } workload)
+                    {
+                        <MudIcon Icon="@GetWorkloadIcon(workload.Kind)"
+                                 Size="Size.Small"
+                                 Class="@GetWorkloadIconClass(workload.Kind)" />
+                    }
                 </div>
             </MudTooltip>
         }
@@ -25,7 +33,16 @@
     };
 
     [Parameter] public IReadOnlyList<ServiceHealth> Services { get; set; } = [];
+    [Parameter] public DateTimeOffset? SampledAt { get; set; }
     [Parameter] public StatusBarMode Mode { get; set; } = StatusBarMode.All;
+    [Parameter] public StatusBarAlignment Alignment { get; set; } = StatusBarAlignment.Left;
+
+    private string BarClass => Alignment switch
+    {
+        StatusBarAlignment.Right => "status-bar status-bar-align-right",
+        StatusBarAlignment.SpacedEvenly => "status-bar status-bar-align-spaced",
+        _ => "status-bar status-bar-align-left"
+    };
 
     private IReadOnlyList<ServiceHealth> FilteredServices => Mode switch
     {
@@ -42,17 +59,47 @@
         return service.Online ? "online" : "offline";
     }
 
-    private static string? GetTooltip(ServiceHealth service)
+    private static string? GetTooltip(ServiceHealth service, DateTimeOffset? sampledAt)
     {
+        var parts = new List<string>();
+
+        if (service.Workload is { Kind: not ServiceWorkloadKind.None } workload)
+        {
+            parts.Add(workload.Label);
+            if (sampledAt is { } at)
+                parts.Add($"Checked {TimeDisplayHelper.FormatRefreshRelative(at)}");
+        }
+
         if (!service.Configured)
-            return "Not configured";
+            return parts.Count > 0 ? string.Join("\n", parts) : "Not configured";
 
         if (!service.Online && !string.IsNullOrWhiteSpace(service.Error))
-            return service.Error;
+            parts.Add(service.Error);
 
         if (!HideVersionKeys.Contains(service.Key) && !string.IsNullOrWhiteSpace(service.Version))
-            return $"v{service.Version}";
+            parts.Add($"v{service.Version}");
 
-        return null;
+        return parts.Count > 0 ? string.Join("\n", parts) : null;
+    }
+
+    private static string GetWorkloadIcon(ServiceWorkloadKind kind) => kind switch
+    {
+        ServiceWorkloadKind.Searching => Icons.Material.Filled.ManageSearch,
+        ServiceWorkloadKind.Importing => Icons.Material.Filled.Publish,
+        ServiceWorkloadKind.Downloading => Icons.Material.Filled.CloudDownload,
+        ServiceWorkloadKind.Scanning => Icons.Material.Filled.FolderOpen,
+        ServiceWorkloadKind.Matching => Icons.Material.Filled.AutoFixHigh,
+        ServiceWorkloadKind.Syncing => Icons.Material.Filled.Sync,
+        ServiceWorkloadKind.Transcoding => Icons.Material.Filled.Memory,
+        _ => Icons.Material.Filled.MoreHoriz
+    };
+
+    private static string GetWorkloadIconClass(ServiceWorkloadKind kind)
+    {
+        var classes = "status-activity-icon is-active";
+        if (kind is ServiceWorkloadKind.Syncing or ServiceWorkloadKind.Searching)
+            classes += " is-sync";
+
+        return classes;
     }
 }

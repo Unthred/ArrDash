@@ -5,7 +5,10 @@ using ArrDash.Services;
 
 namespace ArrDash.Services.Clients;
 
-public sealed class AudiobookShelfClient(HttpClient http, MediaServiceOptionsAccessor options)
+public sealed class AudiobookShelfClient(
+    HttpClient http,
+    MediaServiceOptionsAccessor options,
+    AudiobookShelfActivityTracker activityTracker)
 {
     private ServiceEndpoint Abs => options.Options.AudiobookShelf;
 
@@ -35,7 +38,8 @@ public sealed class AudiobookShelfClient(HttpClient http, MediaServiceOptionsAcc
                 .ToList();
 
             var version = await GetVersionAsync(ct);
-            return (items, new ServiceHealth("audiobookshelf", "AudioBookShelf", true, true, null, version));
+            var workload = activityTracker.GetCurrentWorkload();
+            return (items, new ServiceHealth("audiobookshelf", "AudioBookShelf", true, true, null, version, workload));
         }
         catch (Exception ex)
         {

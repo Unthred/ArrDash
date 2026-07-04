@@ -69,8 +69,9 @@ public abstract class ArrClientBase
                 }
             }
 
-            var version = await GetVersionAsync(ct);
-            return (items.Take(limit).ToList(), new ServiceHealth(Source.ToString().ToLowerInvariant(), Source.ToString(), true, true, null, version));
+            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
+            return (items.Take(limit).ToList(),
+                WithWorkload(new ServiceHealth(Source.ToString().ToLowerInvariant(), Source.ToString(), true, true, null, version), workload));
         }
         catch (Exception ex)
         {
@@ -148,6 +149,76 @@ public abstract class ArrClientBase
         return doc.RootElement.Clone();
     }
 
+    protected async Task<ServiceWorkload?> FetchArrWorkloadAsync(CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return null;
+
+        try
+        {
+            var commandsTask = GetJsonAsync($"/api/{ApiVersion}/command", ct);
+            var queueStatusTask = GetJsonAsync($"/api/{ApiVersion}/queue/status", ct);
+            await Task.WhenAll(commandsTask, queueStatusTask);
+
+            var commands = await commandsTask;
+            var queueStatus = await queueStatusTask;
+
+            JsonElement? queue = null;
+            if (ReadQueueTotalCount(queueStatus) > 0)
+                queue = await GetJsonAsync($"/api/{ApiVersion}/queue?pageSize=50", ct);
+
+            return ArrActivityDetector.Detect(commands, queueStatus, queue);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int ReadQueueTotalCount(JsonElement? queueStatus)
+    {
+        if (queueStatus is not { } status)
+            return 0;
+
+        if (status.TryGetProperty("totalCount", out var totalEl) && totalEl.TryGetInt32(out var total))
+            return total;
+
+        if (status.TryGetProperty("count", out var countEl) && countEl.TryGetInt32(out var count))
+            return count;
+
+        return 0;
+    }
+
+    protected static ServiceHealth WithWorkload(ServiceHealth health, ServiceWorkload? workload) =>
+        health with { Workload = workload };
+
+    protected async Task<(string? Version, ServiceWorkload? Workload)> FetchVersionAndWorkloadAsync(CancellationToken ct)
+    {
+        var versionTask = GetVersionAsync(ct);
+        var workloadTask = FetchArrWorkloadAsync(ct);
+        await Task.WhenAll(versionTask, workloadTask);
+        return (await versionTask, await workloadTask);
+    }
+
+    protected async Task<string?> GetVersionAsync(CancellationToken ct)
+    {
+        try
+        {
+            var url = $"{Options.Url.TrimEnd('/')}/api/{ApiVersion}/system/status";
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("X-Api-Key", Options.ApiKey);
+            using var response = await Http.SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return null;
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     protected static bool IsRelevantEvent(string eventType) =>
         IsImportEvent(eventType) || eventType is "downloadFailed";
 
@@ -169,25 +240,6 @@ public abstract class ArrClientBase
         DownloadEvent.Failed => 1,
         _ => 0
     };
-
-    private async Task<string?> GetVersionAsync(CancellationToken ct)
-    {
-        try
-        {
-            var url = $"{Options.Url.TrimEnd('/')}/api/{ApiVersion}/system/status";
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("X-Api-Key", Options.ApiKey);
-            using var response = await Http.SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) return null;
-            await using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
 }
 
 public interface ISonarrEpisodeSearchMonitor
@@ -332,9 +384,9 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
             foreach (var entry in deduped.Where(e => !consumed.Contains(e.EpisodeId)))
                 items.Add(BuildDownloadItem([entry], seriesLookup, episodeLookup, seriesEpisodes, null));
 
-            var version = await GetVersionAsync(ct);
+            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
             return (items.OrderByDescending(i => i.Timestamp).Take(limit).ToList(),
-                new ServiceHealth("sonarr", "Sonarr", true, true, null, version));
+                WithWorkload(new ServiceHealth("sonarr", "Sonarr", true, true, null, version), workload));
         }
         catch (Exception ex)
         {
@@ -852,8 +904,8 @@ public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor op
                 .Take(limit)
                 .ToList();
 
-            var version = await GetVersionAsync(ct);
-            return (items, new ServiceHealth("radarr", "Radarr", true, true, null, version));
+            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
+            return (items, WithWorkload(new ServiceHealth("radarr", "Radarr", true, true, null, version), workload));
         }
         catch (Exception ex)
         {
@@ -1040,8 +1092,8 @@ public sealed class LidarrClient(HttpClient http, MediaServiceOptionsAccessor op
                 .Take(limit)
                 .ToList();
 
-            var version = await GetVersionAsync(ct);
-            return (items, new ServiceHealth("lidarr", "Lidarr", true, true, null, version));
+            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
+            return (items, WithWorkload(new ServiceHealth("lidarr", "Lidarr", true, true, null, version), workload));
         }
         catch (Exception ex)
         {
@@ -1209,8 +1261,8 @@ public sealed class ChaptarrClient(HttpClient http, MediaServiceOptionsAccessor 
                 .Take(limit)
                 .ToList();
 
-            var version = await GetVersionAsync(ct);
-            return (items, new ServiceHealth("chaptarr", "Chaptarr", true, true, null, version));
+            var (version, workload) = await FetchVersionAndWorkloadAsync(ct);
+            return (items, WithWorkload(new ServiceHealth("chaptarr", "Chaptarr", true, true, null, version), workload));
         }
         catch (Exception ex)
         {
