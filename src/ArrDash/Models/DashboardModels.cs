@@ -356,3 +356,29 @@ public sealed class UserLayoutPreferences
     public int KioskRotateSeconds { get; set; } = 30;
     public bool ShowSettingsHelp { get; set; }
 }
+
+public enum NetworkBandwidthDirection
+{
+    Download,
+    Upload
+}
+
+public sealed record NetworkBandwidthDetailItem(string Label, string? Subtitle);
+
+public sealed record NetworkBandwidthRow(
+    string Key,
+    string Label,
+    long BytesPerSecond,
+    double PercentOfAttributed,
+    IReadOnlyList<NetworkBandwidthDetailItem> DetailItems,
+    string? ServiceUrl = null,
+    string Source = "container");
+
+public sealed record NetworkBandwidthDetail(
+    NetworkBandwidthDirection Direction,
+    long TotalBytesPerSecond,
+    long AttributedBytesPerSecond,
+    long UnattributedBytesPerSecond,
+    DateTimeOffset SampledAt,
+    IReadOnlyList<NetworkBandwidthRow> Rows,
+    string? Note);

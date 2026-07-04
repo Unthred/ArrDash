@@ -3,20 +3,42 @@
 @implements IDisposable
 @inject UnraidActivityService UnraidActivityService
 
-<div class="network-speed-graph" title="Network throughput">
-    <MiniUsageRing Class="mini-usage-ring-lg"
-                   Label="↓"
-                   Detail="@FormatThroughput(_latest?.RxBytesPerSecond ?? 0)"
-                   Percent="@RxPercent"
-                   Color="#35c5f4" />
-    <MiniUsageRing Class="mini-usage-ring-lg"
-                   Label="↑"
-                   Detail="@FormatThroughput(_latest?.TxBytesPerSecond ?? 0)"
-                   Percent="@TxPercent"
-                   Color="#f5c518" />
+<div class="network-speed-wrap">
+    <div class="network-speed-graph" title="Network throughput — click a ring for breakdown">
+        <button type="button"
+                class="network-ring-button @(_selectedDirection == NetworkBandwidthDirection.Download ? "is-selected" : "")"
+                @onclick="@(() => ToggleDirection(NetworkBandwidthDirection.Download))"
+                aria-label="Download throughput breakdown">
+            <MiniUsageRing Class="mini-usage-ring-lg"
+                           Label="↓"
+                           Detail="@FormatThroughput(_latest?.RxBytesPerSecond ?? 0)"
+                           Percent="@RxPercent"
+                           Color="#35c5f4" />
+        </button>
+        <button type="button"
+                class="network-ring-button @(_selectedDirection == NetworkBandwidthDirection.Upload ? "is-selected" : "")"
+                @onclick="@(() => ToggleDirection(NetworkBandwidthDirection.Upload))"
+                aria-label="Upload throughput breakdown">
+            <MiniUsageRing Class="mini-usage-ring-lg"
+                           Label="↑"
+                           Detail="@FormatThroughput(_latest?.TxBytesPerSecond ?? 0)"
+                           Percent="@TxPercent"
+                           Color="#f5c518" />
+        </button>
+    </div>
+
+    @if (_selectedDirection is NetworkBandwidthDirection direction)
+    {
+        <NetworkBandwidthDetailPanel @key="direction"
+                                     Direction="direction"
+                                     Sessions="Sessions"
+                                     SparklineSamples="@SparklineFor(direction)"
+                                     OnClose="ClearSelection" />
+    }
 </div>
 
 @code {
+    [Parameter] public IReadOnlyList<ActiveSession> Sessions { get; set; } = [];
     [Parameter] public int MaxSamples { get; set; } = 24;
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
@@ -24,6 +46,7 @@
     private readonly List<long> _rxSamples = [];
     private readonly List<long> _txSamples = [];
     private NetworkThroughput? _latest;
+    private NetworkBandwidthDirection? _selectedDirection;
     private System.Threading.Timer? _timer;
 
     private double RxPercent => Percent(_latest?.RxBytesPerSecond ?? 0);
@@ -46,6 +69,16 @@
 
         await InvokeAsync(StateHasChanged);
     }
+
+    private void ToggleDirection(NetworkBandwidthDirection direction)
+    {
+        _selectedDirection = _selectedDirection == direction ? null : direction;
+    }
+
+    private void ClearSelection() => _selectedDirection = null;
+
+    private IReadOnlyList<long> SparklineFor(NetworkBandwidthDirection direction) =>
+        direction == NetworkBandwidthDirection.Download ? _rxSamples : _txSamples;
 
     private void AddSample(List<long> samples, long value)
     {

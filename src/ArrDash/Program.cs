@@ -1,6 +1,7 @@
 using ArrDash.Components;
 using ArrDash.Configuration;
 using ArrDash.Hubs;
+using ArrDash.Models;
 using ArrDash.Services;
 using ArrDash.Services.Clients;
 using Microsoft.AspNetCore.Components.Server.Circuits;
@@ -41,6 +42,7 @@ builder.Services.AddSingleton<HostSystemMetricsService>();
 builder.Services.AddSingleton<CpuHistoryService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<CpuHistoryService>());
 builder.Services.AddSingleton<UnraidActivityService>();
+builder.Services.AddSingleton<NetworkBandwidthService>();
 builder.Services.AddSingleton<AudiobookShelfActivityTracker>();
 builder.Services.AddHostedService<AudiobookShelfActivityHostedService>();
 builder.Services.AddSingleton<LibraryStatsService>();
@@ -88,6 +90,18 @@ app.MapGet("/api/dashboard", (DashboardState state) => Results.Json(state.Curren
 app.MapGet("/api/services/{serviceKey}/detail", async (string serviceKey, ServiceDetailService details, CancellationToken ct) =>
 {
     var detail = await details.FetchAsync(serviceKey, ct);
+    return Results.Json(detail);
+});
+app.MapGet("/api/network/detail", async (
+    string direction,
+    NetworkBandwidthService bandwidth,
+    DashboardState state,
+    CancellationToken ct) =>
+{
+    if (!Enum.TryParse<NetworkBandwidthDirection>(direction, ignoreCase: true, out var parsed))
+        return Results.BadRequest(new { error = "direction must be upload or download" });
+
+    var detail = await bandwidth.FetchDetailAsync(parsed, state.Current.ActiveSessions, ct);
     return Results.Json(detail);
 });
 app.MapGet("/api/poster/sonarr/{seriesId:int}", (int seriesId, PosterProxyService proxy, CancellationToken ct) =>

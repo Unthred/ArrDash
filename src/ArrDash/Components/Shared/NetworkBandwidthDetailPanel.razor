@@ -1,0 +1,190 @@
+@using ArrDash.Models
+@using ArrDash.Services
+@using MudBlazor
+@inject NetworkBandwidthService BandwidthService
+@inject ExternalLinkService ExternalLink
+@inject LayoutPreferencesService Prefs
+@implements IDisposable
+
+@if (_detail is not null || _loading)
+{
+    <MudPaper Class="network-bandwidth-panel" Elevation="0">
+        <div class="network-bandwidth-head">
+            <div class="network-bandwidth-title-wrap">
+                <MudText Typo="Typo.subtitle1" Class="network-bandwidth-title">
+                    @(Direction == NetworkBandwidthDirection.Download ? "Download" : "Upload") breakdown
+                </MudText>
+                @if (_detail is not null)
+                {
+                    <MudText Typo="Typo.body2">@FormatRate(_detail.TotalBytesPerSecond)</MudText>
+                    <MudText Typo="Typo.caption" Class="muted">
+                        Checked @TimeDisplayHelper.FormatRefreshRelative(_detail.SampledAt)
+                    </MudText>
+                }
+                else if (_loading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.body2" Class="muted">Sampling containers…</MudText>
+                }
+            </div>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="Close" aria-label="Close" />
+        </div>
+
+        @if (SparklineSamples.Count > 1)
+        {
+            <div class="network-bandwidth-sparkline" aria-hidden="true">
+                @foreach (var sample in SparklineSamples)
+                {
+                    var height = SparklineHeight(sample);
+                    <span class="network-bandwidth-spark-bar" style="@($"height:{height:0.#}%")"></span>
+                }
+            </div>
+        }
+
+        @if (_detail is not null)
+        {
+            @if (!string.IsNullOrWhiteSpace(_detail.Note))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="network-bandwidth-alert">@_detail.Note</MudAlert>
+            }
+
+            @if (_detail.Rows.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="muted network-bandwidth-empty">No attributed traffic detected for this direction.</MudText>
+            }
+            else
+            {
+                <div class="network-bandwidth-rows">
+                    @foreach (var row in _detail.Rows)
+                    {
+                        <div class="network-bandwidth-row @RowClass(row)">
+                            <div class="network-bandwidth-row-main">
+                                <div class="network-bandwidth-row-label">@row.Label</div>
+                                <div class="network-bandwidth-row-meta muted">
+                                    @($"{row.PercentOfAttributed:0.#}%") · @FormatRate(row.BytesPerSecond)
+                                </div>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(row.ServiceUrl))
+                            {
+                                <MudButton Variant="Variant.Text"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.OpenInNew"
+                                           OnClick="@(() => OpenService(row.ServiceUrl!))">
+                                    Open
+                                </MudButton>
+                            }
+                        </div>
+                        @if (row.DetailItems.Count > 0)
+                        {
+                            <div class="network-bandwidth-row-details">
+                                @foreach (var item in row.DetailItems.Take(6))
+                                {
+                                    <div class="network-bandwidth-detail-item">
+                                        <span>@item.Label</span>
+                                        @if (!string.IsNullOrWhiteSpace(item.Subtitle))
+                                        {
+                                            <span class="muted">@item.Subtitle</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        }
+        else if (!_loading && _error is not null)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="network-bandwidth-alert">@_error</MudAlert>
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public NetworkBandwidthDirection Direction { get; set; }
+    [Parameter] public IReadOnlyList<ActiveSession> Sessions { get; set; } = [];
+    [Parameter] public IReadOnlyList<long> SparklineSamples { get; set; } = [];
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private NetworkBandwidthDetail? _detail;
+    private bool _loading;
+    private string? _error;
+    private int _loadGeneration;
+    private CancellationTokenSource? _loadCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var generation = ++_loadGeneration;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+        var ct = _loadCts.Token;
+
+        _loading = true;
+        _error = null;
+        _detail = null;
+
+        try
+        {
+            var detail = await BandwidthService.FetchDetailAsync(Direction, Sessions, ct);
+            if (generation != _loadGeneration || ct.IsCancellationRequested)
+                return;
+
+            _detail = detail;
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (generation != _loadGeneration)
+                return;
+
+            _error = ex.Message;
+        }
+        finally
+        {
+            if (generation == _loadGeneration)
+            {
+                _loading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task Close()
+    {
+        _loadCts?.Cancel();
+        await OnClose.InvokeAsync();
+    }
+
+    private Task OpenService(string url)
+    {
+        _ = ExternalLink.OpenAsync(url, Prefs.Current.ExternalLinkTarget);
+        return Task.CompletedTask;
+    }
+
+    private static string FormatRate(long bytesPerSecond) => $"{ByteDisplayHelper.Format(bytesPerSecond)}/s";
+
+    private static string RowClass(NetworkBandwidthRow row) =>
+        string.Equals(row.Key, "unattributed", StringComparison.OrdinalIgnoreCase) ? "is-unattributed" : "";
+
+    private double SparklineHeight(long sample)
+    {
+        var max = Math.Max(1L, SparklineSamples.DefaultIfEmpty(0).Max());
+        return Math.Clamp(sample * 100.0 / max, 4, 100);
+    }
+
+    public void Dispose()
+    {
+        _loadGeneration++;
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+    }
+}

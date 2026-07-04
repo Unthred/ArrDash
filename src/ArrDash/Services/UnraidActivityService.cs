@@ -41,6 +41,9 @@ public sealed class UnraidActivityService : IDisposable
     private readonly object _networkLock = new();
     private (long Rx, long Tx, DateTimeOffset At)? _prevNetworkSample;
 
+    private readonly object _containerNetworkLock = new();
+    private Dictionary<string, (long Rx, long Tx, DateTimeOffset At)> _prevContainerNetwork = new(StringComparer.Ordinal);
+
     private readonly object _diskIoLock = new();
     private readonly Dictionary<string, (ulong TimeDoingIoMs, DateTimeOffset At)> _prevDiskIo = new(StringComparer.Ordinal);
 
@@ -528,6 +531,154 @@ public sealed class UnraidActivityService : IDisposable
     {
         lock (_topContainerLock)
             _topContainerCachedAt = DateTimeOffset.MinValue;
+    }
+
+    public void InvalidateContainerNetworkCache()
+    {
+        lock (_containerNetworkLock)
+            _prevContainerNetwork.Clear();
+    }
+
+    public Task<NetworkThroughput?> ReadInterfaceThroughputAsync(CancellationToken ct)
+    {
+        _ = ct;
+        return Task.FromResult(ReadNetworkThroughput());
+    }
+
+    public async Task<(IReadOnlyList<ContainerNetworkRate> Rates, string? Note)> ReadContainerNetworkRatesAsync(CancellationToken ct)
+    {
+        if (_dockerHttp is null)
+            return ([], "Docker socket unavailable — showing streaming sessions only.");
+
+        var needsWarmup = false;
+        lock (_containerNetworkLock)
+            needsWarmup = _prevContainerNetwork.Count == 0;
+
+        if (needsWarmup)
+        {
+            await SampleAndStoreContainerNetworkAsync(ct);
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(1500), ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return ([], null);
+            }
+        }
+
+        return await ComputeContainerNetworkRatesAsync(ct);
+    }
+
+    private async Task<(IReadOnlyList<ContainerNetworkRate> Rates, string? Note)> ComputeContainerNetworkRatesAsync(CancellationToken ct)
+    {
+        var currentSamples = await ReadAllContainerNetworkSamplesAsync(ct);
+        if (currentSamples.Count == 0)
+            return ([], null);
+
+        var now = DateTimeOffset.UtcNow;
+        Dictionary<string, (long Rx, long Tx, DateTimeOffset At)> previous;
+        lock (_containerNetworkLock)
+        {
+            previous = new Dictionary<string, (long Rx, long Tx, DateTimeOffset At)>(_prevContainerNetwork, StringComparer.Ordinal);
+            _prevContainerNetwork = currentSamples.ToDictionary(
+                kv => kv.Key,
+                kv => (kv.Value.Rx, kv.Value.Tx, now),
+                StringComparer.Ordinal);
+        }
+
+        if (previous.Count == 0)
+            return ([], "Collecting container baseline — open again in a few seconds for per-container rates.");
+
+        var rates = new List<ContainerNetworkRate>();
+        foreach (var (name, current) in currentSamples)
+        {
+            if (!previous.TryGetValue(name, out var prev))
+                continue;
+
+            var elapsed = (now - prev.At).TotalSeconds;
+            rates.Add(new ContainerNetworkRate(
+                name,
+                NetworkBandwidthBuilder.ComputeRate(current.Rx, prev.Rx, elapsed),
+                NetworkBandwidthBuilder.ComputeRate(current.Tx, prev.Tx, elapsed)));
+        }
+
+        return (rates, null);
+    }
+
+    private async Task<Dictionary<string, (long Rx, long Tx)>> ReadAllContainerNetworkSamplesAsync(CancellationToken ct)
+    {
+        var containers = await FetchContainerIdsAndNamesAsync(ct);
+        var currentSamples = new Dictionary<string, (long Rx, long Tx)>(StringComparer.Ordinal);
+        if (containers.Count == 0)
+            return currentSamples;
+
+        using var throttle = new SemaphoreSlim(MaxConcurrentStatsCalls);
+        var tasks = containers.Select(async entry =>
+        {
+            await throttle.WaitAsync(ct);
+            try
+            {
+                return await ReadContainerNetworkBytesAsync(entry.Id, entry.Name, ct);
+            }
+            catch
+            {
+                return null;
+            }
+            finally
+            {
+                throttle.Release();
+            }
+        });
+
+        var results = await Task.WhenAll(tasks);
+        foreach (var sample in results.Where(s => s is not null))
+            currentSamples[sample!.ContainerName] = (sample.RxBytes, sample.TxBytes);
+
+        return currentSamples;
+    }
+
+    private async Task SampleAndStoreContainerNetworkAsync(CancellationToken ct)
+    {
+        var currentSamples = await ReadAllContainerNetworkSamplesAsync(ct);
+        var now = DateTimeOffset.UtcNow;
+        lock (_containerNetworkLock)
+        {
+            _prevContainerNetwork = currentSamples.ToDictionary(
+                kv => kv.Key,
+                kv => (kv.Value.Rx, kv.Value.Tx, now),
+                StringComparer.Ordinal);
+        }
+    }
+
+    private async Task<ContainerNetworkSample?> ReadContainerNetworkBytesAsync(string id, string name, CancellationToken ct)
+    {
+        using var response = await _dockerHttp!.GetAsync($"/containers/{id}/stats?stream=false", ct);
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        var (rx, tx) = ParseContainerNetworkBytes(doc.RootElement);
+        return new ContainerNetworkSample(name, rx, tx, DateTimeOffset.UtcNow);
+    }
+
+    internal static (long Rx, long Tx) ParseContainerNetworkBytes(JsonElement root)
+    {
+        if (!root.TryGetProperty("networks", out var networks) || networks.ValueKind != JsonValueKind.Object)
+            return (0, 0);
+
+        long rx = 0;
+        long tx = 0;
+        foreach (var network in networks.EnumerateObject())
+        {
+            if (network.Value.TryGetProperty("rx_bytes", out var rxEl))
+                rx += rxEl.GetInt64();
+            if (network.Value.TryGetProperty("tx_bytes", out var txEl))
+                tx += txEl.GetInt64();
+        }
+
+        return (rx, tx);
     }
 
     private async Task<IReadOnlyList<ContainerUsage>> GetTopContainersAsync(CancellationToken ct)
