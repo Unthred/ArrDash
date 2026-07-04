@@ -1,0 +1,141 @@
+using ArrDash.Models;
+using ArrDash.Services.Clients;
+
+namespace ArrDash.Services;
+
+public sealed class ServiceDetailService(
+    SonarrClient sonarr,
+    RadarrClient radarr,
+    LidarrClient lidarr,
+    ChaptarrClient chaptarr,
+    AudiobookShelfClient audiobookShelf,
+    PlexClient plex,
+    EmbyClient emby,
+    JellyfinClient jellyfin,
+    AudiobookShelfActivityTracker absActivity,
+    MediaServiceOptionsAccessor options,
+    LayoutPreferencesService prefs)
+{
+    public async Task<ServiceDetail?> FetchAsync(string serviceKey, CancellationToken ct)
+    {
+        var key = serviceKey.Trim().ToLowerInvariant();
+        if (!prefs.IsServiceEnabled(key) && key is not "slskd")
+            return DisabledDetail(key);
+
+        return key switch
+        {
+            "sonarr" => await sonarr.FetchServiceDetailAsync(ct),
+            "radarr" => await radarr.FetchServiceDetailAsync(ct),
+            "lidarr" => await lidarr.FetchServiceDetailAsync(ct),
+            "chaptarr" => await chaptarr.FetchServiceDetailAsync(ct),
+            "audiobookshelf" => await FetchAudiobookShelfDetailAsync(ct),
+            "plex" => await FetchStreamingDetailAsync("plex", plex.FetchSessionsAsync(ct), options.Options.Plex.Url),
+            "emby" => await FetchStreamingDetailAsync("emby", emby.FetchSessionsAsync(ct), options.Options.Emby.Url),
+            "jellyfin" => await FetchStreamingDetailAsync("jellyfin", jellyfin.FetchSessionsAsync(ct), options.Options.Jellyfin.Url),
+            "slskd" => FetchSlskdDetail(),
+            _ => null
+        };
+    }
+
+    private static ServiceDetail DisabledDetail(string key) =>
+        new(
+            key,
+            char.ToUpper(key[0]) + key[1..],
+            false,
+            false,
+            null,
+            null,
+            DateTimeOffset.UtcNow,
+            ServiceAttentionLevel.NotConfigured,
+            "Disabled",
+            null,
+            [new ServiceProblem("info", "Disabled in Settings")],
+            [],
+            0,
+            false,
+            false,
+            [],
+            [],
+            [],
+            null);
+
+    private async Task<ServiceDetail> FetchAudiobookShelfDetailAsync(CancellationToken ct)
+    {
+        const string key = "audiobookshelf";
+        const string name = "AudioBookShelf";
+
+        if (!audiobookShelf.IsConfigured)
+            return ArrServiceDetailParser.NotConfigured(key, name);
+
+        try
+        {
+            var (_, health) = await audiobookShelf.FetchRecentAsync(1, ct);
+            var workload = absActivity.GetCurrentWorkload();
+            var recent = await audiobookShelf.FetchRecentAsync(8, ct);
+
+            var recentActivity = recent.Items
+                .Select(i => new ServiceRecentActivity(i.Title, i.Event.ToString(), i.Timestamp))
+                .ToList();
+
+            return ArrServiceDetailParser.BuildSimpleDetail(
+                key,
+                name,
+                options.Options.AudiobookShelf.Url,
+                health.Configured,
+                health.Online,
+                health.Version,
+                health.Error,
+                workload ?? health.Workload,
+                recentActivity);
+        }
+        catch (Exception ex)
+        {
+            return ArrServiceDetailParser.BuildSimpleDetail(
+                key, name, options.Options.AudiobookShelf.Url, true, false, null, ex.Message, null);
+        }
+    }
+
+    private static async Task<ServiceDetail> FetchStreamingDetailAsync(
+        string key,
+        Task<(IReadOnlyList<ActiveSession> Sessions, ServiceHealth Health)> fetchTask,
+        string? serviceUrl)
+    {
+        var name = char.ToUpper(key[0]) + key[1..];
+        try
+        {
+            var (sessions, health) = await fetchTask;
+            return ArrServiceDetailParser.BuildStreamingDetail(
+                key,
+                name,
+                serviceUrl,
+                health.Configured,
+                health.Online,
+                health.Error,
+                sessions,
+                health.Workload);
+        }
+        catch (Exception ex)
+        {
+            return ArrServiceDetailParser.BuildStreamingDetail(
+                key, name, serviceUrl, true, false, ex.Message, [], null);
+        }
+    }
+
+    private ServiceDetail FetchSlskdDetail()
+    {
+        const string key = "slskd";
+        var endpoint = options.Options.Slskd;
+        if (!endpoint.IsConfigured)
+            return ArrServiceDetailParser.NotConfigured(key, "slskd");
+
+        return ArrServiceDetailParser.BuildSimpleDetail(
+            key,
+            "slskd",
+            endpoint.Url,
+            true,
+            false,
+            null,
+            "Connected status not yet monitored — API key is configured",
+            null);
+    }
+}

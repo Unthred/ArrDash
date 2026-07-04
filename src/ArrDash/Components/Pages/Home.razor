@@ -43,7 +43,11 @@
 
     @if (Prefs.Current.ShowServerMetrics)
     {
-        <ServerMetricsBar Metrics="_snapshot.Host" SampledAt="_snapshot.UpdatedAt" Services="_snapshot.Services" />
+        <ServerMetricsBar Metrics="_snapshot.Host"
+                          SampledAt="_snapshot.UpdatedAt"
+                          Services="_snapshot.Services"
+                          SelectedServiceKey="_selectedServiceKey"
+                          SelectedServiceKeyChanged="OnServiceSelected" />
     }
 
     @foreach (var panelId in VisiblePanels)
@@ -141,7 +145,12 @@
 
     @if (Prefs.Current.StatusBarMode != StatusBarMode.Hidden && !Prefs.Current.ShowServerMetrics)
     {
-        <ServiceStatusBar Services="_snapshot.Services" SampledAt="_snapshot.UpdatedAt" Mode="Prefs.Current.StatusBarMode" Alignment="Prefs.Current.StatusBarAlignment" />
+        <ServiceStatusBar Services="_snapshot.Services"
+                          SampledAt="_snapshot.UpdatedAt"
+                          Mode="Prefs.Current.StatusBarMode"
+                          Alignment="Prefs.Current.StatusBarAlignment"
+                          SelectedServiceKey="_selectedServiceKey"
+                          SelectedServiceKeyChanged="OnServiceSelected" />
     }
 </div>
 
@@ -158,6 +167,7 @@
     private bool _screensaverActive;
     private string? _draggingPanel;
     private string? _dragOverPanel;
+    private string? _selectedServiceKey;
     [CascadingParameter] public bool Kiosk { get; set; }
 
     private IReadOnlyList<string> VisiblePanels => Prefs.GetVisiblePanelOrder();
@@ -392,6 +402,12 @@
         if (lidarr is { Configured: false })
             return "Add Lidarr and slskd API keys in Settings to enable music downloads.";
         return null;
+    }
+
+    private Task OnServiceSelected(string? key)
+    {
+        _selectedServiceKey = key;
+        return InvokeAsync(StateHasChanged);
     }
 
     private string? AudiobookPanelMessage()

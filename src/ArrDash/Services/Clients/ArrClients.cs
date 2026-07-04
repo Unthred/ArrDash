@@ -200,6 +200,64 @@ public abstract class ArrClientBase
         return (await versionTask, await workloadTask);
     }
 
+    public virtual async Task<ServiceDetail> FetchServiceDetailAsync(CancellationToken ct)
+    {
+        var key = Source.ToString().ToLowerInvariant();
+        var name = Source.ToString();
+
+        if (!IsConfigured)
+            return ArrServiceDetailParser.NotConfigured(key, name);
+
+        try
+        {
+            var healthTask = GetJsonAsync($"/api/{ApiVersion}/health", ct);
+            var commandsTask = GetJsonAsync($"/api/{ApiVersion}/command", ct);
+            var queueStatusTask = GetJsonAsync($"/api/{ApiVersion}/queue/status", ct);
+            var historyTask = GetJsonAsync(
+                $"/api/{ApiVersion}/history?pageSize=10&sortKey=date&sortDirection=descending", ct);
+            var versionTask = GetVersionAsync(ct);
+            await Task.WhenAll(healthTask, commandsTask, queueStatusTask, historyTask, versionTask);
+
+            var queueStatus = await queueStatusTask;
+            JsonElement? queue = null;
+            if (ArrServiceDetailParser.ReadQueueTotalCount(queueStatus) > 0)
+                queue = await GetJsonAsync($"/api/{ApiVersion}/queue?pageSize=100", ct);
+
+            var commands = await commandsTask;
+            var workload = ArrActivityDetector.Detect(commands, queueStatus, queue);
+
+            return ArrServiceDetailParser.BuildArrDetail(
+                key,
+                name,
+                ServiceBaseUrl,
+                await versionTask,
+                online: true,
+                connectionError: null,
+                await healthTask,
+                commands,
+                queueStatus,
+                queue,
+                await historyTask,
+                workload);
+        }
+        catch (Exception ex)
+        {
+            return ArrServiceDetailParser.BuildArrDetail(
+                key,
+                name,
+                ServiceBaseUrl,
+                null,
+                online: false,
+                connectionError: ex.Message,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        }
+    }
+
     protected async Task<string?> GetVersionAsync(CancellationToken ct)
     {
         try

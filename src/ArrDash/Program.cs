@@ -57,6 +57,7 @@ builder.Services.AddSingleton<ServiceCredentialsPreviewService>();
 builder.Services.AddSingleton<ServiceConnectionTester>();
 builder.Services.AddSingleton<LayoutPreferencesService>();
 builder.Services.AddSingleton<ThemeService>();
+builder.Services.AddSingleton<ServiceDetailService>();
 builder.Services.AddScoped<ExternalLinkService>();
 builder.Services.AddHostedService<MediaAggregatorService>();
 
@@ -84,6 +85,11 @@ app.MapRazorComponents<App>()
 app.MapHub<DashboardHub>("/hubs/dashboard");
 app.MapGet("/health", () => Results.Ok(new { status = "ok", app = "arrdash" }));
 app.MapGet("/api/dashboard", (DashboardState state) => Results.Json(state.Current));
+app.MapGet("/api/services/{serviceKey}/detail", async (string serviceKey, ServiceDetailService details, CancellationToken ct) =>
+{
+    var detail = await details.FetchAsync(serviceKey, ct);
+    return detail is null ? Results.NotFound() : Results.Json(detail);
+});
 app.MapGet("/api/poster/sonarr/{seriesId:int}", (int seriesId, PosterProxyService proxy, CancellationToken ct) =>
     proxy.FetchAsync("sonarr", seriesId, null, ct));
 app.MapGet("/api/poster/radarr/{movieId:int}", (int movieId, PosterProxyService proxy, CancellationToken ct) =>

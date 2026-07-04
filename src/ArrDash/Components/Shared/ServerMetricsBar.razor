@@ -13,7 +13,12 @@
 <MudPaper Class="@ShellClass" Elevation="0">
         @if (Prefs.Current.StatusBarMode != StatusBarMode.Hidden && Services.Count > 0)
         {
-            <ServiceStatusBar Services="Services" SampledAt="SampledAt" Mode="Prefs.Current.StatusBarMode" Alignment="Prefs.Current.StatusBarAlignment" />
+            <ServiceStatusBar Services="Services"
+                              SampledAt="SampledAt"
+                              Mode="Prefs.Current.StatusBarMode"
+                              Alignment="Prefs.Current.StatusBarAlignment"
+                              SelectedServiceKey="@SelectedServiceKey"
+                              SelectedServiceKeyChanged="SelectedServiceKeyChanged" />
         }
 
         <div class="server-metrics-head panel-header-rollup" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
@@ -461,6 +466,8 @@
             : 15;
     [Parameter] public ServerMetrics? Metrics { get; set; }
     [Parameter] public DateTimeOffset SampledAt { get; set; }
+    [Parameter] public string? SelectedServiceKey { get; set; }
+    [Parameter] public EventCallback<string?> SelectedServiceKeyChanged { get; set; }
 
     private ServerMetrics? _liveMetrics;
     private ServerMetrics EffectiveMetrics => DisplayMetrics ?? PlaceholderMetrics;

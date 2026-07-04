@@ -18,6 +18,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Libraries panel — library rollups as their own reorderable/hideable/accent-colourable panel ([#9](https://github.com/Unthred/ArrDash/issues/9))
 - Now Playing: per-session LAN/WAN indicator and bandwidth badge on poster; total bandwidth in rolled-up header ([#10](https://github.com/Unthred/ArrDash/issues/10))
 - Dashboard client polling (`/api/dashboard`), Blazor circuit reconnect, drag-to-reorder panels ([#13](https://github.com/Unthred/ArrDash/issues/13))
+- Service detail panel on status pill click — health, queue breakdown, commands, recent activity ([#21](https://github.com/Unthred/ArrDash/issues/21))
 - Jellyfin Now Playing support (sessions API, poster proxy, Settings toggle, API keys tab)
 - GitHub workflow: issue template, project board setup, `arrdash-issue-create.sh`, Cursor rules for issue-first development
 - Full documentation set under `docs/`

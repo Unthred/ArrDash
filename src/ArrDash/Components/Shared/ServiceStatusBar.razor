@@ -2,27 +2,45 @@
 @using ArrDash.Services
 @using MudBlazor
 
-@if (FilteredServices.Count > 0)
-{
-    <MudPaper Class="@BarClass" Elevation="0">
-        @foreach (var service in FilteredServices)
-        {
-            var tooltip = GetTooltip(service, SampledAt);
-            <MudTooltip Text="@tooltip" Disabled="@string.IsNullOrWhiteSpace(tooltip)" Placement="Placement.Top">
-                <div class="status-chip @GetChipClass(service)">
-                    <span class="status-dot"></span>
-                    <span class="status-name">@service.Name</span>
-                    @if (service.Workload is { Kind: not ServiceWorkloadKind.None } workload)
-                    {
-                        <MudIcon Icon="@GetWorkloadIcon(workload.Kind)"
-                                 Size="Size.Small"
-                                 Class="@GetWorkloadIconClass(workload.Kind)" />
-                    }
-                </div>
-            </MudTooltip>
-        }
-    </MudPaper>
-}
+<div class="service-status-wrap">
+    @if (FilteredServices.Count > 0)
+    {
+        <MudPaper Class="@BarClass" Elevation="0">
+            @foreach (var service in FilteredServices)
+            {
+                var tooltip = GetTooltip(service, SampledAt);
+                var isSelected = string.Equals(SelectedServiceKey, service.Key, StringComparison.OrdinalIgnoreCase);
+                <MudTooltip Text="@tooltip" Disabled="@string.IsNullOrWhiteSpace(tooltip)" Placement="Placement.Top">
+                    <div class="status-chip @GetChipClass(service) @(isSelected ? "is-selected" : "")"
+                         role="button"
+                         tabindex="0"
+                         @onclick="@(() => ToggleService(service.Key))"
+                         @onkeydown="@(e => OnChipKeyDown(e, service.Key))">
+                        <span class="status-dot"></span>
+                        <span class="status-name">@service.Name</span>
+                        @if (service.Workload is { Kind: not ServiceWorkloadKind.None } workload)
+                        {
+                            <MudIcon Icon="@GetWorkloadIcon(workload.Kind)"
+                                     Size="Size.Small"
+                                     Class="@GetWorkloadIconClass(workload.Kind)" />
+                        }
+                        @if (NeedsAttentionBadge(service))
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.WarningAmber"
+                                     Size="Size.Small"
+                                     Class="status-attention-icon" />
+                        }
+                    </div>
+                </MudTooltip>
+            }
+        </MudPaper>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(SelectedServiceKey))
+    {
+        <ServiceDetailPanel ServiceKey="@SelectedServiceKey" OnClose="ClearSelection" />
+    }
+</div>
 
 @code {
     private static readonly HashSet<string> HideVersionKeys = new(StringComparer.OrdinalIgnoreCase)
@@ -36,6 +54,8 @@
     [Parameter] public DateTimeOffset? SampledAt { get; set; }
     [Parameter] public StatusBarMode Mode { get; set; } = StatusBarMode.All;
     [Parameter] public StatusBarAlignment Alignment { get; set; } = StatusBarAlignment.Left;
+    [Parameter] public string? SelectedServiceKey { get; set; }
+    [Parameter] public EventCallback<string?> SelectedServiceKeyChanged { get; set; }
 
     private string BarClass => Alignment switch
     {
@@ -51,6 +71,28 @@
         _ => Services
     };
 
+    private async Task ToggleService(string key)
+    {
+        var next = string.Equals(SelectedServiceKey, key, StringComparison.OrdinalIgnoreCase) ? null : key;
+        SelectedServiceKey = next;
+        await SelectedServiceKeyChanged.InvokeAsync(next);
+    }
+
+    private async Task ClearSelection()
+    {
+        SelectedServiceKey = null;
+        await SelectedServiceKeyChanged.InvokeAsync(null);
+    }
+
+    private async Task OnChipKeyDown(KeyboardEventArgs e, string key)
+    {
+        if (e.Key is "Enter" or " ")
+            await ToggleService(key);
+    }
+
+    private static bool NeedsAttentionBadge(ServiceHealth service) =>
+        !service.Online && service.Configured;
+
     private static string GetChipClass(ServiceHealth service)
     {
         if (!service.Configured)
@@ -61,7 +103,7 @@
 
     private static string? GetTooltip(ServiceHealth service, DateTimeOffset? sampledAt)
     {
-        var parts = new List<string>();
+        var parts = new List<string> { "Click for details" };
 
         if (service.Workload is { Kind: not ServiceWorkloadKind.None } workload)
         {
@@ -71,7 +113,10 @@
         }
 
         if (!service.Configured)
-            return parts.Count > 0 ? string.Join("\n", parts) : "Not configured";
+        {
+            parts.Add("Not configured");
+            return string.Join("\n", parts);
+        }
 
         if (!service.Online && !string.IsNullOrWhiteSpace(service.Error))
             parts.Add(service.Error);
@@ -79,7 +124,7 @@
         if (!HideVersionKeys.Contains(service.Key) && !string.IsNullOrWhiteSpace(service.Version))
             parts.Add($"v{service.Version}");
 
-        return parts.Count > 0 ? string.Join("\n", parts) : null;
+        return string.Join("\n", parts);
     }
 
     private static string GetWorkloadIcon(ServiceWorkloadKind kind) => kind switch

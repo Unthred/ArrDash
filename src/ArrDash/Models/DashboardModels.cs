@@ -124,6 +124,46 @@ public sealed record ServiceHealth(
     string? Version,
     ServiceWorkload? Workload = null);
 
+public enum ServiceAttentionLevel
+{
+    NotConfigured,
+    Offline,
+    Healthy,
+    Busy,
+    NeedsAttention
+}
+
+public sealed record ServiceProblem(string Severity, string Message, string? Url = null);
+
+public sealed record ServiceQueueStateCount(string State, int Count);
+
+public sealed record ServiceCommandInfo(string Name, string Status, DateTimeOffset? StartedAt);
+
+public sealed record ServiceRecentActivity(string Title, string EventLabel, DateTimeOffset At);
+
+public sealed record ServiceSessionSummary(string Title, string? Detail, int? BandwidthKbps, bool? IsLocal);
+
+public sealed record ServiceDetail(
+    string Key,
+    string Name,
+    bool Configured,
+    bool Online,
+    string? Version,
+    string? ServiceUrl,
+    DateTimeOffset SampledAt,
+    ServiceAttentionLevel Attention,
+    string AttentionLabel,
+    ServiceWorkload? Workload,
+    IReadOnlyList<ServiceProblem> Problems,
+    IReadOnlyList<ServiceQueueStateCount> QueueStates,
+    int QueueTotal,
+    bool QueueHasErrors,
+    bool QueueHasWarnings,
+    IReadOnlyList<ServiceCommandInfo> Commands,
+    IReadOnlyList<ServiceRecentActivity> RecentActivity,
+    IReadOnlyList<ServiceSessionSummary> Sessions,
+    string? ConnectionError = null);
+
 public sealed record ServerMetrics(
     string Label,
     double? CpuPercent,
