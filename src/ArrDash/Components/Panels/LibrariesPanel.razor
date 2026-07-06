@@ -86,12 +86,14 @@
 
     [Inject] private LayoutPreferencesService Prefs { get; set; } = default!;
     [Inject] private LibraryStatsService LibraryStats { get; set; } = default!;
+    [Inject] private DashboardState DashState { get; set; } = default!;
 
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(10);
 
     private IReadOnlyList<LibraryStatItem> _stats = [];
     private DateTimeOffset _statsLoadedAt;
     private bool _loading;
+    private PanelRefreshSubscription? _refreshSubscription;
 
     private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
     private string ShellClass => RolledUp ? "panel-shell is-rolled-up" : "panel-shell";
@@ -100,11 +102,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        Prefs.Changed += OnPrefsChanged;
+        _refreshSubscription = new PanelRefreshSubscription(Prefs, DashState, force => _ = RefreshAsync(force));
         await RefreshAsync(force: true);
     }
-
-    private void OnPrefsChanged() => _ = RefreshAsync(force: false);
 
     private async Task RefreshAsync(bool force)
     {
@@ -117,7 +117,7 @@
         _loading = true;
         try
         {
-            _stats = await LibraryStats.GetAsync(CancellationToken.None);
+            _stats = await LibraryStats.GetAsync(CancellationToken.None, force: force);
             _statsLoadedAt = DateTimeOffset.UtcNow;
             await InvokeAsync(StateHasChanged);
         }
@@ -129,5 +129,5 @@
 
     private static string LibraryAccentStyle(string accentColor) => $"--library-accent:{accentColor}";
 
-    public void Dispose() => Prefs.Changed -= OnPrefsChanged;
+    public void Dispose() => _refreshSubscription?.Dispose();
 }

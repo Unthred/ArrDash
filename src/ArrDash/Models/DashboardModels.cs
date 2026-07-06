@@ -344,6 +344,12 @@ public sealed class UserLayoutPreferences
     public int PollIntervalSeconds { get; set; }
     public int MetricsPollIntervalSeconds { get; set; }
     public int MetricsGraphWindowMinutes { get; set; }
+    public int NetworkPieChartSize { get; set; } = 160;
+    public NetworkPieStyle NetworkPieStyle { get; set; } = NetworkPieStyle.Soft;
+    public bool NetworkPieShowSliceLabels { get; set; } = true;
+    public bool NetworkLegendShowPercent { get; set; }
+    public bool NetworkLegendShowRate { get; set; }
+    public bool NetworkLegendShowCpu { get; set; }
     public bool ManualRefreshOnly { get; set; }
     public StartupPage StartupPage { get; set; } = StartupPage.Dashboard;
     public Dictionary<string, bool> ServiceEnabled { get; set; } = new();
@@ -372,7 +378,8 @@ public sealed record NetworkBandwidthRow(
     double PercentOfAttributed,
     IReadOnlyList<NetworkBandwidthDetailItem> DetailItems,
     string? ServiceUrl = null,
-    string Source = "container");
+    string Source = "container",
+    double? CpuPercent = null);
 
 public sealed record NetworkBandwidthDetail(
     NetworkBandwidthDirection Direction,

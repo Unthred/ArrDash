@@ -2019,7 +2019,13 @@ html {
 .server-metrics-scroll {
     display: flex;
     align-items: stretch;
-    flex: 1 1 auto;
+    /* flex-basis:0, not auto -- with auto, this item's starting size (and therefore its
+       shrink-weight against .metrics-column-cpu) is computed from its content's width. Long
+       unbroken text inside (e.g. a stuck process's full command line) then skews that weight
+       and drags the CPU column down toward its min-width even though it has room to spare.
+       Zeroing the basis makes sizing depend only on flex-grow/shrink and the min/max clamps,
+       never on what happens to be rendered inside. */
+    flex: 1 1 0;
     flex-wrap: nowrap;
     overflow-x: auto;
     min-width: 0;
@@ -2400,6 +2406,19 @@ html {
     box-sizing: border-box;
 }
 
+.network-bandwidth-panels-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.network-bandwidth-panels-row .network-bandwidth-panel {
+    width: auto;
+    flex: 1 1 320px;
+    min-width: 260px;
+}
+
 .network-bandwidth-head {
     display: flex;
     align-items: flex-start;
@@ -2419,74 +2438,163 @@ html {
     font-weight: 700;
 }
 
-.network-bandwidth-sparkline {
-    display: flex;
-    align-items: flex-end;
-    gap: 3px;
-    height: 36px;
-    margin-bottom: 10px;
-}
-
-.network-bandwidth-spark-bar {
-    flex: 1 1 0;
-    min-width: 4px;
-    border-radius: 3px 3px 0 0;
-    background: color-mix(in srgb, #35c5f4 70%, var(--mud-palette-primary));
-    opacity: 0.85;
-}
-
 .network-bandwidth-alert {
     margin-bottom: 8px;
 }
 
-.network-bandwidth-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-height: 280px;
-    overflow-y: auto;
-}
-
-.network-bandwidth-row {
+.network-bandwidth-pie-wrap {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    border: 1px solid var(--mud-palette-divider);
-}
-
-.network-bandwidth-row.is-unattributed {
-    border-style: dashed;
-    opacity: 0.9;
-}
-
-.network-bandwidth-row-main {
-    min-width: 0;
-}
-
-.network-bandwidth-row-label {
-    font-weight: 600;
-}
-
-.network-bandwidth-row-meta {
-    font-size: 0.82rem;
-}
-
-.network-bandwidth-row-details {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 0 10px 4px;
-    margin-top: -4px;
-}
-
-.network-bandwidth-detail-item {
-    display: flex;
+    margin-bottom: 10px;
     flex-wrap: wrap;
-    gap: 8px;
-    font-size: 0.82rem;
+}
+
+.network-bandwidth-pie {
+    width: 160px;
+    height: 160px;
+    flex: 0 0 auto;
+    overflow: visible;
+}
+
+/* CSS filter, not an SVG <filter> primitive -- an SVG filter's region is computed in the
+   element's own (tiny, 32-unit) coordinate space and can rasterize at that resolution before
+   the browser scales it up to the rendered pixel size, which was quietly warping the circle at
+   larger pie sizes. A CSS filter runs in the browser's normal compositing pipeline at the final
+   pixel size, so it can't distort the shape underneath it. Opt-in (Soft/Glossy styles only) --
+   Flat renders with no shadow at all. */
+.network-bandwidth-pie.has-shadow {
+    filter: drop-shadow(0 0.5px 1px rgba(0, 0, 0, 0.3));
+}
+
+.pie-segment {
+    stroke: var(--mud-palette-surface);
+    stroke-width: 0.25;
+    cursor: pointer;
+    transition: opacity 0.15s ease, filter 0.15s ease, transform 0.2s ease;
+}
+
+.pie-segment:hover {
+    filter: brightness(1.1);
+}
+
+.pie-segment.is-selected {
+    filter: brightness(1.12) drop-shadow(0 0.3px 0.6px rgba(0, 0, 0, 0.35));
+}
+
+.pie-segment.is-dimmed {
+    opacity: 0.35;
+}
+
+.pie-slice-label {
+    font-size: 3.2px;
+    font-weight: 700;
+    fill: #fff;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    paint-order: stroke;
+    stroke: rgba(0, 0, 0, 0.4);
+    stroke-width: 0.3px;
+    stroke-linejoin: round;
+    pointer-events: none;
+}
+
+.network-bandwidth-legend {
+    /* table-layout:fixed (not auto) is the actual fix for the panel resizing on every refresh --
+       with auto layout, a table's cell content can inflate its rendered width past its flex
+       allocation regardless of flex-basis, since column widths are measured from content first.
+       Fixed layout locks column widths to the <colgroup> below; the name column just truncates
+       instead of ever changing the table's (and therefore the panel's) overall width. */
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 0;
+    flex: 1 1 140px;
+    font-size: 0.74rem;
+}
+
+.network-bandwidth-legend-col-swatch {
+    width: 20px;
+}
+
+/* Fixed widths (not just min-width) so a value changing digit count between refreshes -- "8%"
+   becoming "12.3%" -- never reflows the row; the column is already sized for the widest case. */
+.network-bandwidth-legend-col-num {
+    width: 3.6em;
+}
+
+.network-bandwidth-legend-col-rate {
+    width: 5.6em;
+}
+
+.network-bandwidth-legend-th {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--mud-palette-text-secondary);
+    text-align: right;
+    padding: 0 0 3px;
+}
+
+.network-bandwidth-legend thead th:nth-child(2) {
+    text-align: left;
+}
+
+.network-bandwidth-legend-th-sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease;
+}
+
+.network-bandwidth-legend-th-sortable:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+.network-bandwidth-legend-th-sortable.is-active {
+    color: var(--mud-palette-primary);
+}
+
+.network-bandwidth-legend-swatch-cell {
+    padding: 2px 0;
+}
+
+.network-bandwidth-legend-label {
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px 4px 2px 0;
+}
+
+.network-bandwidth-legend-value {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    padding: 2px 0 2px 6px;
+}
+
+.network-bandwidth-legend tbody tr {
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.network-bandwidth-legend tbody tr:hover {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 6%, transparent);
+}
+
+.network-bandwidth-legend tbody tr.is-selected {
+    background: color-mix(in srgb, var(--mud-palette-primary) 14%, transparent);
+}
+
+.network-bandwidth-legend tbody tr.is-dimmed {
+    opacity: 0.45;
+}
+
+.network-bandwidth-swatch {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    display: inline-block;
 }
 
 .network-bandwidth-empty {
@@ -2634,6 +2742,8 @@ html {
 .metrics-detail-stuck-row {
     padding: 10px 0;
     border-bottom: 1px solid color-mix(in srgb, var(--mud-palette-divider) 70%, transparent);
+    min-width: 0;
+    overflow: hidden;
 }
 
 .metrics-detail-stuck-row:last-child {
@@ -2686,6 +2796,8 @@ html {
 }
 
 .metrics-detail-stuck-name {
+    display: block;
+    max-width: 100%;
     font-size: 0.84rem;
     font-weight: 700;
     color: var(--mud-palette-text-primary);
@@ -2706,6 +2818,8 @@ html {
 }
 
 .metrics-detail-stuck-cmd {
+    display: block;
+    max-width: 100%;
     font-size: 0.68rem;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     color: var(--mud-palette-text-secondary);
@@ -2887,6 +3001,15 @@ html {
     white-space: nowrap;
     flex-shrink: 0;
     cursor: pointer;
+}
+
+/* Reserves space for the widest realistic reading ("999 KB/s", "1.2 GB/s") so the pill's own
+   width doesn't visibly resize every poll tick as the value's digit/unit count changes. */
+.network-speed-value {
+    display: inline-block;
+    min-width: 7ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .status-chip.is-selected {

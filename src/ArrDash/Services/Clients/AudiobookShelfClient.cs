@@ -26,16 +26,14 @@ public sealed class AudiobookShelfClient(
         {
             var libraries = await GetLibrariesAsync(ct);
             var issueCountTask = FetchIssueCountAsync(libraries, ct);
-            var recentTask = FetchRecentItemsAsync(libraries, 8, ct);
             var versionTask = GetVersionAsync(ct);
-            await Task.WhenAll(issueCountTask, recentTask, versionTask);
+            await Task.WhenAll(issueCountTask, versionTask);
 
             var issueCount = await issueCountTask;
-            var recentItems = await recentTask;
             var workload = activityTracker.GetCurrentWorkload();
-            var recentActivity = recentItems
-                .Select(i => new ServiceRecentActivity(i.Title, "Added", i.Timestamp))
-                .ToList();
+            // No Activity tab here on purpose -- it would just duplicate the "Recent Audiobooks"
+            // panel, which already shows the same recently-added items via the same fetch.
+            IReadOnlyList<ServiceRecentActivity> recentActivity = [];
 
             IReadOnlyList<ServiceProblem>? problems = issueCount > 0
                 ? [AudiobookShelfIssueHelper.IssueSummaryProblem(issueCount)]

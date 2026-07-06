@@ -1,0 +1,154 @@
+@using ArrDash.Services
+@implements IDisposable
+
+<MudPaper Class="@ShellClass" Elevation="0">
+    <div class="panel-header panel-header-rollup" style="--accent:@Accent" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
+        <div class="panel-title-wrap">
+            @if (DragHandle is not null)
+            {
+                @DragHandle
+            }
+            <MudIcon Icon="@Icons.Material.Filled.Sync" Class="panel-icon" />
+            <div>
+                <div class="panel-title">Chaptarr Sync</div>
+                @if (!RolledUp)
+                {
+                    <div class="panel-sub">@LastRunText</div>
+                }
+            </div>
+        </div>
+
+        @if (_status.IsStale)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">stale</MudChip>
+        }
+
+        @if (RolledUp)
+        {
+            <div class="rollup-summary panel-content-rollup">
+                <span class="rollup-stat rollup-stat-wide">@_status.Summary</span>
+            </div>
+        }
+    </div>
+
+    @if (!RolledUp)
+    {
+        <div class="library-stack-grid">
+            <div class="library-row">
+                <span class="library-row-label">Status</span>
+                <span class="library-row-headline">@_status.Summary</span>
+            </div>
+
+            <div class="library-row">
+                <span class="library-row-label">This run</span>
+                <span class="library-row-headline">@_status.FilledCount filled</span>
+                <span class="library-row-detail">@_status.CollectionsCreated new collections · @_status.CollectionsAddedTo updated</span>
+            </div>
+
+            @if (_status.ConflictCount > 0)
+            {
+                <div class="library-row library-row-link" @onclick="ToggleConflicts" style="cursor:pointer">
+                    <span class="library-row-label">Needs review</span>
+                    <span class="library-row-headline">@_status.ConflictCount conflict@(_status.ConflictCount == 1 ? "" : "s")</span>
+                    <span class="library-row-detail">@(_showConflicts ? "click to collapse" : "click to view")</span>
+                </div>
+
+                @if (_showConflicts)
+                {
+                    <div class="empty-state" style="align-items:flex-start;text-align:left;gap:0.25rem">
+                        @foreach (var conflict in _status.Conflicts.Take(25))
+                        {
+                            <div style="width:100%">
+                                <strong>@conflict.RelPath</strong>
+                                @foreach (var field in conflict.Fields)
+                                {
+                                    <div class="library-row-detail">
+                                        @field.Field: ABS has "@field.AbsValue", Chaptarr has "@field.ChaptarrValue"
+                                    </div>
+                                }
+                            </div>
+                        }
+                        @if (_status.Conflicts.Count > 25)
+                        {
+                            <div class="library-row-detail">...and @(_status.Conflicts.Count - 25) more (see verification-report.json)</div>
+                        }
+                    </div>
+                }
+            }
+
+            @if (_status.CollectionsLikelyDuplicate > 0)
+            {
+                <div class="library-row">
+                    <span class="library-row-label">Skipped</span>
+                    <span class="library-row-headline">@_status.CollectionsLikelyDuplicate likely duplicate series</span>
+                </div>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string PanelId { get; set; } = "";
+    [Parameter] public string Accent { get; set; } = "#f97316";
+    [Parameter] public RenderFragment? DragHandle { get; set; }
+
+    [Inject] private LayoutPreferencesService Prefs { get; set; } = default!;
+    [Inject] private ChaptarrSyncStatusService SyncStatus { get; set; } = default!;
+    [Inject] private DashboardState DashState { get; set; } = default!;
+
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(5);
+
+    private ChaptarrSyncStatus _status = ChaptarrSyncStatus.Empty;
+    private DateTimeOffset _statusLoadedAt;
+    private bool _loading;
+    private bool _showConflicts;
+    private PanelRefreshSubscription? _refreshSubscription;
+
+    private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
+    private string ShellClass => RolledUp ? "panel-shell is-rolled-up" : "panel-shell";
+
+    private string LastRunText => _status.LastRunAt is { } t
+        ? $"last run {FormatRelative(t)}"
+        : "never run";
+
+    private static string FormatRelative(DateTimeOffset t)
+    {
+        var delta = DateTimeOffset.UtcNow - t;
+        if (delta.TotalMinutes < 1) return "just now";
+        if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes} min ago";
+        if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h ago";
+        return $"{(int)delta.TotalDays}d ago";
+    }
+
+    private async Task ToggleRollup() => await Prefs.TogglePanelRollupAsync(PanelId);
+    private void ToggleConflicts() => _showConflicts = !_showConflicts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _refreshSubscription = new PanelRefreshSubscription(Prefs, DashState, force => _ = RefreshAsync(force));
+        await RefreshAsync(force: true);
+    }
+
+    private async Task RefreshAsync(bool force)
+    {
+        if (_loading)
+            return;
+
+        if (!force && DateTimeOffset.UtcNow - _statusLoadedAt < RefreshInterval)
+            return;
+
+        _loading = true;
+        try
+        {
+            _status = await SyncStatus.GetAsync(CancellationToken.None);
+            _statusLoadedAt = DateTimeOffset.UtcNow;
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public void Dispose() => _refreshSubscription?.Dispose();
+}

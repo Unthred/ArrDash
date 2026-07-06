@@ -5,6 +5,8 @@ namespace ArrDash.Services;
 
 public sealed class NetworkBandwidthService(
     UnraidActivityService unraidActivity,
+    ContainerNetworkSamplerService containerSampler,
+    HostNetworkSamplerService hostNetworkSampler,
     MediaServiceOptionsAccessor options)
 {
     public async Task<NetworkBandwidthDetail> FetchDetailAsync(
@@ -12,15 +14,23 @@ public sealed class NetworkBandwidthService(
         IReadOnlyList<ActiveSession> sessions,
         CancellationToken ct)
     {
-        var totalTask = unraidActivity.ReadInterfaceThroughputAsync(ct);
-        var containerTask = unraidActivity.ReadContainerNetworkRatesAsync(ct);
-        await Task.WhenAll(totalTask, containerTask);
-
-        var total = await totalTask;
-        var (containerRates, note) = await containerTask;
+        // Both rates come from their own background-sampled caches, not a live read -- reading
+        // the host interface counter on demand raced with every other caller (ambient metrics
+        // poll, status-bar pill poll) over a single shared "previous sample" baseline, so
+        // whichever one fired right after another measured a near-instant, noise-dominated
+        // window instead of a real rate (this is how the total could read ~0 B/s while the
+        // per-container rows below summed to several MB/s). Container rates were already fixed
+        // this way earlier -- this host runs 70+ containers and a live sample takes 60-140+ seconds.
+        var total = hostNetworkSampler.GetLatest();
+        var (containerRates, note, _) = containerSampler.GetLatest();
         var totalBytesPerSecond = direction == NetworkBandwidthDirection.Download
             ? total?.RxBytesPerSecond ?? 0
             : total?.TxBytesPerSecond ?? 0;
+
+        // Reuses UnraidActivityService's own 20s cache (the same data behind the Top CPU tile)
+        // rather than sampling docker stats again here.
+        var topContainers = await unraidActivity.GetTopContainersAsync(ct);
+        var cpuByContainerName = topContainers.ToDictionary(c => c.Name, c => c.CpuPercent, StringComparer.Ordinal);
 
         return NetworkBandwidthBuilder.Build(
             direction,
@@ -29,7 +39,8 @@ public sealed class NetworkBandwidthService(
             sessions,
             containerRates,
             BuildServiceUrls(),
-            note);
+            note,
+            cpuByContainerName);
     }
 
     private IReadOnlyDictionary<string, string?> BuildServiceUrls()

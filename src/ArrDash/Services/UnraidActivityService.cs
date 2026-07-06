@@ -34,12 +34,9 @@ public sealed class UnraidActivityService : IDisposable
     private IReadOnlyList<ContainerUsage> _topContainersCached = [];
     private DateTimeOffset _topContainerCachedAt;
 
-    private readonly string _hostProcNetDevPath;
     private readonly string _hostProcRootPath;
     private readonly string _diskStatsPath;
-    private readonly string _networkInterface;
-    private readonly object _networkLock = new();
-    private (long Rx, long Tx, DateTimeOffset At)? _prevNetworkSample;
+    private readonly HostNetworkSamplerService _hostNetworkSampler;
 
     private readonly object _containerNetworkLock = new();
     private Dictionary<string, (long Rx, long Tx, DateTimeOffset At)> _prevContainerNetwork = new(StringComparer.Ordinal);
@@ -47,8 +44,9 @@ public sealed class UnraidActivityService : IDisposable
     private readonly object _diskIoLock = new();
     private readonly Dictionary<string, (ulong TimeDoingIoMs, DateTimeOffset At)> _prevDiskIo = new(StringComparer.Ordinal);
 
-    public UnraidActivityService()
+    public UnraidActivityService(HostNetworkSamplerService hostNetworkSampler)
     {
+        _hostNetworkSampler = hostNetworkSampler;
         _varIniPath = Environment.GetEnvironmentVariable("ARRDASH_UNRAID_VAR_INI") ?? "/var/local/emhttp/var.ini";
         _disksIniPath = Environment.GetEnvironmentVariable("ARRDASH_UNRAID_DISKS_INI") ?? "/var/local/emhttp/disks.ini";
 
@@ -57,10 +55,8 @@ public sealed class UnraidActivityService : IDisposable
         // mover, per-disk health) that have no equivalent on plain Docker/Linux.
         _isUnraidHost = File.Exists(_varIniPath) || File.Exists(_disksIniPath);
 
-        _hostProcNetDevPath = Environment.GetEnvironmentVariable("ARRDASH_HOST_PROC_NET_DEV") ?? "/host/proc/1/net/dev";
         _hostProcRootPath = Environment.GetEnvironmentVariable("ARRDASH_HOST_PROC_ROOT") ?? "/host/proc";
         _diskStatsPath = Environment.GetEnvironmentVariable("ARRDASH_DISKSTATS_PATH") ?? "/proc/diskstats";
-        _networkInterface = Environment.GetEnvironmentVariable("ARRDASH_NET_INTERFACE") ?? "br0";
         var dockerSocketPath = Environment.GetEnvironmentVariable("ARRDASH_DOCKER_SOCKET") ?? "/var/run/docker.sock";
 
         if (File.Exists(dockerSocketPath))
@@ -143,7 +139,7 @@ public sealed class UnraidActivityService : IDisposable
         var uptime = ReadUptime();
         var cpuTemp = ReadCpuTemperature();
         var cpuCoreTemps = ReadCpuCoreTemps();
-        var network = ReadNetworkThroughput();
+        var network = _hostNetworkSampler.GetLatest();
 
         IReadOnlyList<StuckProcess> stuckProcesses = [];
         try
@@ -462,7 +458,7 @@ public sealed class UnraidActivityService : IDisposable
         }
     }
 
-    private static (long Rx, long Tx)? ReadNetworkBytes(string procNetDevPath, string interfaceName)
+    internal static (long Rx, long Tx)? ReadNetworkBytes(string procNetDevPath, string interfaceName)
     {
         if (!File.Exists(procNetDevPath))
             return null;
@@ -497,33 +493,6 @@ public sealed class UnraidActivityService : IDisposable
         }
     }
 
-    private NetworkThroughput? ReadNetworkThroughput()
-    {
-        var current = ReadNetworkBytes(_hostProcNetDevPath, _networkInterface);
-        if (current is null)
-            return null;
-
-        var now = DateTimeOffset.UtcNow;
-        lock (_networkLock)
-        {
-            if (_prevNetworkSample is not { } prev)
-            {
-                _prevNetworkSample = (current.Value.Rx, current.Value.Tx, now);
-                return null;
-            }
-
-            var elapsedSeconds = (now - prev.At).TotalSeconds;
-            var rxDelta = current.Value.Rx - prev.Rx;
-            var txDelta = current.Value.Tx - prev.Tx;
-            _prevNetworkSample = (current.Value.Rx, current.Value.Tx, now);
-
-            if (elapsedSeconds <= 0 || rxDelta < 0 || txDelta < 0)
-                return null;
-
-            return new NetworkThroughput((long)(rxDelta / elapsedSeconds), (long)(txDelta / elapsedSeconds));
-        }
-    }
-
     /// <summary>Forces the next GetTopContainersAsync call to fetch fresh data, used when the
     /// user actually opens the Memory/Top-CPU detail panel — the cache keeps the ambient tiles
     /// cheap, but a drill-down should never show data older than the click that triggered it.</summary>
@@ -537,12 +506,6 @@ public sealed class UnraidActivityService : IDisposable
     {
         lock (_containerNetworkLock)
             _prevContainerNetwork.Clear();
-    }
-
-    public Task<NetworkThroughput?> ReadInterfaceThroughputAsync(CancellationToken ct)
-    {
-        _ = ct;
-        return Task.FromResult(ReadNetworkThroughput());
     }
 
     public async Task<(IReadOnlyList<ContainerNetworkRate> Rates, string? Note)> ReadContainerNetworkRatesAsync(CancellationToken ct)
@@ -681,7 +644,10 @@ public sealed class UnraidActivityService : IDisposable
         return (rx, tx);
     }
 
-    private async Task<IReadOnlyList<ContainerUsage>> GetTopContainersAsync(CancellationToken ct)
+    // Public so the network bandwidth panel can attach per-container CPU% to its breakdown --
+    // this reuses the same 20s-cached data that already drives the Top CPU tile rather than
+    // triggering its own docker stats sampling for every container.
+    public async Task<IReadOnlyList<ContainerUsage>> GetTopContainersAsync(CancellationToken ct)
     {
         lock (_topContainerLock)
         {

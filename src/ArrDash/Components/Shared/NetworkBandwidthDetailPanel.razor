@@ -2,7 +2,6 @@
 @using ArrDash.Services
 @using MudBlazor
 @inject NetworkBandwidthService BandwidthService
-@inject ExternalLinkService ExternalLink
 @inject LayoutPreferencesService Prefs
 @implements IDisposable
 
@@ -30,14 +29,131 @@
             <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="Close" aria-label="Close" />
         </div>
 
-        @if (SparklineSamples.Count > 1)
+        @if (_detail is not null && _slices.Count > 0)
         {
-            <div class="network-bandwidth-sparkline" aria-hidden="true">
-                @foreach (var sample in SparklineSamples)
-                {
-                    var height = SparklineHeight(sample);
-                    <span class="network-bandwidth-spark-bar" style="@($"height:{height:0.#}%")"></span>
-                }
+            <div class="network-bandwidth-pie-wrap">
+                <svg class="@PieStyleClass()" viewBox="0 0 32 32" role="img"
+                     style="@($"width:{Prefs.Current.NetworkPieChartSize}px;height:{Prefs.Current.NetworkPieChartSize}px")"
+                     aria-label="@PieAriaLabel()">
+                    <defs>
+                        <radialGradient id="@SheenGradientId" cx="35%" cy="28%" r="75%">
+                            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.4" />
+                            <stop offset="55%" stop-color="#ffffff" stop-opacity="0.06" />
+                            <stop offset="100%" stop-color="#000000" stop-opacity="0.14" />
+                        </radialGradient>
+                    </defs>
+                    <g>
+                        @{ double cumulative = 0; }
+                        @foreach (var slice in _slices)
+                        {
+                            var (path, midAngle) = BuildSlicePath(cumulative, slice.Percent);
+                            cumulative += slice.Percent;
+                            var isSelected = _selectedKey == slice.Key;
+                            <path class="@PieSegmentClass(slice)"
+                                  d="@path"
+                                  fill="@SliceColor(slice)"
+                                  transform="@(isSelected ? ExplodeTransform(midAngle) : null)"
+                                  role="button" tabindex="0"
+                                  @onclick="@(() => ToggleSelection(slice.Key))"
+                                  @onkeydown="@(e => OnSelectionKeyDown(e, slice.Key))">
+                                <title>@($"{slice.Label}: {slice.Percent:0.#}%")</title>
+                            </path>
+                        }
+                    </g>
+                    @if (Prefs.Current.NetworkPieStyle == NetworkPieStyle.Glossy)
+                    {
+                        <circle cx="16" cy="16" r="14" fill="url(#@SheenGradientId)" pointer-events="none" />
+                    }
+                    @if (Prefs.Current.NetworkPieShowSliceLabels)
+                    {
+                        @foreach (var label in BuildSliceLabels())
+                        {
+                            @RenderSliceLabel(label.X, label.Y, label.Text)
+                        }
+                    }
+                </svg>
+                <table class="network-bandwidth-legend">
+                    <colgroup>
+                        <col class="network-bandwidth-legend-col-swatch" />
+                        <col />
+                        @if (Prefs.Current.NetworkLegendShowPercent)
+                        {
+                            <col class="network-bandwidth-legend-col-num" />
+                        }
+                        @if (Prefs.Current.NetworkLegendShowRate)
+                        {
+                            <col class="network-bandwidth-legend-col-rate" />
+                        }
+                        @if (Prefs.Current.NetworkLegendShowCpu)
+                        {
+                            <col class="network-bandwidth-legend-col-num" />
+                        }
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th class="@SortHeaderClass(SortColumn.Name)"
+                                role="button" tabindex="0"
+                                @onclick="@(() => SetSort(SortColumn.Name))"
+                                @onkeydown="@(e => OnSortKeyDown(e, SortColumn.Name))">
+                                @($"Item{SortArrow(SortColumn.Name)}")
+                            </th>
+                            @if (Prefs.Current.NetworkLegendShowPercent)
+                            {
+                                <th class="@SortHeaderClass(SortColumn.Percent)"
+                                    role="button" tabindex="0"
+                                    @onclick="@(() => SetSort(SortColumn.Percent))"
+                                    @onkeydown="@(e => OnSortKeyDown(e, SortColumn.Percent))">
+                                    @($"%{SortArrow(SortColumn.Percent)}")
+                                </th>
+                            }
+                            @if (Prefs.Current.NetworkLegendShowRate)
+                            {
+                                <th class="@SortHeaderClass(SortColumn.Rate)"
+                                    role="button" tabindex="0"
+                                    @onclick="@(() => SetSort(SortColumn.Rate))"
+                                    @onkeydown="@(e => OnSortKeyDown(e, SortColumn.Rate))">
+                                    @($"Speed{SortArrow(SortColumn.Rate)}")
+                                </th>
+                            }
+                            @if (Prefs.Current.NetworkLegendShowCpu)
+                            {
+                                <th class="@SortHeaderClass(SortColumn.Cpu)"
+                                    role="button" tabindex="0"
+                                    @onclick="@(() => SetSort(SortColumn.Cpu))"
+                                    @onkeydown="@(e => OnSortKeyDown(e, SortColumn.Cpu))">
+                                    @($"CPU{SortArrow(SortColumn.Cpu)}")
+                                </th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var slice in SortedSlices)
+                        {
+                            <tr class="@RowClass(slice)"
+                                role="button" tabindex="0"
+                                @onclick="@(() => ToggleSelection(slice.Key))"
+                                @onkeydown="@(e => OnSelectionKeyDown(e, slice.Key))">
+                                <td class="network-bandwidth-legend-swatch-cell">
+                                    <span class="network-bandwidth-swatch" style="@($"background:{SliceColor(slice)}")"></span>
+                                </td>
+                                <td class="network-bandwidth-legend-label">@slice.Label</td>
+                                @if (Prefs.Current.NetworkLegendShowPercent)
+                                {
+                                    <td class="network-bandwidth-legend-value muted">@($"{slice.Percent:0.#}%")</td>
+                                }
+                                @if (Prefs.Current.NetworkLegendShowRate)
+                                {
+                                    <td class="network-bandwidth-legend-value muted">@FormatRate(slice.BytesPerSecond)</td>
+                                }
+                                @if (Prefs.Current.NetworkLegendShowCpu)
+                                {
+                                    <td class="network-bandwidth-legend-value muted">@(slice.CpuPercent is double cpu ? $"{cpu:0.#}%" : "—")</td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
             </div>
         }
 
@@ -48,49 +164,9 @@
                 <MudAlert Severity="Severity.Info" Dense="true" Class="network-bandwidth-alert">@_detail.Note</MudAlert>
             }
 
-            @if (_detail.Rows.Count == 0)
+            @if (_slices.Count == 0)
             {
                 <MudText Typo="Typo.body2" Class="muted network-bandwidth-empty">No attributed traffic detected for this direction.</MudText>
-            }
-            else
-            {
-                <div class="network-bandwidth-rows">
-                    @foreach (var row in _detail.Rows)
-                    {
-                        <div class="network-bandwidth-row @RowClass(row)">
-                            <div class="network-bandwidth-row-main">
-                                <div class="network-bandwidth-row-label">@row.Label</div>
-                                <div class="network-bandwidth-row-meta muted">
-                                    @($"{row.PercentOfAttributed:0.#}%") · @FormatRate(row.BytesPerSecond)
-                                </div>
-                            </div>
-                            @if (!string.IsNullOrWhiteSpace(row.ServiceUrl))
-                            {
-                                <MudButton Variant="Variant.Text"
-                                           Size="Size.Small"
-                                           StartIcon="@Icons.Material.Filled.OpenInNew"
-                                           OnClick="@(() => OpenService(row.ServiceUrl!))">
-                                    Open
-                                </MudButton>
-                            }
-                        </div>
-                        @if (row.DetailItems.Count > 0)
-                        {
-                            <div class="network-bandwidth-row-details">
-                                @foreach (var item in row.DetailItems.Take(6))
-                                {
-                                    <div class="network-bandwidth-detail-item">
-                                        <span>@item.Label</span>
-                                        @if (!string.IsNullOrWhiteSpace(item.Subtitle))
-                                        {
-                                            <span class="muted">@item.Subtitle</span>
-                                        }
-                                    </div>
-                                }
-                            </div>
-                        }
-                    }
-                </div>
             }
         }
         else if (!_loading && _error is not null)
@@ -103,17 +179,94 @@
 @code {
     [Parameter] public NetworkBandwidthDirection Direction { get; set; }
     [Parameter] public IReadOnlyList<ActiveSession> Sessions { get; set; } = [];
-    [Parameter] public IReadOnlyList<long> SparklineSamples { get; set; } = [];
     [Parameter] public EventCallback OnClose { get; set; }
+
+    private const int MaxCategoricalSlices = 8;
+
+    private sealed record ChartSlice(string Key, string Label, long BytesPerSecond, double Percent, int? ColorSlot, double? CpuPercent);
 
     private NetworkBandwidthDetail? _detail;
     private bool _loading;
     private string? _error;
     private int _loadGeneration;
     private CancellationTokenSource? _loadCts;
+    private IReadOnlyList<ChartSlice> _slices = [];
+    private NetworkBandwidthDirection? _loadedDirection;
+    private IReadOnlyList<ActiveSession>? _loadedSessions;
+
+    private enum SortColumn { Name, Percent, Rate, Cpu }
+    private SortColumn _sortColumn = SortColumn.Percent;
+    private bool _sortDescending = true;
+    private string? _selectedKey;
+
+    // The pie's own slice order never changes with sort -- only the table re-orders. Selection
+    // is by Key, so clicking a sorted-away row still finds and highlights the right wedge.
+    private IEnumerable<ChartSlice> SortedSlices => _sortColumn switch
+    {
+        SortColumn.Name => Order(_slices, s => s.Label, StringComparer.OrdinalIgnoreCase),
+        SortColumn.Rate => Order(_slices, s => s.BytesPerSecond),
+        SortColumn.Cpu => Order(_slices, s => s.CpuPercent ?? -1),
+        _ => Order(_slices, s => s.Percent)
+    };
+
+    private IEnumerable<ChartSlice> Order<TKey>(IEnumerable<ChartSlice> source, Func<ChartSlice, TKey> selector, IComparer<TKey>? comparer = null) =>
+        _sortDescending ? source.OrderByDescending(selector, comparer) : source.OrderBy(selector, comparer);
+
+    private void SetSort(SortColumn column)
+    {
+        if (_sortColumn == column)
+            _sortDescending = !_sortDescending;
+        else
+        {
+            _sortColumn = column;
+            _sortDescending = true;
+        }
+    }
+
+    private void OnSortKeyDown(KeyboardEventArgs e, SortColumn column)
+    {
+        if (e.Key is "Enter" or " ")
+            SetSort(column);
+    }
+
+    private string SortHeaderClass(SortColumn column) =>
+        "network-bandwidth-legend-th network-bandwidth-legend-th-sortable" + (_sortColumn == column ? " is-active" : "");
+
+    private string SortArrow(SortColumn column) =>
+        _sortColumn != column ? "" : _sortDescending ? " ↓" : " ↑";
+
+    private void ToggleSelection(string key) => _selectedKey = _selectedKey == key ? null : key;
+
+    private void OnSelectionKeyDown(KeyboardEventArgs e, string key)
+    {
+        if (e.Key is "Enter" or " ")
+            ToggleSelection(key);
+    }
+
+    private string PieSegmentClass(ChartSlice slice) => "pie-segment" + SelectionSuffix(slice);
+
+    private string RowClass(ChartSlice slice) => SelectionSuffix(slice).Trim();
+
+    private string SelectionSuffix(ChartSlice slice)
+    {
+        if (_selectedKey is null)
+            return "";
+
+        return _selectedKey == slice.Key ? " is-selected" : " is-dimmed";
+    }
 
     protected override async Task OnParametersSetAsync()
     {
+        // Blazor calls this on every render pass that reaches this component, not just ones
+        // where Direction/Sessions actually changed -- this component now lives inside
+        // ServerMetricsBar, which re-renders on every mousemove over the CPU graph's hover area.
+        // Without this guard, moving the mouse near the graph reloaded (and visibly flickered)
+        // the totally unrelated bandwidth panel dozens of times a second.
+        if (_loadedDirection == Direction && ReferenceEquals(_loadedSessions, Sessions))
+            return;
+
+        _loadedDirection = Direction;
+        _loadedSessions = Sessions;
         await LoadAsync();
     }
 
@@ -125,9 +278,17 @@
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
-        _loading = true;
+        // Deliberately does NOT clear _detail here (stale-while-revalidate). This component
+        // reloads on every ancestor render pass that touches its parameters -- including one
+        // that changes a totally unrelated preference elsewhere on the dashboard, since that
+        // triggers a full RefreshNow() that gives Sessions a new list reference. Blanking the
+        // chart on every one of those meant a display-only setting (pie size, legend fields)
+        // could get stuck showing "Sampling containers..." indefinitely if another reload
+        // preempted it before finishing, making the setting look like it wasn't taking effect.
+        // Keeping the previous data visible means those settings apply on the very next render
+        // regardless of the fetch's timing, and the actual data is still numerically fresh.
+        _loading = _detail is null;
         _error = null;
-        _detail = null;
 
         try
         {
@@ -136,6 +297,7 @@
                 return;
 
             _detail = detail;
+            _slices = BuildSlices(detail);
         }
         catch (OperationCanceledException)
         {
@@ -164,22 +326,141 @@
         await OnClose.InvokeAsync();
     }
 
-    private Task OpenService(string url)
-    {
-        _ = ExternalLink.OpenAsync(url, Prefs.Current.ExternalLinkTarget);
-        return Task.CompletedTask;
-    }
-
     private static string FormatRate(long bytesPerSecond) => $"{ByteDisplayHelper.Format(bytesPerSecond)}/s";
 
-    private static string RowClass(NetworkBandwidthRow row) =>
-        string.Equals(row.Key, "unattributed", StringComparison.OrdinalIgnoreCase) ? "is-unattributed" : "";
-
-    private double SparklineHeight(long sample)
+    // Folds the tail past MaxCategoricalSlices into "Other" (8 is the categorical palette's
+    // full token ceiling) and keeps "unattributed" as its own always-muted slice rather than
+    // a hued one, since it isn't an identity, it's "unknown". Color slots are
+    // assigned by each row's key in alphabetical order, not by its current byte-rank, so a
+    // container's hue doesn't reshuffle every refresh just because another one briefly
+    // overtook it in the ranking. CPU% for a folded "Other" slice is the sum of its members',
+    // same as bytes -- unattributed traffic has no associated container, so it has no CPU.
+    private static IReadOnlyList<ChartSlice> BuildSlices(NetworkBandwidthDetail detail)
     {
-        var max = Math.Max(1L, SparklineSamples.DefaultIfEmpty(0).Max());
-        return Math.Clamp(sample * 100.0 / max, 4, 100);
+        var total = detail.Rows.Sum(r => r.BytesPerSecond);
+        if (total <= 0)
+            return [];
+
+        var unattributed = detail.Rows.FirstOrDefault(r => string.Equals(r.Key, "unattributed", StringComparison.OrdinalIgnoreCase));
+        var named = detail.Rows.Where(r => r != unattributed).ToList();
+
+        var top = named.Take(MaxCategoricalSlices).ToList();
+        var overflow = named.Skip(MaxCategoricalSlices).ToList();
+
+        var slotByKey = top
+            .Select(r => r.Key)
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .Select((k, i) => (k, i))
+            .ToDictionary(x => x.k, x => x.i, StringComparer.OrdinalIgnoreCase);
+
+        var slices = top
+            .Select(r => new ChartSlice(r.Key, r.Label, r.BytesPerSecond, r.BytesPerSecond * 100.0 / total, slotByKey[r.Key], r.CpuPercent))
+            .ToList();
+
+        if (overflow.Count > 0)
+        {
+            var overflowBytes = overflow.Sum(r => r.BytesPerSecond);
+            var overflowCpu = overflow.Any(r => r.CpuPercent.HasValue) ? overflow.Sum(r => r.CpuPercent ?? 0) : (double?)null;
+            slices.Add(new ChartSlice("other", $"Other ({overflow.Count})", overflowBytes, overflowBytes * 100.0 / total, null, overflowCpu));
+        }
+
+        if (unattributed is not null && unattributed.BytesPerSecond > 0)
+            slices.Add(new ChartSlice(unattributed.Key, unattributed.Label, unattributed.BytesPerSecond, unattributed.BytesPerSecond * 100.0 / total, null, null));
+
+        return slices;
     }
+
+    private static string SliceColor(ChartSlice slice) =>
+        slice.ColorSlot is int slot ? $"var(--viz-series-{slot + 1})" : "var(--viz-muted)";
+
+    // Two panels (Download + Upload) render side by side, so the gradient needs a unique id per
+    // instance -- a duplicate SVG id would make both panels' sheens resolve to whichever one the
+    // browser saw first.
+    private string SheenGradientId => $"network-pie-sheen-{Direction}";
+
+    private string PieStyleClass() => Prefs.Current.NetworkPieStyle switch
+    {
+        NetworkPieStyle.Flat => "network-bandwidth-pie",
+        NetworkPieStyle.Glossy => "network-bandwidth-pie has-shadow",
+        _ => "network-bandwidth-pie has-shadow"
+    };
+
+    private string PieAriaLabel() =>
+        "Breakdown: " + string.Join(", ", _slices.Select(s => $"{s.Label} {s.Percent:0.#}%"));
+
+    private const double PieRadius = 14;
+    private const double PieCenter = 16;
+
+    // 0deg = 3 o'clock; -90 offset + clockwise-as-percent-increases makes the first slice start
+    // at 12 o'clock and proceed clockwise, matching how a reader expects a pie to fill.
+    private static (double X, double Y) PointOnCircle(double angleDegrees, double radius)
+    {
+        var rad = angleDegrees * Math.PI / 180.0;
+        return (PieCenter + radius * Math.Cos(rad), PieCenter + radius * Math.Sin(rad));
+    }
+
+    private static string Fmt(double n) => n.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+    // A real pie slice is a wedge -- a triangle-ish shape that comes to a point at the center --
+    // not a thick ring. Drawing it as "center -> arc start -> arc -> center" (an SVG path, not a
+    // stroked circle standing in for one) is what makes it actually taper correctly instead of
+    // looking like a fat donut band pretending to be solid. The gap between slices is a small
+    // angular inset on each side, which also tapers naturally to the center point, unlike a
+    // fixed-arc-length gap on a stroke (which stayed a constant width all the way in).
+    private (string Path, double MidAngle) BuildSlicePath(double cumulativeBeforePercent, double slicePercent)
+    {
+        var startPercent = cumulativeBeforePercent;
+        var endPercent = cumulativeBeforePercent + slicePercent;
+        var spanDegrees = slicePercent / 100.0 * 360.0;
+        var gapDegrees = _slices.Count > 1 ? Math.Min(1.6, spanDegrees * 0.5) : 0;
+
+        var startAngle = startPercent / 100.0 * 360.0 - 90 + gapDegrees / 2;
+        var endAngle = endPercent / 100.0 * 360.0 - 90 - gapDegrees / 2;
+        var midAngle = (startAngle + endAngle) / 2;
+
+        var (x1, y1) = PointOnCircle(startAngle, PieRadius);
+        var (x2, y2) = PointOnCircle(endAngle, PieRadius);
+        var largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+        var path = $"M {Fmt(PieCenter)},{Fmt(PieCenter)} L {Fmt(x1)},{Fmt(y1)} A {Fmt(PieRadius)},{Fmt(PieRadius)} 0 {largeArc} 1 {Fmt(x2)},{Fmt(y2)} Z";
+        return (path, midAngle);
+    }
+
+    // The little "pop" a selected slice gets: nudge it outward along its own mid-angle, the
+    // classic "exploded" pie-slice treatment.
+    private static string? ExplodeTransform(double midAngleDegrees)
+    {
+        var rad = midAngleDegrees * Math.PI / 180.0;
+        return $"translate({Fmt(1.1 * Math.Cos(rad))} {Fmt(1.1 * Math.Sin(rad))})";
+    }
+
+    // Only labels slices big enough for a "NN%" glyph to actually fit (the anti-pattern to
+    // avoid is a number on every sliver). Placed at ~65% of the radius, the usual sweet spot
+    // for a pie label -- centered on the band where the wedge already reads widest.
+    private List<(double X, double Y, string Text)> BuildSliceLabels()
+    {
+        var labels = new List<(double, double, string)>();
+        double cumulative = 0;
+        foreach (var slice in _slices)
+        {
+            if (slice.Percent >= 5)
+            {
+                var midFraction = (cumulative + slice.Percent / 2) / 100.0;
+                var (x, y) = PointOnCircle(midFraction * 360 - 90, PieRadius * 0.65);
+                labels.Add((x, y, $"{slice.Percent:0}%"));
+            }
+
+            cumulative += slice.Percent;
+        }
+
+        return labels;
+    }
+
+    // SVG's <text> element name collides with Razor's reserved "text" pseudo-tag (used to
+    // emit literal markup from a code block), which rejects attributes on it (RZ1023) --
+    // routing through MarkupString sidesteps Razor's tag parser entirely.
+    private static MarkupString RenderSliceLabel(double x, double y, string text) => new(
+        $"<text class=\"pie-slice-label\" x=\"{x.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}\" y=\"{y.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}\">{System.Net.WebUtility.HtmlEncode(text)}</text>");
 
     public void Dispose()
     {

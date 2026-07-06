@@ -55,6 +55,12 @@ public static class SettingsHelpTexts
     public const string MetricsDiskPath = "Path(s) for disk usage, comma-separated for multiple mounts (e.g. / or /mnt/user). Leave blank to use ARRDASH_DISK_PATH env, then default / inside Linux containers.";
     public const string MetricsPollInterval = "How often server CPU and usage rings refresh. 0 uses the default (2 seconds).";
     public const string MetricsGraphWindow = "How many minutes of CPU history the graph displays. 0 uses the default (15 minutes).";
+    public const string NetworkPieChartSize = "Size in pixels of the pie chart in the network bandwidth breakdown panel.";
+    public const string NetworkPieStyle = "Visual style of the pie chart: Flat (no shading), Soft (a subtle drop shadow), or Glossy (shadow plus a highlight sheen). Purely cosmetic — doesn't change the shape or the numbers.";
+    public const string NetworkPieShowSliceLabels = "Shows a percentage label directly on larger pie slices, in addition to the legend list.";
+    public const string NetworkLegendShowPercent = "Adds each item's percentage of total traffic next to its name in the legend.";
+    public const string NetworkLegendShowRate = "Adds each item's throughput (e.g. 1.2 MB/s) next to its name in the legend.";
+    public const string NetworkLegendShowCpu = "Adds each container's CPU usage next to its name in the legend, so you can see what's using bandwidth AND CPU at a glance.";
     public const string EnableClickThrough = "Lets you click recent items and library stats to open the source app.";
     public const string DeepLinkClickThrough = "Opens the specific movie, show, book, or artist in the app instead of the app home page.";
     public const string ExternalLinkTarget = "Whether click-through opens the source app in a new browser tab or the current tab.";

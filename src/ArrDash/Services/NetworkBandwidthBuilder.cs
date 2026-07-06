@@ -19,7 +19,8 @@ public static class NetworkBandwidthBuilder
         IReadOnlyList<ActiveSession> sessions,
         IReadOnlyList<ContainerNetworkRate> containerRates,
         IReadOnlyDictionary<string, string?> serviceUrls,
-        string? note)
+        string? note,
+        IReadOnlyDictionary<string, double>? cpuByContainerName = null)
     {
         var rows = new Dictionary<string, MutableRow>(StringComparer.OrdinalIgnoreCase);
         var claimedStreamingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -37,6 +38,8 @@ public static class NetworkBandwidthBuilder
             if (claimedStreamingKeys.Contains(key))
                 continue;
 
+            var cpu = cpuByContainerName?.GetValueOrDefault(rate.ContainerName);
+
             if (!rows.TryGetValue(key, out var row))
             {
                 rows[key] = new MutableRow(
@@ -45,11 +48,15 @@ public static class NetworkBandwidthBuilder
                     bps,
                     "container",
                     serviceUrls.GetValueOrDefault(key),
-                    [new NetworkBandwidthDetailItem(rate.ContainerName, "Container I/O")]);
+                    [new NetworkBandwidthDetailItem(rate.ContainerName, "Container I/O")])
+                {
+                    CpuPercent = cpu
+                };
                 continue;
             }
 
             row.BytesPerSecond += bps;
+            row.CpuPercent = (row.CpuPercent ?? 0) + (cpu ?? 0);
             row.DetailItems.Add(new NetworkBandwidthDetailItem(rate.ContainerName, "Container I/O"));
         }
 
@@ -69,7 +76,8 @@ public static class NetworkBandwidthBuilder
                 attributed > 0 ? r.BytesPerSecond * 100.0 / attributed : 0,
                 r.DetailItems,
                 r.ServiceUrl,
-                r.Source))
+                r.Source,
+                r.CpuPercent))
             .ToList();
 
         if (unattributed > 0)
@@ -167,6 +175,7 @@ public static class NetworkBandwidthBuilder
         public string Source { get; } = source;
         public string? ServiceUrl { get; } = serviceUrl;
         public List<NetworkBandwidthDetailItem> DetailItems { get; } = detailItems;
+        public double? CpuPercent { get; set; }
     }
 }
 

@@ -10,6 +10,12 @@ public sealed class DashboardState
 
     public event Action<DashboardSnapshot>? Changed;
 
+    // Fires only for an explicit user-initiated "Refresh now" -- separate from Changed, which
+    // also fires on every automatic ~30s poll tick. Panels that keep their own longer-TTL cache
+    // (Libraries, Chaptarr sync) must only force-bypass that cache on this event, not on Changed,
+    // or they end up re-fetching from *arr/ABS every poll tick instead of respecting their cache.
+    public event Action? ManualRefreshRequested;
+
     public DashboardSnapshot Current
     {
         get
@@ -30,6 +36,8 @@ public sealed class DashboardState
 
         handlers?.Invoke(snapshot);
     }
+
+    public void NotifyManualRefresh() => ManualRefreshRequested?.Invoke();
 
     public static DashboardSnapshot Empty() => new(
         [],
@@ -336,6 +344,12 @@ public sealed class LayoutPreferencesService(IWebHostEnvironment env, ILogger<La
         PollIntervalSeconds = p.PollIntervalSeconds,
         MetricsPollIntervalSeconds = p.MetricsPollIntervalSeconds,
         MetricsGraphWindowMinutes = p.MetricsGraphWindowMinutes,
+        NetworkPieChartSize = p.NetworkPieChartSize,
+        NetworkPieStyle = p.NetworkPieStyle,
+        NetworkPieShowSliceLabels = p.NetworkPieShowSliceLabels,
+        NetworkLegendShowPercent = p.NetworkLegendShowPercent,
+        NetworkLegendShowRate = p.NetworkLegendShowRate,
+        NetworkLegendShowCpu = p.NetworkLegendShowCpu,
         ManualRefreshOnly = p.ManualRefreshOnly,
         StartupPage = p.StartupPage,
         ServiceEnabled = new Dictionary<string, bool>(p.ServiceEnabled),

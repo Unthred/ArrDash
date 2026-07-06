@@ -7,6 +7,7 @@
 @inject NavigationManager Nav
 @implements IDisposable
 @inject IJSRuntime Js
+@inject ILogger<Home> Logger
 @using Microsoft.JSInterop
 
 <PageTitle>ArrDash</PageTitle>
@@ -28,13 +29,12 @@
                 <p class="hero-copy">@_display.Subtitle</p>
             </div>
             <div class="hero-status">
-                <NetworkSpeedGraph Sessions="_snapshot.ActiveSessions" />
                 <VpnStatusBadge />
             </div>
             <div class="hero-meta">
                 <MudText Typo="Typo.caption" Class="muted">Last refresh</MudText>
                 <MudText Typo="Typo.body2">@FormatUpdated(_snapshot.UpdatedAt)</MudText>
-                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshNow" Class="mt-2">
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="@(() => RefreshNow(manual: true))" Class="mt-2">
                     Refresh now
                 </MudButton>
             </div>
@@ -46,6 +46,7 @@
         <ServerMetricsBar Metrics="_snapshot.Host"
                           SampledAt="_snapshot.UpdatedAt"
                           Services="_snapshot.Services"
+                          Sessions="_snapshot.ActiveSessions"
                           SelectedServiceKey="@_selectedServiceKey"
                           SelectedServiceKeyChanged="@OnServiceSelected" />
     }
@@ -80,6 +81,12 @@
                                  ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget">
                     <DragHandle>@BuildDragHandle(panelId)</DragHandle>
                 </LibrariesPanel>
+                break;
+            case "chaptarr-abs-sync":
+                <ChaptarrSyncPanel PanelId="chaptarr-abs-sync"
+                                    Accent="@Prefs.GetPanelAccent(panelId, "#f97316")">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </ChaptarrSyncPanel>
                 break;
             case "recent-tv":
                 <DownloadPanel PanelId="recent-tv" Title="Recent TV" Icon="@Icons.Material.Filled.LiveTv"
@@ -143,14 +150,31 @@
         </div>
     }
 
-    @if (Prefs.Current.StatusBarMode != StatusBarMode.Hidden && !Prefs.Current.ShowServerMetrics)
+    @if (!Prefs.Current.ShowServerMetrics)
     {
         <ServiceStatusBar Services="_snapshot.Services"
                           SampledAt="_snapshot.UpdatedAt"
                           Mode="Prefs.Current.StatusBarMode"
                           Alignment="Prefs.Current.StatusBarAlignment"
                           SelectedServiceKey="@_selectedServiceKey"
-                          SelectedServiceKeyChanged="@OnServiceSelected" />
+                          SelectedServiceKeyChanged="@OnServiceSelected"
+                          ShowNetworkPills="true"
+                          NetworkDetailOpen="_networkDetailOpen"
+                          OnToggleNetworkDetail="ToggleNetworkDetail" />
+
+        @if (_networkDetailOpen)
+        {
+            <div class="network-bandwidth-panels-row">
+                <NetworkBandwidthDetailPanel @key="NetworkBandwidthDirection.Download"
+                                             Direction="NetworkBandwidthDirection.Download"
+                                             Sessions="_snapshot.ActiveSessions"
+                                             OnClose="CloseNetworkDetail" />
+                <NetworkBandwidthDetailPanel @key="NetworkBandwidthDirection.Upload"
+                                             Direction="NetworkBandwidthDirection.Upload"
+                                             Sessions="_snapshot.ActiveSessions"
+                                             OnClose="CloseNetworkDetail" />
+            </div>
+        }
     }
 </div>
 
@@ -168,7 +192,11 @@
     private string? _draggingPanel;
     private string? _dragOverPanel;
     private string? _selectedServiceKey;
+    private bool _networkDetailOpen;
     [CascadingParameter] public bool Kiosk { get; set; }
+
+    private void ToggleNetworkDetail() => _networkDetailOpen = !_networkDetailOpen;
+    private void CloseNetworkDetail() => _networkDetailOpen = false;
 
     private IReadOnlyList<string> VisiblePanels => Prefs.GetVisiblePanelOrder();
     private bool ShowHero => !Prefs.Current.HideHeroStrip && !(Kiosk && Prefs.Current.KioskHideHero);
@@ -248,7 +276,7 @@
 
         var pollSeconds = Prefs.GetPollIntervalSeconds(OptionsAccessor.Options.PollIntervalSeconds);
         if (DateTimeOffset.UtcNow - _snapshot.UpdatedAt > TimeSpan.FromSeconds(pollSeconds + 5))
-            _ = InvokeAsync(RefreshNow);
+            _ = InvokeAsync(() => RefreshNow());
     }
 
     private void RequestRender()
@@ -297,8 +325,11 @@
         if (!ShowHero)
             return;
 
+        // 1s, not the old 10s -- FormatRefreshRelative claims per-second precision ("Xs ago"),
+        // so a 10s render tick made the label sit frozen then jump straight from "just now" to
+        // whatever had accumulated by the next tick (e.g. "8s ago"), instead of counting up.
         _refreshLabelTimer = new System.Threading.Timer(_ =>
-            _ = InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+            _ = InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     private void ConfigureKioskTimers()
@@ -365,20 +396,31 @@
         };
     }
 
-    private void OnPrefsChanged()
+    // Everything here must run inside InvokeAsync, not just the tail -- this handler fires from
+    // LayoutPreferencesService.Changed, a singleton event, so when the preference change comes
+    // from a DIFFERENT browser tab/circuit (e.g. Settings open alongside the dashboard), this
+    // runs on that other circuit's thread. Mutating this component's state or calling
+    // NavigationManager/JS-interop-backed methods off this component's own dispatcher thread is
+    // unsafe in Blazor Server, and an exception here would also abort any other subscriber
+    // further down LayoutPreferencesService's invocation list.
+    private void OnPrefsChanged() => _ = InvokeAsync(async () =>
     {
-        _display = Prefs.GetDisplaySettings();
-        ApplyStartupPagePreference();
-        ConfigureKioskTimers();
-        ConfigureRefreshLabelTimer();
-        ConfigureSnapshotSyncTimer();
-        _ = InvokeAsync(async () =>
+        try
         {
+            _display = Prefs.GetDisplaySettings();
+            ApplyStartupPagePreference();
+            ConfigureKioskTimers();
+            ConfigureRefreshLabelTimer();
+            ConfigureSnapshotSyncTimer();
             await StartBrowserPollAsync();
             await RefreshNow();
             StateHasChanged();
-        });
-    }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to apply a cross-tab preference change to the dashboard");
+        }
+    });
 
     private void ApplyStartupPagePreference()
     {
@@ -427,12 +469,15 @@
         return null;
     }
 
-    private async Task RefreshNow()
+    private async Task RefreshNow(bool manual = false)
     {
         await RefreshService.RefreshAsync(CancellationToken.None);
         _snapshot = State.Current;
         UpdateScreensaverState();
         StateHasChanged();
+
+        if (manual)
+            State.NotifyManualRefresh();
     }
 
     private async Task OnViewModeChanged(string panelId, PanelViewMode mode)

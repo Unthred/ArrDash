@@ -114,6 +114,34 @@
             </MudPaper>
 
             <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-section-title">Network breakdown</div>
+                <div class="settings-grid-2">
+                    <SettingField Text="@SettingsHelpTexts.NetworkPieChartSize">
+                        <MudSlider @bind-Value="_networkPieChartSize" @bind-Value:after="ScheduleLivePreviewNow" Min="32" Max="320" Step="4" Color="Color.Primary">Pie chart size: @(_networkPieChartSize)px</MudSlider>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.NetworkPieStyle">
+                        <MudSelect T="NetworkPieStyle" @bind-Value="_networkPieStyle" @bind-Value:after="ScheduleLivePreviewNow" Label="Pie style" Variant="Variant.Outlined" Margin="Margin.Dense">
+                            <MudSelectItem Value="NetworkPieStyle.Flat">Flat</MudSelectItem>
+                            <MudSelectItem Value="NetworkPieStyle.Soft">Soft shadow</MudSelectItem>
+                            <MudSelectItem Value="NetworkPieStyle.Glossy">Glossy</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.NetworkPieShowSliceLabels">
+                        <MudSwitch @bind-Value="_networkPieShowSliceLabels" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show % labels on slices" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.NetworkLegendShowPercent">
+                        <MudSwitch @bind-Value="_networkLegendShowPercent" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show % in legend" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.NetworkLegendShowRate">
+                        <MudSwitch @bind-Value="_networkLegendShowRate" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show speed in legend" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.NetworkLegendShowCpu">
+                        <MudSwitch @bind-Value="_networkLegendShowCpu" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show CPU % in legend" />
+                    </SettingField>
+                </div>
+            </MudPaper>
+
+            <MudPaper Class="settings-section compact" Elevation="0">
                 <div class="settings-section-title">Panels</div>
                 <SettingSectionHelp Text="@SettingsHelpTexts.PanelOrder" />
                 <div class="panel-order-compact">
@@ -515,6 +543,12 @@
     private string _metricsDiskPath = "";
     private int _metricsPollIntervalSeconds;
     private int _metricsGraphWindowMinutes;
+    private int _networkPieChartSize = 160;
+    private NetworkPieStyle _networkPieStyle = NetworkPieStyle.Soft;
+    private bool _networkPieShowSliceLabels;
+    private bool _networkLegendShowPercent;
+    private bool _networkLegendShowRate;
+    private bool _networkLegendShowCpu;
     private bool _enableClickThrough = true;
     private bool _deepLinkClickThrough = true;
     private ExternalLinkTarget _externalLinkTarget = ExternalLinkTarget.NewTab;
@@ -690,6 +724,12 @@
         _metricsDiskPath = prefs.MetricsDiskPath ?? "";
         _metricsPollIntervalSeconds = prefs.MetricsPollIntervalSeconds;
         _metricsGraphWindowMinutes = prefs.MetricsGraphWindowMinutes;
+        _networkPieChartSize = prefs.NetworkPieChartSize;
+        _networkPieStyle = prefs.NetworkPieStyle;
+        _networkPieShowSliceLabels = prefs.NetworkPieShowSliceLabels;
+        _networkLegendShowPercent = prefs.NetworkLegendShowPercent;
+        _networkLegendShowRate = prefs.NetworkLegendShowRate;
+        _networkLegendShowCpu = prefs.NetworkLegendShowCpu;
         _enableClickThrough = prefs.EnableClickThrough;
         _deepLinkClickThrough = prefs.DeepLinkClickThrough;
         _externalLinkTarget = prefs.ExternalLinkTarget;
@@ -977,6 +1017,12 @@
         p.MetricsDiskPath = _metricsDiskPath.Trim();
         p.MetricsPollIntervalSeconds = Math.Clamp(_metricsPollIntervalSeconds, 0, 60);
         p.MetricsGraphWindowMinutes = Math.Clamp(_metricsGraphWindowMinutes, 0, 240);
+        p.NetworkPieChartSize = Math.Clamp(_networkPieChartSize, 32, 320);
+        p.NetworkPieStyle = _networkPieStyle;
+        p.NetworkPieShowSliceLabels = _networkPieShowSliceLabels;
+        p.NetworkLegendShowPercent = _networkLegendShowPercent;
+        p.NetworkLegendShowRate = _networkLegendShowRate;
+        p.NetworkLegendShowCpu = _networkLegendShowCpu;
         p.EnableClickThrough = _enableClickThrough;
         p.DeepLinkClickThrough = _deepLinkClickThrough;
         p.ExternalLinkTarget = _externalLinkTarget;

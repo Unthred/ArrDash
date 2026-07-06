@@ -11,15 +11,15 @@
 @inject IJSRuntime Js
 
 <MudPaper Class="@ShellClass" Elevation="0">
-        @if (Prefs.Current.StatusBarMode != StatusBarMode.Hidden && Services.Count > 0)
-        {
-            <ServiceStatusBar Services="Services"
-                              SampledAt="SampledAt"
-                              Mode="Prefs.Current.StatusBarMode"
-                              Alignment="Prefs.Current.StatusBarAlignment"
-                              SelectedServiceKey="@SelectedServiceKey"
-                              SelectedServiceKeyChanged="@SelectedServiceKeyChanged" />
-        }
+        <ServiceStatusBar Services="Services"
+                          SampledAt="SampledAt"
+                          Mode="Prefs.Current.StatusBarMode"
+                          Alignment="Prefs.Current.StatusBarAlignment"
+                          SelectedServiceKey="@SelectedServiceKey"
+                          SelectedServiceKeyChanged="@SelectedServiceKeyChanged"
+                          ShowNetworkPills="true"
+                          NetworkDetailOpen="_networkDetailOpen"
+                          OnToggleNetworkDetail="ToggleNetworkDetail" />
 
         <div class="server-metrics-head panel-header-rollup" title="Double-click to expand or collapse" @ondblclick="ToggleRollup">
             <div class="server-metrics-title-wrap">
@@ -442,10 +442,30 @@
             </div>
         </div>
         }
+
+        @if (_networkDetailOpen)
+        {
+            <div class="network-bandwidth-panels-row">
+                <NetworkBandwidthDetailPanel @key="NetworkBandwidthDirection.Download"
+                                             Direction="NetworkBandwidthDirection.Download"
+                                             Sessions="Sessions"
+                                             OnClose="CloseNetworkDetail" />
+                <NetworkBandwidthDetailPanel @key="NetworkBandwidthDirection.Upload"
+                                             Direction="NetworkBandwidthDirection.Upload"
+                                             Sessions="Sessions"
+                                             OnClose="CloseNetworkDetail" />
+            </div>
+        }
     </MudPaper>
 
 @code {
     [Parameter] public IReadOnlyList<ServiceHealth> Services { get; set; } = [];
+    [Parameter] public IReadOnlyList<ActiveSession> Sessions { get; set; } = [];
+
+    private bool _networkDetailOpen;
+
+    private void ToggleNetworkDetail() => _networkDetailOpen = !_networkDetailOpen;
+    private void CloseNetworkDetail() => _networkDetailOpen = false;
 
     private const string PanelId = "server-metrics";
     private const int ChartWidth = 640;

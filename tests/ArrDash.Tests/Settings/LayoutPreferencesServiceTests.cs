@@ -36,6 +36,22 @@ public class LayoutPreferencesServiceTests : IDisposable
     }
 
     [Fact]
+    public void SetPreview_and_Current_round_trip_preserves_all_preference_fields()
+    {
+        // Current clones the preview/saved preferences on every read via a manual,
+        // field-by-field Clone() -- unlike the Save/Load path above, this isn't a JSON round
+        // trip, so it silently drops any field someone adds to UserLayoutPreferences and forgets
+        // to also add to Clone(). That happened for real: the network breakdown panel's settings
+        // were unreachable through live preview because of exactly this.
+        var original = PreferencesTestFactory.CreateFullyPopulated();
+        _service.SetPreview(original);
+
+        var left = JsonSerializer.Serialize(original);
+        var right = JsonSerializer.Serialize(_service.Current);
+        Assert.Equal(left, right);
+    }
+
+    [Fact]
     public async Task Preview_overrides_saved_preferences_until_cleared()
     {
         await _service.SaveAsync(new UserLayoutPreferences { DashboardTitle = "Saved" });

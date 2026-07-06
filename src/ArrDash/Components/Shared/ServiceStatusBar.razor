@@ -1,11 +1,33 @@
 @using ArrDash.Models
 @using ArrDash.Services
 @using MudBlazor
+@implements IDisposable
+@inject UnraidActivityService UnraidActivityService
 
 <div class="service-status-wrap">
-    @if (FilteredServices.Count > 0)
+    @if (FilteredServices.Count > 0 || ShowNetworkPills)
     {
         <MudPaper Class="@BarClass" Elevation="0">
+            @if (ShowNetworkPills)
+            {
+                <div class="status-chip network-speed-chip is-online @(NetworkDetailOpen ? "is-selected" : "")"
+                     role="button" tabindex="0"
+                     @onclick="@(() => OnToggleNetworkDetail.InvokeAsync())"
+                     @onclick:stopPropagation="true"
+                     aria-label="Download throughput breakdown">
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" />
+                    <span class="status-name network-speed-value">@FormatThroughput(_latest?.RxBytesPerSecond ?? 0)</span>
+                </div>
+                <div class="status-chip network-speed-chip is-online @(NetworkDetailOpen ? "is-selected" : "")"
+                     role="button" tabindex="0"
+                     @onclick="@(() => OnToggleNetworkDetail.InvokeAsync())"
+                     @onclick:stopPropagation="true"
+                     aria-label="Upload throughput breakdown">
+                    <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" />
+                    <span class="status-name network-speed-value">@FormatThroughput(_latest?.TxBytesPerSecond ?? 0)</span>
+                </div>
+            }
+
             @foreach (var service in FilteredServices)
             {
                 var tooltip = GetTooltip(service, SampledAt);
@@ -44,6 +66,7 @@
                             ServiceDisplayName="@SelectedServiceDisplayName"
                             OnClose="ClearSelection" />
     }
+
 </div>
 
 @code {
@@ -60,6 +83,33 @@
     [Parameter] public StatusBarAlignment Alignment { get; set; } = StatusBarAlignment.Left;
     [Parameter] public string? SelectedServiceKey { get; set; }
     [Parameter] public EventCallback<string?> SelectedServiceKeyChanged { get; set; }
+    [Parameter] public bool ShowNetworkPills { get; set; }
+    [Parameter] public bool NetworkDetailOpen { get; set; }
+    [Parameter] public EventCallback OnToggleNetworkDetail { get; set; }
+
+    private static readonly TimeSpan NetworkPollInterval = TimeSpan.FromSeconds(5);
+
+    private NetworkThroughput? _latest;
+    private System.Threading.Timer? _networkTimer;
+
+    protected override void OnInitialized()
+    {
+        if (ShowNetworkPills)
+            _networkTimer = new System.Threading.Timer(async _ => await PollNetworkAsync(), null, TimeSpan.Zero, NetworkPollInterval);
+    }
+
+    private async Task PollNetworkAsync()
+    {
+        var activity = await UnraidActivityService.ReadAsync(CancellationToken.None);
+        if (activity?.Network is not { } net)
+            return;
+
+        _latest = net;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatThroughput(long bytesPerSecond) => $"{ByteDisplayHelper.Format(bytesPerSecond)}/s";
 
     private string BarClass => Alignment switch
     {
@@ -170,4 +220,6 @@
 
         return classes;
     }
+
+    public void Dispose() => _networkTimer?.Dispose();
 }

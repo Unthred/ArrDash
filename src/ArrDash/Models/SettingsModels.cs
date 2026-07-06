@@ -46,6 +46,13 @@ public enum BackgroundStyle
     Minimal
 }
 
+public enum NetworkPieStyle
+{
+    Flat,
+    Soft,
+    Glossy
+}
+
 public enum BorderRadiusStyle
 {
     Rounded,
@@ -142,7 +149,8 @@ public static class PanelCatalog
         ("recent-tv", "Recent TV", "#35c5f4"),
         ("recent-movies", "Recent Movies", "#f5c518"),
         ("recent-audiobooks", "Recent Audiobooks", "#00d2be"),
-        ("recent-music", "Recent Music", "#bc93e1")
+        ("recent-music", "Recent Music", "#bc93e1"),
+        ("chaptarr-abs-sync", "Chaptarr Sync", "#f97316")
     ];
 
     public static readonly (string Id, string Label)[] Recent =

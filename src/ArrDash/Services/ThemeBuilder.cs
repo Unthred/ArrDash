@@ -85,8 +85,11 @@ public static class ThemeBuilder
         var textSecondary = isDarkMode ? "#94a3b8" : "#64748b";
         var button = ResolveButtonColor(prefs);
         var accent = ResolveAccentColor(prefs);
+        var vizSeries = isDarkMode ? VizSeriesDark : VizSeriesLight;
+        var vizMuted = isDarkMode ? "#5a5a68" : "#9a9aa8";
 
-        return string.Join(';',
+        var vars = new List<string>
+        {
             $"--arrdash-bg:{bg}",
             $"--arrdash-gradient-start:{gradientStart}",
             $"--arrdash-gradient-end:{gradientEnd}",
@@ -96,8 +99,22 @@ public static class ThemeBuilder
             $"--mud-palette-background:{bg}",
             $"--mud-palette-surface:{surface}",
             $"--mud-palette-text-primary:{textPrimary}",
-            $"--mud-palette-text-secondary:{textSecondary}") + ";";
+            $"--mud-palette-text-secondary:{textSecondary}",
+            $"--viz-muted:{vizMuted}"
+        };
+        for (var i = 0; i < vizSeries.Length; i++)
+            vars.Add($"--viz-series-{i + 1}:{vizSeries[i]}");
+
+        return string.Join(';', vars) + ";";
     }
+
+    // Fixed categorical palette (dataviz skill reference instance) — order is the CVD-safety
+    // mechanism (max adjacent ΔE), so slots must stay in this order, not be re-sorted per use.
+    // Validated against this app's default light/dark surfaces via validate_palette.js.
+    private static readonly string[] VizSeriesLight =
+        ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948", "#e87ba4", "#eb6834"];
+    private static readonly string[] VizSeriesDark =
+        ["#3987e5", "#199e70", "#c98500", "#008300", "#9085e9", "#e66767", "#d55181", "#d95926"];
 
     public static string ResolveAccentColor(UserLayoutPreferences prefs) =>
         NormalizeColor(prefs.PrimaryColor, "#6366f1");

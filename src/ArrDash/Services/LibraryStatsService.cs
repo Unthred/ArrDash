@@ -17,12 +17,15 @@ public sealed class LibraryStatsService(
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
 
-    public async Task<IReadOnlyList<LibraryStatItem>> GetAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<LibraryStatItem>> GetAsync(CancellationToken ct = default, bool force = false)
     {
-        lock (_lock)
+        if (!force)
         {
-            if (_cached.Count > 0 && DateTimeOffset.UtcNow - _cachedAt < CacheTtl)
-                return _cached;
+            lock (_lock)
+            {
+                if (_cached.Count > 0 && DateTimeOffset.UtcNow - _cachedAt < CacheTtl)
+                    return _cached;
+            }
         }
 
         var tasks = new List<Task<LibraryStatItem?>>();
