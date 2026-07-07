@@ -25,6 +25,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Upgraded to .NET 10 (was .NET 8) — `TargetFramework`, Dockerfile base images, and docs updated ([#32](https://github.com/Unthred/ArrDash/issues/32))
 - Repository renamed to [Unthred/ArrDash](https://github.com/Unthred/ArrDash) (was `arrdash-blazor`; old URLs redirect)
 - Host metrics: portable defaults (`Host`, disk `/`); Settings overrides for host label and disk path(s); docs for non-Unraid platforms ([#4](https://github.com/Unthred/ArrDash/issues/4))
 - `docker-compose.example.yml`: optional Unraid mounts (`var.ini`, `disks.ini`, `docker.sock`) and `ARRDASH_NET_INTERFACE`

@@ -4,7 +4,7 @@
 
 **ArrDash** is a [Blazor Server](https://dotnet.microsoft.com/apps/aspnet/web-apps/blazor) dashboard for homelab media stacks. It aggregates recent downloads from the *arr apps, audiobooks from Chaptarr and AudioBookShelf, music from Lidarr, and live playback from Plex, Emby, and Jellyfin — in one configurable UI.
 
-![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4)
+![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)
 ![MudBlazor](https://img.shields.io/badge/UI-MudBlazor-594AE2)
 
 ## Features
@@ -49,7 +49,7 @@ Open **http://localhost:7979**. Further setup (reverse proxy, Unraid, secrets) i
 
 ## Stack
 
-- **.NET 8** — Blazor Server (interactive)
+- **.NET 10** — Blazor Server (interactive)
 - **MudBlazor 7** — UI components
 - **SignalR** — live dashboard updates
 - **Docker** — recommended deployment

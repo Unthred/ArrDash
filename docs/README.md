@@ -28,7 +28,7 @@ Complete reference for installing, configuring, and developing ArrDash.
 |------|---------|
 | `README.md` | Project overview |
 | `docker-compose.example.yml` | Sample Compose file (no secrets) |
-| `Dockerfile` | Multi-stage .NET 8 build |
+| `Dockerfile` | Multi-stage .NET 10 build |
 | `unraid/my-arrdash.xml` | Unraid Community Applications template stub |
 | `CHECKPOINT.md` | Maintainer notes (optional) |
 | `AGENTS.md` | Cursor / agent workflow entry point |
