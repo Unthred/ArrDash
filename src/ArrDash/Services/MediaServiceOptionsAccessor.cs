@@ -40,6 +40,7 @@ public sealed class MediaServiceOptionsAccessor
             Emby = CloneEndpoint(_options.Value.Emby),
             Jellyfin = CloneEndpoint(_options.Value.Jellyfin),
             Tautulli = CloneEndpoint(_options.Value.Tautulli),
+            Tracearr = CloneEndpoint(_options.Value.Tracearr),
             Plex = new PlexOptions
             {
                 Url = _options.Value.Plex.Url,

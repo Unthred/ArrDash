@@ -1,0 +1,119 @@
+@using ArrDash.Models
+
+<div class="activity-line-chart-wrap">
+    <div class="activity-line-chart-y">
+        <span>@_maxLabel</span>
+        <span>0</span>
+    </div>
+    <div class="activity-line-chart-main">
+        <svg viewBox="0 0 @Width @Height" preserveAspectRatio="none" class="activity-line-chart" role="img" aria-label="@AriaLabel">
+            @if (!string.IsNullOrEmpty(_areaPath))
+            {
+                <defs>
+                    <linearGradient id="@_gradientId" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="@Accent" stop-opacity="0.35" />
+                        <stop offset="100%" stop-color="@Accent" stop-opacity="0.02" />
+                    </linearGradient>
+                </defs>
+                @foreach (var y in _gridYs)
+                {
+                    <line x1="0" y1="@F(y)" x2="@Width" y2="@F(y)" class="activity-line-chart-grid" />
+                }
+                <path d="@_areaPath" fill="url(#@_gradientId)" />
+                <path d="@_linePath" class="activity-line-chart-stroke" stroke="@Accent" fill="none" />
+                @foreach (var pt in _plotPoints)
+                {
+                    <circle cx="@F(pt.X)" cy="@F(pt.Y)" r="@(Points.Count <= 14 ? "3.5" : "2")" fill="@Accent">
+                        <title>@pt.Label: @FormatValue(pt.Value) plays</title>
+                    </circle>
+                }
+            }
+        </svg>
+        <div class="activity-line-chart-x">
+            @foreach (var label in _xLabels)
+            {
+                <span style="left:@($"{label.Pct:0.#}%")">@label.Text</span>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ActivityChartPoint> Points { get; set; } = [];
+    [Parameter] public double Width { get; set; } = 640;
+    [Parameter] public double Height { get; set; } = 180;
+    [Parameter] public string Accent { get; set; } = "#38bdf8";
+    [Parameter] public string AriaLabel { get; set; } = "Plays over time";
+
+    private string _linePath = "";
+    private string _areaPath = "";
+    private string _maxLabel = "0";
+    private string _gradientId = $"act-{Guid.NewGuid():N}";
+    private List<(double X, double Y, string Label, double Value)> _plotPoints = [];
+    private List<double> _gridYs = [];
+    private List<(string Text, double Pct)> _xLabels = [];
+
+    protected override void OnParametersSet() => Build();
+
+    private void Build()
+    {
+        _plotPoints = [];
+        _gridYs = [];
+        _xLabels = [];
+        if (Points.Count == 0)
+        {
+            _linePath = "";
+            _areaPath = "";
+            _maxLabel = "0";
+            return;
+        }
+
+        var max = Points.Max(p => p.Value);
+        if (max <= 0)
+            max = 1;
+        _maxLabel = FormatValue(max);
+
+        const double padTop = 8;
+        const double padBottom = 4;
+        var plotH = Height - padTop - padBottom;
+
+        _gridYs =
+        [
+            padTop,
+            padTop + plotH * 0.5,
+            Height - padBottom
+        ];
+
+        _plotPoints = Points.Select((p, i) =>
+        {
+            var x = Points.Count == 1 ? Width / 2 : i * Width / (Points.Count - 1);
+            var y = Height - padBottom - (p.Value / max) * plotH;
+            return (X: x, Y: y, p.Label, p.Value);
+        }).ToList();
+
+        _linePath = "M " + string.Join(" L ", _plotPoints.Select(c => $"{F(c.X)},{F(c.Y)}"));
+        _areaPath = _linePath
+            + $" L {F(_plotPoints[^1].X)},{F(Height)}"
+            + $" L {F(_plotPoints[0].X)},{F(Height)} Z";
+
+        var labelIndexes = PickLabelIndexes(Points.Count);
+        _xLabels = labelIndexes
+            .Select(i => (
+                Text: Points[i].Label,
+                Pct: Points.Count == 1 ? 50 : i * 100.0 / (Points.Count - 1)))
+            .ToList();
+    }
+
+    private static IReadOnlyList<int> PickLabelIndexes(int count)
+    {
+        if (count <= 1) return [0];
+        if (count <= 6) return Enumerable.Range(0, count).ToList();
+        if (count <= 12) return [0, count / 3, (count * 2) / 3, count - 1];
+        return [0, count / 4, count / 2, (count * 3) / 4, count - 1];
+    }
+
+    private static string FormatValue(double value) =>
+        value >= 100 ? value.ToString("0") : value.ToString("0.#");
+
+    private static string F(double v) => $"{v:0.##}";
+}

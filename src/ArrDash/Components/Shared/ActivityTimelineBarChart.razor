@@ -1,0 +1,111 @@
+@using ArrDash.Models
+
+<div class="activity-timeline-chart-wrap">
+    <div class="activity-timeline-chart-y">
+        <span>@_maxLabel</span>
+        <span>0</span>
+    </div>
+    <div class="activity-timeline-chart-main">
+        <svg viewBox="0 0 @Width @Height" preserveAspectRatio="none" class="activity-timeline-chart" role="img" aria-label="@AriaLabel">
+            @if (Points.Count > 0)
+            {
+                @foreach (var y in _gridYs)
+                {
+                    <line x1="0" y1="@F(y)" x2="@Width" y2="@F(y)" class="activity-line-chart-grid" />
+                }
+                @foreach (var (pt, i) in Points.Select((p, idx) => (p, idx)))
+                {
+                    var h = _maxValue > 0 ? (pt.Value / _maxValue) * _plotHeight : 0;
+                    var x = i * _gap + (_gap - _barWidth) / 2;
+                    var y = Height - _padBottom - h;
+                    <rect x="@F(x)" y="@F(y)" width="@F(_barWidth)" height="@F(Math.Max(h, 1))"
+                          rx="2" fill="@Accent" opacity="0.92">
+                        <title>@pt.Label: @FormatValue(pt.Value)</title>
+                    </rect>
+                }
+            }
+        </svg>
+        <div class="activity-line-chart-x @(_denseLabels ? "activity-line-chart-x--dense" : null)">
+            @foreach (var label in _xLabels)
+            {
+                <span style="left:@($"{label.Pct:0.#}%")">@label.Text</span>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ActivityChartPoint> Points { get; set; } = [];
+    [Parameter] public double Width { get; set; } = 640;
+    [Parameter] public double Height { get; set; } = 180;
+    [Parameter] public string Accent { get; set; } = "#38bdf8";
+    [Parameter] public string AriaLabel { get; set; } = "Plays over time";
+    [Parameter] public bool Hours { get; set; }
+    [Parameter] public bool ShowAllLabels { get; set; }
+
+    private string _maxLabel = "0";
+    private bool _denseLabels;
+    private double _maxValue;
+    private double _plotHeight;
+    private double _barWidth;
+    private double _gap;
+    private const double _padTop = 8;
+    private const double _padBottom = 4;
+    private List<double> _gridYs = [];
+    private List<(string Text, double Pct)> _xLabels = [];
+
+    protected override void OnParametersSet() => Build();
+
+    private void Build()
+    {
+        _gridYs = [];
+        _xLabels = [];
+        if (Points.Count == 0)
+        {
+            _maxValue = 0;
+            _maxLabel = "0";
+            _barWidth = 0;
+            _gap = 0;
+            return;
+        }
+
+        _gap = Width / Points.Count;
+        _barWidth = Math.Max(2, _gap * 0.72);
+
+        _maxValue = Points.Max(p => p.Value);
+        if (_maxValue <= 0)
+            _maxValue = 1;
+        _maxLabel = FormatValue(_maxValue);
+        _plotHeight = Height - _padTop - _padBottom;
+
+        _gridYs =
+        [
+            _padTop,
+            _padTop + _plotHeight * 0.5,
+            Height - _padBottom
+        ];
+
+        var labelIndexes = ShowAllLabels
+            ? Enumerable.Range(0, Points.Count).ToList()
+            : PickLabelIndexes(Points.Count);
+        _denseLabels = ShowAllLabels && Points.Count > 7;
+        _xLabels = labelIndexes
+            .Select(i => (
+                Text: Points[i].Label,
+                Pct: Points.Count == 1 ? 50 : i * 100.0 / (Points.Count - 1)))
+            .ToList();
+    }
+
+    private static IReadOnlyList<int> PickLabelIndexes(int count)
+    {
+        if (count <= 1) return [0];
+        if (count <= 6) return Enumerable.Range(0, count).ToList();
+        if (count <= 12) return [0, count / 3, (count * 2) / 3, count - 1];
+        return [0, count / 4, count / 2, (count * 3) / 4, count - 1];
+    }
+
+    private string FormatValue(double value) =>
+        Hours ? $"{value:0.#}h" : value >= 100 ? value.ToString("0") : value.ToString("0.#");
+
+    private static string F(double v) => $"{v:0.##}";
+}

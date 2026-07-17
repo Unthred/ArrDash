@@ -1,0 +1,248 @@
+@page "/activity/users"
+@using ArrDash.Models
+@using ArrDash.Components.Activity
+@inject UserActivityService UserActivitySvc
+@inject ActivitySourceAvailability SourceAvailability
+@implements IDisposable
+
+<PageTitle>User activity · ArrDash</PageTitle>
+
+<div class="activity-page user-activity-page">
+    <header class="activity-page-header">
+        <div>
+            <h1 class="activity-page-title">User activity</h1>
+            <p class="activity-page-sub">Who watches the most — ranked by watch time. Click a user for genres, top titles, and plays.</p>
+        </div>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Dashboard" Href="/">
+            Dashboard
+        </MudButton>
+    </header>
+
+    <nav class="activity-subnav">
+        <MudButton Variant="Variant.Text" Href="/activity" Class="activity-subnav-link">Overview</MudButton>
+        <MudButton Variant="Variant.Filled" Href="/activity/users" Class="activity-subnav-link is-active">Users</MudButton>
+    </nav>
+
+    <div class="activity-toolbar">
+        <ActivityPeriodFilter Period="_range.Period"
+                              CustomStartUtc="_range.CustomStartUtc"
+                              CustomEndUtc="_range.CustomEndUtc"
+                              RangeChanged="OnRangeChanged" />
+
+        @if (_filters.Count > 0)
+        {
+            <MudToggleGroup T="WatchStatsSourceFilter"
+                            Value="_source"
+                            ValueChanged="SetSource"
+                            Rounded="true"
+                            SelectedClass="segmented-toggle-selected"
+                            Class="arrdash-segmented-toggle watch-stats-chips activity-filter-toggle">
+                @foreach (var filter in _filters)
+                {
+                    <MudToggleItem T="WatchStatsSourceFilter" Value="filter" Text="@FilterLabel(filter)" />
+                }
+            </MudToggleGroup>
+        }
+    </div>
+
+    @if (ShowInitialLoading)
+    {
+        <div class="activity-loading">
+            <MudProgressCircular Indeterminate="true" />
+            <span>Loading users…</span>
+        </div>
+    }
+    else if (_snapshot is null || _filters.Count == 0)
+    {
+        <div class="activity-empty">No watch stats sources configured. Add Tautulli and/or Tracearr in Settings.</div>
+    }
+    else if (_snapshot.Users.Count == 0)
+    {
+        <div class="activity-empty">No user watch data for @WatchStatsPeriodHelper.Label(_range). Try 1y or All.</div>
+    }
+    else
+    {
+        <div class="activity-kpi-grid">
+            <div class="activity-kpi-card accent-sky">
+                <div class="activity-kpi-label">Total watch time</div>
+                <div class="activity-kpi-value">@_snapshot.TotalHours.ToString("0.#")<span>h</span></div>
+            </div>
+            <div class="activity-kpi-card accent-violet">
+                <div class="activity-kpi-label">Active users</div>
+                <div class="activity-kpi-value">@_snapshot.UserCount</div>
+            </div>
+            <div class="activity-kpi-card accent-emerald">
+                <div class="activity-kpi-label">Top user</div>
+                <div class="activity-kpi-value user-activity-kpi-name">@(_snapshot.Leader?.Username ?? "—")</div>
+                @if (_snapshot.Leader is { } leader)
+                {
+                    <div class="activity-kpi-sub">@leader.Hours.ToString("0.#")h · @leader.SharePercent.ToString("0.#")% of household</div>
+                }
+            </div>
+            <div class="activity-kpi-card accent-amber">
+                <div class="activity-kpi-label">Avg per user</div>
+                <div class="activity-kpi-value">@_snapshot.AverageHoursPerUser.ToString("0.#")<span>h</span></div>
+            </div>
+        </div>
+
+        <div class="activity-chart-grid user-activity-chart-grid">
+            <MudPaper Class="activity-card activity-card-chart" Elevation="0">
+                <div class="activity-card-title">Watch time by user</div>
+                <div class="activity-card-hint">Share of household watch time. Hover a slice to highlight; click to highlight the matching table row.</div>
+                @if (_snapshot.HoursByUser.Count > 0)
+                {
+                    <ActivityPieChart Rows="_snapshot.HoursByUser"
+                                      Hours="true"
+                                      AriaLabel="Watch time by user"
+                                      MaxSlices="8"
+                                      SelectedLabel="_selectedPieUser"
+                                      SelectedLabelChanged="OnPieUserSelected" />
+                }
+            </MudPaper>
+
+            @if (_snapshot.Leader is { } top)
+            {
+                <MudPaper Class="activity-card activity-card-chart user-activity-leader-card" Elevation="0">
+                    <div class="activity-card-title">#1 this period</div>
+                    <div class="user-activity-leader-spotlight">
+                        @if (!string.IsNullOrWhiteSpace(top.AvatarUrl))
+                        {
+                            <img class="user-activity-leader-avatar" src="@top.AvatarUrl" alt="" />
+                        }
+                        else
+                        {
+                            <span class="user-activity-leader-avatar user-activity-rank-avatar-fallback">
+                                <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" />
+                            </span>
+                        }
+                        <div class="user-activity-leader-body">
+                            <div class="user-activity-leader-name">@top.Username</div>
+                            <div class="user-activity-leader-stats">
+                                @top.Hours.ToString("0.#")h · @top.Plays.ToString("N0") plays · @top.SharePercent.ToString("0.#")%
+                            </div>
+                            @if (top.SourceBreakdown is { Count: > 0 })
+                            {
+                                <div class="user-activity-leader-sources">@string.Join(" · ", top.SourceBreakdown)</div>
+                            }
+                        </div>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" OnClick="() => OpenUser(top)">View plays</MudButton>
+                    </div>
+                </MudPaper>
+            }
+        </div>
+
+        <MudPaper Class="activity-card user-activity-table-card" Elevation="0">
+            <div class="activity-card-title">All users · @WatchStatsPeriodHelper.Label(_range)</div>
+            <UserActivityRankList Users="_snapshot.Users"
+                                  HighlightedUsername="_selectedPieUser"
+                                  OnRowClick="OpenUser" />
+        </MudPaper>
+    }
+</div>
+
+<ActivityDetailDrawer @ref="_drawer" />
+
+@code {
+    private WatchStatsRange _range = WatchStatsRange.Year;
+    private WatchStatsSourceFilter _source = WatchStatsSourceFilter.Combined;
+    private UserActivitySnapshot? _snapshot;
+    private IReadOnlyList<WatchStatsSourceFilter> _filters = [];
+    private bool _refreshing;
+    private bool _hasLoaded;
+    private string? _selectedPieUser;
+    private ActivityDetailDrawer? _drawer;
+
+    private bool ShowInitialLoading => !_hasLoaded && _refreshing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _filters = await SourceAvailability.GetAvailableFiltersAsync();
+        if (_filters.Count > 0 && !_filters.Contains(_source))
+            _source = _filters[0];
+        await RefreshAsync(force: false);
+    }
+
+    private static string FilterLabel(WatchStatsSourceFilter filter) => filter switch
+    {
+        WatchStatsSourceFilter.Combined => "Combined",
+        WatchStatsSourceFilter.Plex => "Plex",
+        WatchStatsSourceFilter.Emby => "Emby",
+        WatchStatsSourceFilter.Jellyfin => "Jellyfin",
+        _ => filter.ToString()
+    };
+
+    private async Task OnRangeChanged((WatchStatsPeriod Period, DateTime? StartUtc, DateTime? EndUtc) args)
+    {
+        var next = new WatchStatsRange(args.Period, args.StartUtc, args.EndUtc);
+        if (!next.IsQueryable || WatchStatsPeriodHelper.RangesEqual(_range, next))
+            return;
+
+        _range = next;
+        _selectedPieUser = null;
+        await RefreshAsync(force: true);
+    }
+
+    private Task OnPieUserSelected(string? username)
+    {
+        _selectedPieUser = username;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SetSource(WatchStatsSourceFilter source)
+    {
+        if (_source == source) return;
+        _source = source;
+        await RefreshAsync(force: true);
+    }
+
+    private async Task RefreshAsync(bool force)
+    {
+        if (_refreshing)
+            return;
+
+        _refreshing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            _snapshot = await UserActivitySvc.GetAsync(_range, _source, force);
+            _hasLoaded = true;
+        }
+        finally
+        {
+            _refreshing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task OpenUser(UserActivityRow user)
+    {
+        _selectedPieUser = user.Username;
+        if (_drawer is null)
+            return;
+
+        var row = new WatchStatRow(
+            user.Username,
+            user.SourceBreakdown is { Count: > 0 } ? string.Join(" · ", user.SourceBreakdown) : user.ServerName,
+            user.Hours,
+            user.Plays,
+            user.AvatarUrl,
+            null,
+            null,
+            user.SourceBreakdown,
+            user.DrilldownKey,
+            ActivityDrilldownKind.User);
+
+        var sourceFilter = _source switch
+        {
+            WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
+            WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
+            WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
+            _ => null
+        };
+
+        await _drawer.OpenAsync(row, _range, sourceFilter);
+    }
+
+    public void Dispose() { }
+}

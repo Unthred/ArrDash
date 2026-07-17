@@ -1,0 +1,71 @@
+@using ArrDash.Models
+
+<div class="user-activity-rank-list">
+    @if (Users.Count == 0)
+    {
+        <div class="activity-card-empty">No users with watch time in this period</div>
+    }
+    else
+    {
+        <div class="user-activity-rank-header">
+            <span>#</span>
+            <span>User</span>
+            <span>Share</span>
+            <span>Watch time</span>
+            <span>Plays</span>
+        </div>
+        @foreach (var user in Users)
+        {
+            <button type="button" class="user-activity-rank-row @(IsHighlighted(user) ? "is-highlighted" : null)" @onclick="() => OnUserClick(user)">
+                <span class="user-activity-rank-num">@user.Rank</span>
+                <div class="user-activity-rank-user">
+                    @if (!string.IsNullOrWhiteSpace(user.AvatarUrl))
+                    {
+                        <img class="user-activity-rank-avatar" src="@user.AvatarUrl" alt="" loading="lazy" />
+                    }
+                    else
+                    {
+                        <span class="user-activity-rank-avatar user-activity-rank-avatar-fallback">
+                            <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                        </span>
+                    }
+                    <div class="user-activity-rank-names">
+                        <span class="user-activity-rank-name">@user.Username</span>
+                        @if (!string.IsNullOrWhiteSpace(user.DisplayName) && !string.Equals(user.DisplayName, user.Username, StringComparison.OrdinalIgnoreCase))
+                        {
+                            <span class="user-activity-rank-display">@user.DisplayName</span>
+                        }
+                        @if (user.SourceBreakdown is { Count: > 0 })
+                        {
+                            <span class="user-activity-rank-sources">@string.Join(" · ", user.SourceBreakdown)</span>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(user.ServerName))
+                        {
+                            <span class="user-activity-rank-sources">@user.ServerName</span>
+                        }
+                    </div>
+                </div>
+                <div class="user-activity-rank-share">
+                    <div class="user-activity-share-track">
+                        <div class="user-activity-share-fill" style="width:@($"{user.SharePercent:0.#}%")"></div>
+                    </div>
+                    <span class="user-activity-share-pct">@user.SharePercent.ToString("0.#")%</span>
+                </div>
+                <span class="user-activity-rank-hours">@user.Hours.ToString("0.#")h</span>
+                <span class="user-activity-rank-plays">@user.Plays.ToString("N0")</span>
+            </button>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<UserActivityRow> Users { get; set; } = [];
+    [Parameter] public EventCallback<UserActivityRow> OnRowClick { get; set; }
+    [Parameter] public string? HighlightedUsername { get; set; }
+
+    private bool IsHighlighted(UserActivityRow user) =>
+        !string.IsNullOrWhiteSpace(HighlightedUsername)
+        && string.Equals(user.Username, HighlightedUsername, StringComparison.OrdinalIgnoreCase);
+
+    private Task OnUserClick(UserActivityRow user) => OnRowClick.InvokeAsync(user);
+}

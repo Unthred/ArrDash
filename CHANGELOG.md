@@ -8,6 +8,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Canonical `PlayEvents` warehouse for Activity reporting — ingest from Tautulli/Plex PMS and Tracearr/Playback Reporting; charts and drilldowns read the local DB only ([#34](https://github.com/Unthred/ArrDash/issues/34))
+- Activity page: popular titles, top libraries, peak concurrent streams, library include/exclude picker in Settings ([#34](https://github.com/Unthred/ArrDash/issues/34))
 - Service activity icons on status bar chips — live workload from *arr commands/queue, ABS scans, and streaming transcodes ([#5](https://github.com/Unthred/ArrDash/issues/5))
 - Activity detection counts **active** work only (`started` commands; `importing`/`downloading` queue items — not `importBlocked`) ([#6](https://github.com/Unthred/ArrDash/issues/6))
 - Activity tooltips show data freshness (`Checked Xs ago`) ([#14](https://github.com/Unthred/ArrDash/issues/14))

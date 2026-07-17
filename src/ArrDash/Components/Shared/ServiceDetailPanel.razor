@@ -4,6 +4,7 @@
 @inject ServiceDetailService DetailService
 @inject ExternalLinkService ExternalLink
 @inject LayoutPreferencesService Prefs
+@inject DashboardState DashboardState
 @implements IDisposable
 
 @if (!string.IsNullOrWhiteSpace(ServiceKey))
@@ -179,6 +180,7 @@
     private string? _error;
     private int _loadGeneration;
     private CancellationTokenSource? _loadCts;
+    private Action<DashboardSnapshot>? _dashboardChangedHandler;
 
     private string HeaderTitle =>
         _detail?.Name
@@ -194,6 +196,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _dashboardChangedHandler = snapshot =>
+        {
+            if (!string.IsNullOrWhiteSpace(ServiceKey))
+                _ = LoadAsync(ServiceKey);
+        };
+        DashboardState.Changed += _dashboardChangedHandler;
+
         if (!string.IsNullOrWhiteSpace(ServiceKey))
             await LoadAsync(ServiceKey);
     }
@@ -206,9 +215,10 @@
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
-        _loading = true;
+        // Stale-while-revalidate: keep the open panel readable while a dashboard refresh
+        // re-fetches detail so pills and the detail sheet stay in sync.
+        _loading = _detail is null;
         _error = null;
-        _detail = null;
 
         try
         {
@@ -310,5 +320,11 @@
         return buffer.ToString();
     }
 
-    public void Dispose() => ResetState();
+    public void Dispose()
+    {
+        if (_dashboardChangedHandler is not null)
+            DashboardState.Changed -= _dashboardChangedHandler;
+
+        ResetState();
+    }
 }

@@ -1,0 +1,33 @@
+@using ArrDash.Models
+
+<div class="activity-bar-chart">
+    @foreach (var row in VisibleRows)
+    {
+        var pct = MaxValue > 0 ? row.Value / MaxValue * 100 : 0;
+        <div class="activity-bar-row">
+            <div class="activity-bar-label" title="@row.Label">@row.Label</div>
+            <div class="activity-bar-track">
+                <div class="activity-bar-fill" style="width:@($"{pct:0.#}%"); --bar-color:@Accent"></div>
+            </div>
+            <div class="activity-bar-value">@FormatValue(row.Value)</div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ActivityChartPoint> Rows { get; set; } = [];
+    [Parameter] public int MaxRows { get; set; } = 8;
+    [Parameter] public string Accent { get; set; } = "#38bdf8";
+    [Parameter] public bool Hours { get; set; }
+    [Parameter] public bool SortByValue { get; set; } = true;
+
+    private IReadOnlyList<ActivityChartPoint> VisibleRows =>
+        (SortByValue ? Rows.OrderByDescending(r => r.Value) : Rows.AsEnumerable())
+        .Take(MaxRows)
+        .ToList();
+
+    private double MaxValue => VisibleRows.Count == 0 ? 0 : VisibleRows.Max(r => r.Value);
+
+    private string FormatValue(double value) =>
+        Hours ? $"{value:0.#}h" : $"{value:0}";
+}

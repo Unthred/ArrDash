@@ -20,7 +20,27 @@ ArrDash integrates with the following apps via their HTTP APIs.
 | **Emby** | Now Playing | API key |
 | **Jellyfin** | Now Playing | API key |
 | **slskd** | Status / future | API key (optional) |
-| **Tautulli** | Reserved in config | API key (not wired to UI yet) |
+| **Tautulli** | Optional Plex history bootstrap (richer fields) | API key |
+| **Tracearr** | Optional Emby/Jellyfin history bootstrap | API key |
+
+## Watch history warehouse (Activity page)
+
+Activity reporting reads **only** the local `PlayEvents` database (`arrdash.db`). Ingest adapters write into it; charts and drilldowns never call Tautulli/Tracearr at query time.
+
+| Setup | Bootstrap ingest | Ongoing without enricher |
+|-------|------------------|---------------------------|
+| **Plex only** | PMS `/status/sessions/history/all` | Same Plex API |
+| **Plex + Tautulli** | Full Tautulli history import | Plex API after you disconnect Tautulli |
+| **Emby/JF only** | Playback Reporting plugin (if installed) | Plugin or forward capture |
+| **Emby/JF + Tracearr** | Tracearr history import | Tracearr optional after backfill |
+
+Enable **Watch stats sync** in Settings and wait for the first backfill. Tautulli/Tracearr are optional accelerators — not required for ArrDash to run.
+
+**Backfill vs retention:** Settings **Backfill days** (0 = server default, 365) controls how far back the *first* import reaches. **Retention days** (0 = default 365) controls how long events are kept — it must be ≥ your backfill window or older imported rows are pruned on the next sync.
+
+**Libraries:** Activity can include all libraries (default) or a subset chosen in Settings → Watch stats. Picker shows each server's real library names (not hardcoded “TV Shows” / “Movies”). Movies/TV/Music chart buckets still use media type (`movie` / `episode` / `music`), not library titles.
+
+**Emby:** Prefer Tracearr for history bootstrap when configured. Emby Playback Reporting plugin is a fallback; if its playlist API is empty, Tracearr remains the source of truth.
 
 ## Per-service setup
 
@@ -43,10 +63,18 @@ Chaptarr history may fail if Chaptarr's database is unhealthy — ArrDash shows 
 2. Set `PLEX_URL` to your server base URL (HTTPS recommended)
 3. Set `PLEX_TOKEN`
 
-### Emby / Jellyfin
+### Tautulli (optional)
 
-1. **Dashboard → Advanced → API Keys**
+1. In Tautulli: **Settings → Web Interface** → copy API key
+2. Set `TAUTULLI_URL` and `TAUTULLI_API_KEY`
+3. When configured, ArrDash imports Plex watch history into `PlayEvents` on a schedule (bootstrap). After backfill completes, Activity works from the warehouse; Tautulli is only needed for ongoing enrichment if you want its extra fields.
+
+### Emby / Jellyfin Playback Reporting
+
+1. **Dashboard → Advanced → API Keys** — create or copy an API key
 2. Set `EMBY_URL` / `JELLYFIN_URL` and matching API key env vars
+3. For **Watch Stats**, install the **Playback Reporting** plugin on each server
+4. ArrDash reads live sessions via the standard Emby/Jellyfin API and watch history via the plugin's `user_usage_stats` endpoints
 
 Both use the same session and image API shape; ArrDash treats them as separate sources with independent toggles in Settings → Playback.
 

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Xml.Linq;
 using ArrDash.Configuration;
+using ArrDash.Services.Clients;
 
 namespace ArrDash.Services;
 
@@ -9,7 +10,9 @@ public sealed record ServiceTestInput(string? Url, string? ApiKeyOrToken);
 
 public sealed class ServiceConnectionTester(
     IHttpClientFactory httpClientFactory,
-    MediaServiceOptionsAccessor optionsAccessor)
+    MediaServiceOptionsAccessor optionsAccessor,
+    TautulliClient tautulli,
+    TracearrClient tracearr)
 {
     public Task<(bool Ok, string Message)> TestAsync(string serviceKey, CancellationToken ct) =>
         TestAsync(serviceKey, null, ct);
@@ -29,6 +32,8 @@ public sealed class ServiceConnectionTester(
                 "plex" => await TestPlex(options.Plex, input, ct),
                 "emby" => await TestEmbyLike(options.Emby, input, "Emby", ct),
                 "jellyfin" => await TestEmbyLike(options.Jellyfin, input, "Jellyfin", ct),
+                "tautulli" => await TestTautulli(input, ct),
+                "tracearr" => await TestTracearr(input, ct),
                 "slskd" => TestSlskd(ResolveEndpoint(options.Slskd, input), "slskd"),
                 _ => (false, "Unknown service")
             };
@@ -151,6 +156,41 @@ public sealed class ServiceConnectionTester(
         return response.IsSuccessStatusCode
             ? (true, "Connected")
             : (false, $"HTTP {(int)response.StatusCode}");
+    }
+
+    private async Task<(bool Ok, string Message)> TestTautulli(ServiceTestInput? input, CancellationToken ct)
+    {
+        if (input?.Url is not null || input?.ApiKeyOrToken is not null)
+        {
+            var endpoint = ResolveEndpoint(optionsAccessor.Options.Tautulli, input);
+            if (string.IsNullOrWhiteSpace(endpoint.Url) || string.IsNullOrWhiteSpace(endpoint.ApiKey))
+                return (false, "Tautulli URL or API key required");
+
+            var client = httpClientFactory.CreateClient(nameof(ServiceConnectionTester));
+            var url = $"{endpoint.Url.TrimEnd('/')}/api/v2?apikey={Uri.EscapeDataString(endpoint.ApiKey)}&cmd=get_server_info";
+            using var response = await client.GetAsync(url, ct);
+            return response.IsSuccessStatusCode ? (true, "Connected") : (false, $"HTTP {(int)response.StatusCode}");
+        }
+
+        return await tautulli.TestConnectionAsync(ct);
+    }
+
+    private async Task<(bool Ok, string Message)> TestTracearr(ServiceTestInput? input, CancellationToken ct)
+    {
+        if (input?.Url is not null || input?.ApiKeyOrToken is not null)
+        {
+            var endpoint = ResolveEndpoint(optionsAccessor.Options.Tracearr, input);
+            if (string.IsNullOrWhiteSpace(endpoint.Url) || string.IsNullOrWhiteSpace(endpoint.ApiKey))
+                return (false, "Tracearr URL or API key required");
+
+            var client = httpClientFactory.CreateClient(nameof(ServiceConnectionTester));
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{endpoint.Url.TrimEnd('/')}/api/v1/public/health");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", endpoint.ApiKey.Trim());
+            using var response = await client.SendAsync(request, ct);
+            return response.IsSuccessStatusCode ? (true, "Connected") : (false, $"HTTP {(int)response.StatusCode}");
+        }
+
+        return await tracearr.TestConnectionAsync(ct);
     }
 
     private static (bool Ok, string Message) TestSlskd(ServiceEndpoint endpoint, string name) =>

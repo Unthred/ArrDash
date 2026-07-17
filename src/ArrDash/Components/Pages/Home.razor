@@ -51,13 +51,23 @@
                           SelectedServiceKeyChanged="@OnServiceSelected" />
     }
 
-    @foreach (var panelId in VisiblePanels)
-    {
-        @if (!ShouldShowPanel(panelId))
-        {
-            continue;
-        }
+    @{
+        var activePanels = VisiblePanels
+            .Where(p => ShouldShowPanel(p) && PanelHasConfiguredSource(p))
+            .ToList();
+    }
 
+    @if (activePanels.Count == 0)
+    {
+        <div class="empty-state dashboard-empty-state">
+            <MudIcon Icon="@Icons.Material.Outlined.SettingsInputComponent" Size="Size.Large" />
+            <div>No services configured yet</div>
+            <MudButton Variant="Variant.Filled" Size="Size.Small" Href="/settings" Class="mt-2">Open Settings</MudButton>
+        </div>
+    }
+
+    @foreach (var panelId in activePanels)
+    {
         <div class="dashboard-panel-wrap @(_dragOverPanel == panelId ? "dashboard-panel-drag-over" : "")"
              @ondragover="@(() => OnPanelDragOver(panelId))" @ondragover:preventDefault="true"
              @ondragleave="@(() => OnPanelDragLeave(panelId))"
@@ -73,6 +83,15 @@
                                    LargeCards="@(Kiosk && Prefs.Current.KioskLargeNowPlaying)">
                     <DragHandle>@BuildDragHandle(panelId)</DragHandle>
                 </NowPlayingPanel>
+                break;
+            case "watch-stats":
+                <WatchStatsPanel Accent="@Prefs.GetPanelAccent(panelId, "#a855f7")"
+                                 ShowCombined="@Prefs.Current.ShowCombinedWatchStats"
+                                 ShowPlex="@Prefs.Current.ShowPlexWatchStats"
+                                 ShowEmby="@Prefs.Current.ShowEmbyWatchStats"
+                                 ShowJellyfin="@Prefs.Current.ShowJellyfinWatchStats">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </WatchStatsPanel>
                 break;
             case "libraries":
                 <LibrariesPanel PanelId="libraries"
@@ -392,6 +411,26 @@
         {
             KioskRotateMode.NowPlayingOnly => panelId == "now-playing",
             KioskRotateMode.Sequential => VisiblePanels.Count > 0 && VisiblePanels[_rotateIndex % VisiblePanels.Count] == panelId,
+            _ => true
+        };
+    }
+
+    // Hide a panel when none of the services that feed its data are configured, so the dashboard
+    // only shows panels the user actually has a source for.
+    private bool PanelHasConfiguredSource(string panelId)
+    {
+        var o = OptionsAccessor.Options;
+        return panelId switch
+        {
+            "now-playing" => o.Plex.IsConfigured || o.Emby.IsConfigured || o.Jellyfin.IsConfigured,
+            "watch-stats" => o.Tautulli.IsConfigured || o.Tracearr.IsConfigured || o.Emby.IsConfigured || o.Jellyfin.IsConfigured,
+            "libraries" => o.Sonarr.IsConfigured || o.Radarr.IsConfigured || o.Lidarr.IsConfigured
+                || o.Chaptarr.IsConfigured || o.AudiobookShelf.IsConfigured,
+            "chaptarr-abs-sync" => o.Chaptarr.IsConfigured,
+            "recent-tv" => o.Sonarr.IsConfigured,
+            "recent-movies" => o.Radarr.IsConfigured,
+            "recent-audiobooks" => o.Chaptarr.IsConfigured || o.AudiobookShelf.IsConfigured,
+            "recent-music" => o.Lidarr.IsConfigured,
             _ => true
         };
     }

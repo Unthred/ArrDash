@@ -28,21 +28,89 @@ public sealed class PosterProxyService(IHttpClientFactory httpClientFactory, Med
     public async Task<IResult> FetchStreamingThumbnailAsync(string source, string pathOrItemId, CancellationToken ct)
     {
         var services = options.Options;
-        string? url = source.ToLowerInvariant() switch
+        return source.ToLowerInvariant() switch
         {
-            "plex" when services.Plex.IsConfigured && IsSafeAbsolutePath(pathOrItemId) =>
-                $"{services.Plex.Url.TrimEnd('/')}{pathOrItemId}?X-Plex-Token={Uri.EscapeDataString(services.Plex.Token)}",
+            "plex" when IsSafeAbsolutePath(pathOrItemId) => await FetchPlexThumbnailAsync(pathOrItemId, ct),
+            "tracearr" when services.Tracearr.IsConfigured && IsSafeAbsolutePath(pathOrItemId) =>
+                await FetchTracearrImageAsync($"{services.Tracearr.Url.TrimEnd('/')}{pathOrItemId}", ct),
             "emby" when services.Emby.IsConfigured && !string.IsNullOrWhiteSpace(pathOrItemId) =>
-                $"{services.Emby.Url.TrimEnd('/')}/Items/{Uri.EscapeDataString(pathOrItemId)}/Images/Primary?api_key={Uri.EscapeDataString(services.Emby.ApiKey)}",
+                await FetchImageAsync(
+                    $"{services.Emby.Url.TrimEnd('/')}/Items/{Uri.EscapeDataString(pathOrItemId)}/Images/Primary?api_key={Uri.EscapeDataString(services.Emby.ApiKey)}",
+                    ct),
             "jellyfin" when services.Jellyfin.IsConfigured && !string.IsNullOrWhiteSpace(pathOrItemId) =>
-                $"{services.Jellyfin.Url.TrimEnd('/')}/Items/{Uri.EscapeDataString(pathOrItemId)}/Images/Primary?api_key={Uri.EscapeDataString(services.Jellyfin.ApiKey)}",
-            _ => null
+                await FetchImageAsync(
+                    $"{services.Jellyfin.Url.TrimEnd('/')}/Items/{Uri.EscapeDataString(pathOrItemId)}/Images/Primary?api_key={Uri.EscapeDataString(services.Jellyfin.ApiKey)}",
+                    ct),
+            _ => Results.NotFound()
         };
+    }
 
-        if (url is null)
+    private async Task<IResult> FetchPlexThumbnailAsync(string thumbPath, CancellationToken ct)
+    {
+        var services = options.Options;
+        if (services.Plex.IsConfigured)
+        {
+            var directUrl =
+                $"{services.Plex.Url.TrimEnd('/')}{thumbPath}?X-Plex-Token={Uri.EscapeDataString(services.Plex.Token)}";
+            return await FetchImageAsync(directUrl, ct);
+        }
+
+        if (!services.Tautulli.IsConfigured)
             return Results.NotFound();
 
+        return await FetchTautulliPmsImageAsync(thumbPath, ct);
+    }
+
+    private async Task<IResult> FetchTautulliPmsImageAsync(string imgPath, CancellationToken ct)
+    {
+        var tautulli = options.Options.Tautulli;
+        var query = new List<string>
+        {
+            "cmd=pms_image_proxy",
+            $"apikey={Uri.EscapeDataString(tautulli.ApiKey)}",
+            $"img={Uri.EscapeDataString(imgPath)}",
+            "width=300",
+            "height=450"
+        };
+
+        var ratingKey = TryParsePlexRatingKey(imgPath);
+        if (!string.IsNullOrWhiteSpace(ratingKey))
+            query.Add($"rating_key={Uri.EscapeDataString(ratingKey)}");
+
+        var url = $"{tautulli.Url.TrimEnd('/')}/api/v2?{string.Join('&', query)}";
         return await FetchImageAsync(url, ct);
+    }
+
+    private static string? TryParsePlexRatingKey(string path)
+    {
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 3
+            && string.Equals(parts[0], "library", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(parts[1], "metadata", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(parts[2], out _))
+        {
+            return parts[2];
+        }
+
+        return null;
+    }
+
+    private async Task<IResult> FetchTracearrImageAsync(string url, CancellationToken ct)
+    {
+        var token = options.Options.Tracearr.ApiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(token))
+            return Results.NotFound();
+
+        var client = httpClientFactory.CreateClient(nameof(PosterProxyService));
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!response.IsSuccessStatusCode)
+            return Results.NotFound();
+
+        var contentType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+        return Results.Bytes(bytes, contentType);
     }
 
     public async Task<IResult> FetchAudiobookShelfCoverAsync(string itemId, CancellationToken ct)

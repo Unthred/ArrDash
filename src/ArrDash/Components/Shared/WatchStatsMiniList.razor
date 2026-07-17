@@ -1,0 +1,59 @@
+@using ArrDash.Models
+
+<section class="watch-stats-mini-section">
+    <div class="watch-stats-section-title">@Title</div>
+    @if (Rows.Count == 0)
+    {
+        <div class="watch-stats-empty">No data</div>
+    }
+    else
+    {
+        <div class="watch-stats-list">
+            @{
+                var rank = 0;
+            }
+            @foreach (var row in Rows.Take(MaxItems))
+            {
+                rank++;
+                <div class="watch-stats-row @(ShowRank ? "has-rank" : null)">
+                    @if (ShowRank)
+                    {
+                        <div class="watch-stats-rank">@rank</div>
+                    }
+                    @if (ShowThumb)
+                    {
+                        <div class="watch-stats-thumb-slot">
+                            @if (!string.IsNullOrWhiteSpace(row.ThumbUrl))
+                            {
+                                <img class="watch-stats-thumb @(UseAvatar ? "is-avatar" : "")" src="@row.ThumbUrl" alt="" loading="lazy" />
+                            }
+                            else
+                            {
+                                <span class="watch-stats-thumb-fallback @(UseAvatar ? "is-avatar" : "")">
+                                    <MudIcon Icon="@(UseAvatar ? Icons.Material.Filled.Person : Icons.Material.Filled.Movie)" Size="Size.Small" />
+                                </span>
+                            }
+                        </div>
+                    }
+                    <div class="watch-stats-row-body">
+                        <div class="watch-stats-row-title" title="@row.Title">@row.Title</div>
+                        @if (!string.IsNullOrWhiteSpace(row.Subtitle))
+                        {
+                            <div class="watch-stats-row-sub">@row.Subtitle</div>
+                        }
+                    </div>
+                    <div class="watch-stats-row-meta">@row.Hours.ToString("0.#")h</div>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public IReadOnlyList<WatchStatRow> Rows { get; set; } = [];
+    [Parameter] public bool ShowThumb { get; set; }
+    [Parameter] public bool UseAvatar { get; set; }
+    [Parameter] public bool ShowRank { get; set; }
+    [Parameter] public int MaxItems { get; set; } = 3;
+}

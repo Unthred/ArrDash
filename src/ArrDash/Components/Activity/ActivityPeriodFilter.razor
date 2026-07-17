@@ -1,0 +1,110 @@
+@using ArrDash.Models
+
+<div class="activity-period-filter @(Compact ? "activity-period-filter--compact" : null)">
+    <MudToggleGroup T="WatchStatsPeriod"
+                    Value="_period"
+                    ValueChanged="OnPeriodChanged"
+                    Rounded="true"
+                    SelectedClass="segmented-toggle-selected"
+                    Class="arrdash-segmented-toggle watch-stats-chips activity-filter-toggle"
+                    Disabled="Disabled">
+        @if (ShowToday)
+        {
+            <MudToggleItem T="WatchStatsPeriod" Value="WatchStatsPeriod.Today" Text="Today" />
+        }
+        <MudToggleItem T="WatchStatsPeriod" Value="WatchStatsPeriod.Days7" Text="7d" />
+        <MudToggleItem T="WatchStatsPeriod" Value="WatchStatsPeriod.Days30" Text="30d" />
+        <MudToggleItem T="WatchStatsPeriod" Value="WatchStatsPeriod.Year" Text="1y" />
+        @if (ShowAll)
+        {
+            <MudToggleItem T="WatchStatsPeriod" Value="WatchStatsPeriod.All" Text="All" />
+        }
+        @if (ShowCustom)
+        {
+            <MudToggleItem T="WatchStatsPeriod" Value="WatchStatsPeriod.Custom" Text="Custom" />
+        }
+    </MudToggleGroup>
+
+    @if (ShowCustom && _period == WatchStatsPeriod.Custom)
+    {
+        <div class="activity-period-custom">
+            <MudDatePicker @bind-Date="_draftStart"
+                           Label="From"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           MaxDate="_draftEnd ?? DateTime.Today"
+                           DateFormat="MMM d, yyyy" />
+            <MudDatePicker @bind-Date="_draftEnd"
+                           Label="To"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           MinDate="_draftStart"
+                           MaxDate="DateTime.Today"
+                           DateFormat="MMM d, yyyy" />
+            <MudButton Variant="Variant.Filled"
+                       Size="Size.Small"
+                       OnClick="ApplyCustomAsync"
+                       Disabled="@(!CanApplyCustom)">
+                Apply
+            </MudButton>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public WatchStatsPeriod Period { get; set; } = WatchStatsPeriod.Year;
+    [Parameter] public DateTime? CustomStartUtc { get; set; }
+    [Parameter] public DateTime? CustomEndUtc { get; set; }
+    [Parameter] public EventCallback<(WatchStatsPeriod Period, DateTime? StartUtc, DateTime? EndUtc)> RangeChanged { get; set; }
+    [Parameter] public bool ShowToday { get; set; }
+    [Parameter] public bool ShowAll { get; set; } = true;
+    [Parameter] public bool ShowCustom { get; set; } = true;
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+
+    private WatchStatsPeriod _period;
+    private DateTime? _draftStart;
+    private DateTime? _draftEnd;
+
+    protected override void OnParametersSet()
+    {
+        _period = Period;
+        _draftStart = CustomStartUtc?.ToLocalTime().Date ?? DateTime.Today.AddDays(-29);
+        _draftEnd = CustomEndUtc?.ToLocalTime().Date ?? DateTime.Today;
+    }
+
+    private bool CanApplyCustom =>
+        _draftStart.HasValue
+        && _draftEnd.HasValue
+        && _draftStart <= _draftEnd;
+
+    private async Task OnPeriodChanged(WatchStatsPeriod period)
+    {
+        _period = period;
+
+        if (period == WatchStatsPeriod.Custom)
+        {
+            _draftStart ??= DateTime.Today.AddDays(-29);
+            _draftEnd ??= DateTime.Today;
+            await NotifyRangeAsync(period, _draftStart.Value, _draftEnd.Value);
+            return;
+        }
+
+        await RangeChanged.InvokeAsync((period, null, null));
+    }
+
+    private async Task ApplyCustomAsync()
+    {
+        if (!CanApplyCustom)
+            return;
+
+        await NotifyRangeAsync(WatchStatsPeriod.Custom, _draftStart!.Value, _draftEnd!.Value);
+    }
+
+    private async Task NotifyRangeAsync(WatchStatsPeriod period, DateTime startLocal, DateTime endLocal)
+    {
+        var startUtc = DateTime.SpecifyKind(startLocal.Date, DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(endLocal.Date, DateTimeKind.Utc);
+        await RangeChanged.InvokeAsync((period, startUtc, endUtc));
+    }
+}

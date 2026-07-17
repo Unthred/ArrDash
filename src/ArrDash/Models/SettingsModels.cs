@@ -145,6 +145,7 @@ public static class PanelCatalog
     public static readonly (string Id, string Label, string DefaultAccent)[] All =
     [
         ("now-playing", "Now Playing", "#818cf8"),
+        ("watch-stats", "Watch Stats", "#a855f7"),
         ("libraries", "Libraries", "#22c55e"),
         ("recent-tv", "Recent TV", "#35c5f4"),
         ("recent-movies", "Recent Movies", "#f5c518"),

@@ -1,0 +1,360 @@
+@using ArrDash.Models
+@inject ActivityAnalyticsService ActivityAnalytics
+@inject ExternalLinkService Links
+@inject LayoutPreferencesService Prefs
+
+<MudDrawer @bind-Open="_open"
+           Anchor="Anchor.Right"
+           Elevation="2"
+           Variant="DrawerVariant.Temporary"
+           Width="560px"
+           Class="activity-detail-drawer">
+    @if (_template is not null)
+    {
+        <div class="activity-detail-header">
+            <div class="activity-detail-header-text">
+                @if (_stack.Count > 0)
+                {
+                    <MudButton Variant="Variant.Text"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.ArrowBack"
+                               Class="activity-detail-back"
+                               OnClick="GoBackAsync">
+                        Back
+                    </MudButton>
+                }
+                <div class="activity-detail-kicker">@KindLabel(_template.Kind)</div>
+                <h2 class="activity-detail-title">@(_template.DisplayLabel ?? _template.Title)</h2>
+                @if (_template.Kind == ActivityDrilldownKind.Media)
+                {
+                    <MudButton Variant="Variant.Text"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.OpenInNew"
+                               Class="activity-detail-imdb"
+                               OnClick="OpenImdbAsync">
+                        IMDb
+                    </MudButton>
+                }
+            </div>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="Close" />
+        </div>
+
+        <div class="activity-detail-periods">
+            <ActivityPeriodFilter Period="_range.Period"
+                                  CustomStartUtc="_range.CustomStartUtc"
+                                  CustomEndUtc="_range.CustomEndUtc"
+                                  RangeChanged="OnRangeChanged"
+                                  ShowCustom="false"
+                                  Compact="true" />
+        </div>
+
+        @if (_loading)
+        {
+            <div class="activity-detail-loading">
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                <span>Loading profile…</span>
+            </div>
+        }
+        else if (_snapshot is null || (_snapshot.TotalPlays == 0 && (_snapshot.Plays?.Count ?? 0) == 0))
+        {
+            <div class="activity-detail-empty">No plays found for @WatchStatsPeriodHelper.Label(_range).</div>
+        }
+        else
+        {
+            <div class="activity-detail-kpis">
+                <div class="activity-detail-kpi">
+                    <span class="activity-detail-kpi-value">@_snapshot.TotalHours.ToString("0.#")h</span>
+                    <span class="activity-detail-kpi-label">Watch time</span>
+                </div>
+                <div class="activity-detail-kpi">
+                    <span class="activity-detail-kpi-value">@_snapshot.TotalPlays.ToString("N0")</span>
+                    <span class="activity-detail-kpi-label">Plays</span>
+                </div>
+                @if (_template.Kind == ActivityDrilldownKind.Media)
+                {
+                    <div class="activity-detail-kpi">
+                        <span class="activity-detail-kpi-value">@_snapshot.UniqueUsers</span>
+                        <span class="activity-detail-kpi-label">Viewers</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="activity-detail-kpi">
+                        <span class="activity-detail-kpi-value">@_snapshot.UniqueTitles</span>
+                        <span class="activity-detail-kpi-label">Titles</span>
+                    </div>
+                }
+            </div>
+
+            @if (_snapshot.MediaMix is { } mix && mix.TotalHours > 0)
+            {
+                <div class="activity-detail-mix">
+                    @if (mix.MovieHours > 0)
+                    {
+                        <span class="activity-detail-mix-chip">Movies @mix.MovieHours.ToString("0.#")h</span>
+                    }
+                    @if (mix.TvHours > 0)
+                    {
+                        <span class="activity-detail-mix-chip">TV @mix.TvHours.ToString("0.#")h</span>
+                    }
+                    @if (mix.MusicHours > 0)
+                    {
+                        <span class="activity-detail-mix-chip">Music @mix.MusicHours.ToString("0.#")h</span>
+                    }
+                    @if (mix.OtherHours > 0)
+                    {
+                        <span class="activity-detail-mix-chip">Other @mix.OtherHours.ToString("0.#")h</span>
+                    }
+                </div>
+            }
+
+            <div class="activity-detail-body">
+                @if (_snapshot.TopUsers is { Count: > 0 })
+                {
+                    <section class="activity-detail-section">
+                        <div class="activity-detail-section-title">Who watched</div>
+                        <ActivityLeaderboard Rows="_snapshot.TopUsers"
+                                             Mode="ActivityLeaderboard.ActivityLeaderboardMode.User"
+                                             Compact="true"
+                                             OnRowClick="OpenNestedAsync" />
+                    </section>
+                }
+
+                @if (_snapshot.TopGenres is { Count: > 0 })
+                {
+                    <section class="activity-detail-section">
+                        <div class="activity-detail-section-title">Top genres</div>
+                        <ActivityLeaderboard Rows="_snapshot.TopGenres"
+                                             Compact="true"
+                                             OnRowClick="OpenNestedAsync" />
+                    </section>
+                }
+
+                @if (_snapshot.TopMovies is { Count: > 0 })
+                {
+                    <section class="activity-detail-section">
+                        <div class="activity-detail-section-title">Top movies</div>
+                        <ActivityLeaderboard Rows="_snapshot.TopMovies"
+                                             Compact="true"
+                                             OnRowClick="OpenNestedAsync" />
+                    </section>
+                }
+
+                @if (_snapshot.TopTv is { Count: > 0 })
+                {
+                    <section class="activity-detail-section">
+                        <div class="activity-detail-section-title">Top TV</div>
+                        <ActivityLeaderboard Rows="_snapshot.TopTv"
+                                             Compact="true"
+                                             OnRowClick="OpenNestedAsync" />
+                    </section>
+                }
+
+                @if (_snapshot.Plays is { Count: > 0 })
+                {
+                    <section class="activity-detail-section">
+                        <div class="activity-detail-section-title">Recent plays</div>
+                        <div class="activity-detail-plays">
+                            @foreach (var play in _snapshot.Plays)
+                            {
+                                var clickable = !string.IsNullOrWhiteSpace(play.MediaKey);
+                                var subtitle = !string.IsNullOrWhiteSpace(play.EpisodeLabel)
+                                               && !string.Equals(play.EpisodeLabel, play.Title, StringComparison.OrdinalIgnoreCase)
+                                    ? play.EpisodeLabel
+                                    : play.Subtitle;
+                                <div class="activity-detail-play @(clickable ? "activity-detail-play-clickable" : "")"
+                                     @onclick="() => OpenNestedPlayAsync(play)">
+                                    @if (!string.IsNullOrWhiteSpace(play.ThumbUrl))
+                                    {
+                                        <img class="activity-detail-play-thumb" src="@play.ThumbUrl" alt="" loading="lazy" />
+                                    }
+                                    else
+                                    {
+                                        <span class="activity-detail-play-thumb activity-detail-play-thumb-fallback">
+                                            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" />
+                                        </span>
+                                    }
+                                    <div class="activity-detail-play-body">
+                                        <div class="activity-detail-play-title">@play.Title</div>
+                                        @if (!string.IsNullOrWhiteSpace(subtitle))
+                                        {
+                                            <div class="activity-detail-play-sub">@subtitle</div>
+                                        }
+                                        <div class="activity-detail-play-meta">
+                                            @play.UserDisplayName
+                                            @if (!string.IsNullOrWhiteSpace(play.Source))
+                                            {
+                                                <span> · @WatchStatsSources.Label(play.Source)</span>
+                                            }
+                                            <span> · @play.PlayedAtUtc.LocalDateTime.ToString("g")</span>
+                                        </div>
+                                    </div>
+                                    <div class="activity-detail-play-hours">@play.Hours.ToString("0.##")h</div>
+                                </div>
+                            }
+                        </div>
+                    </section>
+                }
+            </div>
+        }
+    }
+</MudDrawer>
+
+@code {
+    private bool _open;
+    private bool _loading;
+    private WatchStatsRange _range = WatchStatsRange.Year;
+    private string? _sourceFilter;
+    private ActivityDrilldownRequest? _template;
+    private ActivityDrilldownSnapshot? _snapshot;
+    private readonly Stack<(ActivityDrilldownRequest Request, WatchStatsRange Range)> _stack = new();
+
+    public async Task OpenAsync(WatchStatRow row, WatchStatsRange range, string? sourceFilter)
+    {
+        if (row.DrilldownKind is null || string.IsNullOrWhiteSpace(row.DrilldownKey))
+            return;
+
+        _stack.Clear();
+        _sourceFilter = sourceFilter;
+        _range = range;
+        _template = ToRequest(row, range, sourceFilter);
+        _open = true;
+        _snapshot = null;
+        await InvokeAsync(StateHasChanged);
+        await LoadAsync();
+    }
+
+    private async Task OpenNestedAsync(WatchStatRow row)
+    {
+        if (_template is null || row.DrilldownKind is null || string.IsNullOrWhiteSpace(row.DrilldownKey))
+            return;
+
+        _stack.Push((_template, _range));
+        _template = ToRequest(row, _range, _sourceFilter);
+        _snapshot = null;
+        await InvokeAsync(StateHasChanged);
+        await LoadAsync();
+    }
+
+    private async Task OpenNestedPlayAsync(ActivityDrilldownPlay play)
+    {
+        if (_template is null || string.IsNullOrWhiteSpace(play.MediaKey))
+            return;
+
+        var displayLabel = !string.IsNullOrWhiteSpace(play.EpisodeLabel)
+                            && !string.Equals(play.EpisodeLabel, play.Title, StringComparison.OrdinalIgnoreCase)
+            ? $"{play.Title} — {play.EpisodeLabel}"
+            : play.Title;
+
+        var next = new ActivityDrilldownRequest(
+            ActivityDrilldownKind.Media,
+            play.MediaKey,
+            play.Title,
+            play.Source,
+            _range.Period,
+            _range.CustomStartUtc,
+            _range.CustomEndUtc,
+            displayLabel);
+
+        _stack.Push((_template, _range));
+        _template = next;
+        _snapshot = null;
+        await InvokeAsync(StateHasChanged);
+        await LoadAsync();
+    }
+
+    private async Task GoBackAsync()
+    {
+        if (_stack.Count == 0)
+            return;
+
+        var (request, range) = _stack.Pop();
+        _template = request;
+        _range = range;
+        _snapshot = null;
+        await InvokeAsync(StateHasChanged);
+        await LoadAsync();
+    }
+
+    private static ActivityDrilldownRequest ToRequest(WatchStatRow row, WatchStatsRange range, string? sourceFilter) =>
+        new(
+            row.DrilldownKind!.Value,
+            row.DrilldownKey!,
+            row.Title,
+            sourceFilter ?? row.Source,
+            range.Period,
+            range.CustomStartUtc,
+            range.CustomEndUtc);
+
+    private static string KindLabel(ActivityDrilldownKind kind) => kind switch
+    {
+        ActivityDrilldownKind.User => "User profile",
+        ActivityDrilldownKind.Genre => "Genre profile",
+        ActivityDrilldownKind.Platform => "Platform profile",
+        ActivityDrilldownKind.MediaType => "Media type",
+        ActivityDrilldownKind.Quality => "Stream quality",
+        ActivityDrilldownKind.Library => "Library profile",
+        _ => "Title profile"
+    };
+
+    private async Task OnRangeChanged((WatchStatsPeriod Period, DateTime? StartUtc, DateTime? EndUtc) args)
+    {
+        if (_template is null)
+            return;
+
+        var next = new WatchStatsRange(args.Period, args.StartUtc, args.EndUtc);
+        if (!next.IsQueryable || WatchStatsPeriodHelper.RangesEqual(_range, next))
+            return;
+
+        _range = next;
+        _template = _template with
+        {
+            Period = next.Period,
+            CustomStartUtc = next.CustomStartUtc,
+            CustomEndUtc = next.CustomEndUtc
+        };
+        await LoadAsync();
+    }
+
+    private async Task OpenImdbAsync()
+    {
+        if (_template is null)
+            return;
+
+        var url = $"https://www.imdb.com/find/?q={Uri.EscapeDataString(_template.Title)}&s=tt";
+        await Links.OpenAsync(url, Prefs.Current.ExternalLinkTarget);
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_template is null)
+            return;
+
+        _loading = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var request = _template with
+            {
+                Period = _range.Period,
+                CustomStartUtc = _range.CustomStartUtc,
+                CustomEndUtc = _range.CustomEndUtc
+            };
+            _snapshot = await ActivityAnalytics.GetDrilldownAsync(request);
+        }
+        finally
+        {
+            _loading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void Close()
+    {
+        _open = false;
+        _template = null;
+        _snapshot = null;
+        _stack.Clear();
+    }
+}

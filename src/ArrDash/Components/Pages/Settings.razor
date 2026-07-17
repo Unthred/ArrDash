@@ -6,6 +6,9 @@
 @inject MediaServiceOptionsAccessor OptionsAccessor
 @inject DashboardRefreshService RefreshService
 @inject ServiceConnectionTester ConnectionTester
+@inject WatchStatsLibraryCatalog LibraryCatalog
+@inject ActivityAnalyticsService ActivityAnalytics
+@inject WatchStatsService WatchStats
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @implements IDisposable
@@ -409,6 +412,119 @@
             </MudPaper>
         </MudTabPanel>
 
+        <MudTabPanel Text="Watch Stats" Icon="@Icons.Material.Filled.Insights">
+            <MudPaper Class="settings-section compact" Elevation="0">
+                <SettingField Text="@SettingsHelpTexts.WatchStatsLiveSources" Span2="true">
+                    <div class="watch-stats-source-list">
+                        @{
+                            var tautulli = _credentialStatuses.FirstOrDefault(c => c.Key == "tautulli");
+                            var tracearr = _credentialStatuses.FirstOrDefault(c => c.Key == "tracearr");
+                        }
+                        <div class="watch-stats-source-row">
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Tautulli (Plex)</MudText>
+                                <MudText Typo="Typo.caption" Class="muted">@SettingsHelpTexts.WatchStatsTautulliSource</MudText>
+                            </div>
+                            <MudChip T="string" Size="Size.Small" Color="@(tautulli?.Configured == true ? Color.Success : Color.Default)" Variant="Variant.Outlined">
+                                @(tautulli?.Configured == true ? "Configured" : "Not set")
+                            </MudChip>
+                        </div>
+                        <div class="watch-stats-source-row">
+                            <div>
+                                <MudText Typo="Typo.subtitle2">Tracearr (Emby / Jellyfin)</MudText>
+                                <MudText Typo="Typo.caption" Class="muted">@SettingsHelpTexts.WatchStatsTracearrSource</MudText>
+                            </div>
+                            <MudChip T="string" Size="Size.Small" Color="@(tracearr?.Configured == true ? Color.Success : Color.Default)" Variant="Variant.Outlined">
+                                @(tracearr?.Configured == true ? "Configured" : "Not set")
+                            </MudChip>
+                        </div>
+                        <MudText Typo="Typo.caption" Class="muted mt-2">Set credentials on the API keys tab (Tautulli + Tracearr).</MudText>
+                    </div>
+                </SettingField>
+                <div class="settings-grid-2">
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsSyncEnabled">
+                        <MudSwitch @bind-Value="_watchStatsSyncEnabled" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Enable history sync" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsSyncInterval">
+                        <MudNumericField @bind-Value="_watchStatsSyncIntervalMinutes" @bind-Value:after="ScheduleLivePreviewNow" Label="Sync interval (min)" Variant="Variant.Outlined" Min="0" Max="240" Disabled="@(!_watchStatsSyncEnabled)" HelperText="0 = default (20 min)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsBackfillDays">
+                        <MudNumericField @bind-Value="_watchStatsBackfillDays" @bind-Value:after="ScheduleLivePreviewNow" Label="Backfill days" Variant="Variant.Outlined" Min="0" Max="730" Disabled="@(!_watchStatsSyncEnabled)" HelperText="0 = default (90 days)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsRetentionDays">
+                        <MudNumericField @bind-Value="_watchStatsRetentionDays" @bind-Value:after="ScheduleLivePreviewNow" Label="Retention days" Variant="Variant.Outlined" Min="0" Max="1825" Disabled="@(!_watchStatsSyncEnabled)" HelperText="0 = default (365 days)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsSyncPlex">
+                        <MudSwitch @bind-Value="_watchStatsSyncPlex" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Sync Plex (Tautulli)" Disabled="@(!_watchStatsSyncEnabled)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsSyncEmby">
+                        <MudSwitch @bind-Value="_watchStatsSyncEmby" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Sync Emby" Disabled="@(!_watchStatsSyncEnabled)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsSyncJellyfin">
+                        <MudSwitch @bind-Value="_watchStatsSyncJellyfin" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Sync Jellyfin" Disabled="@(!_watchStatsSyncEnabled)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowCombinedWatchStats">
+                        <MudSwitch @bind-Value="_showCombinedWatchStats" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show combined view" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowPlexWatchStats">
+                        <MudSwitch @bind-Value="_showPlexWatchStats" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show Plex stats" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowEmbyWatchStats">
+                        <MudSwitch @bind-Value="_showEmbyWatchStats" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show Emby stats" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowJellyfinWatchStats">
+                        <MudSwitch @bind-Value="_showJellyfinWatchStats" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show Jellyfin stats" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsTopLimit">
+                        <MudNumericField @bind-Value="_watchStatsTopLimit" @bind-Value:after="ScheduleLivePreviewNow" Label="Leaderboard size" Variant="Variant.Outlined" Min="3" Max="25" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsUserAliases" Span2="true">
+                        <MudTextField @bind-Value="_watchStatsAliasesText" @bind-Value:after="ScheduleLivePreviewDebounced" Label="User aliases" Variant="Variant.Outlined" Lines="4" Placeholder="Mom|plex|Margaret&#10;Mom|emby|Margaret" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.WatchStatsIncludedLibraries" Span2="true">
+                        <div class="d-flex align-center gap-2 mb-2">
+                            <MudText Typo="Typo.subtitle2">Libraries in Activity reports</MudText>
+                            <MudSpacer />
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectAllLibraries" Disabled="@(_libraryCatalog.Count == 0)">Select all</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="ClearLibrarySelection">Clear (all)</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="RefreshLibraryCatalogAsync" Disabled="_librariesLoading">
+                                @(_librariesLoading ? "Loading…" : "Refresh")
+                            </MudButton>
+                        </div>
+                        @if (_librariesLoading && _libraryCatalog.Count == 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="muted">Loading libraries…</MudText>
+                        }
+                        else if (_libraryCatalog.Count == 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="muted">No libraries discovered yet. Run a history sync, then Refresh.</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Class="muted mb-2">
+                                @(_includedLibraryKeys.Count == 0
+                                    ? "Including all libraries (nothing selected)."
+                                    : $"{_includedLibraryKeys.Count} of {_libraryCatalog.Count} selected.")
+                            </MudText>
+                            @foreach (var group in _libraryCatalog.GroupBy(l => l.Source))
+                            {
+                                <MudText Typo="Typo.caption" Class="mt-2 mb-1"><b>@WatchStatsSources.Label(group.Key)</b></MudText>
+                                @foreach (var lib in group)
+                                {
+                                    <MudCheckBox T="bool"
+                                                 Value="@IsLibraryIncluded(lib.Key)"
+                                                 ValueChanged="@(v => ToggleLibrary(lib.Key, v))"
+                                                 Label="@LibraryCheckboxLabel(lib)"
+                                                 Dense="true"
+                                                 Color="Color.Primary" />
+                                }
+                            }
+                        }
+                    </SettingField>
+                </div>
+            </MudPaper>
+        </MudTabPanel>
+
         <MudTabPanel Text="Kiosk" Icon="@Icons.Material.Filled.Tv">
             <MudPaper Class="settings-section compact" Elevation="0">
                 <div class="settings-grid-2">
@@ -538,6 +654,22 @@
     private bool _showEmbySessions = true;
     private bool _showJellyfinSessions = true;
     private bool _hideIdleSessions;
+    private bool _showPlexWatchStats = true;
+    private bool _showEmbyWatchStats = true;
+    private bool _showJellyfinWatchStats = true;
+    private bool _showCombinedWatchStats = true;
+    private bool _watchStatsSyncEnabled = true;
+    private bool _watchStatsSyncPlex = true;
+    private bool _watchStatsSyncEmby = true;
+    private bool _watchStatsSyncJellyfin = true;
+    private int _watchStatsRetentionDays;
+    private int _watchStatsBackfillDays;
+    private int _watchStatsSyncIntervalMinutes;
+    private int _watchStatsTopLimit = 10;
+    private string _watchStatsAliasesText = "";
+    private readonly HashSet<string> _includedLibraryKeys = new(StringComparer.OrdinalIgnoreCase);
+    private List<WatchStatsLibraryInfo> _libraryCatalog = [];
+    private bool _librariesLoading;
     private bool _showServerMetrics = true;
     private string _metricsHostLabel = "";
     private string _metricsDiskPath = "";
@@ -719,6 +851,26 @@
         _showEmbySessions = prefs.ShowEmbySessions;
         _showJellyfinSessions = prefs.ShowJellyfinSessions;
         _hideIdleSessions = prefs.HideIdleSessions;
+        _showPlexWatchStats = prefs.ShowPlexWatchStats;
+        _showEmbyWatchStats = prefs.ShowEmbyWatchStats;
+        _showJellyfinWatchStats = prefs.ShowJellyfinWatchStats;
+        _showCombinedWatchStats = prefs.ShowCombinedWatchStats;
+        _watchStatsSyncEnabled = prefs.WatchStatsSyncEnabled;
+        _watchStatsSyncPlex = prefs.WatchStatsSyncPlex;
+        _watchStatsSyncEmby = prefs.WatchStatsSyncEmby;
+        _watchStatsSyncJellyfin = prefs.WatchStatsSyncJellyfin;
+        _watchStatsRetentionDays = prefs.WatchStatsRetentionDays;
+        _watchStatsBackfillDays = prefs.WatchStatsBackfillDays;
+        _watchStatsSyncIntervalMinutes = prefs.WatchStatsSyncIntervalMinutes;
+        _watchStatsTopLimit = prefs.WatchStatsTopLimit;
+        _watchStatsAliasesText = FormatAliases(prefs.UserAliases);
+        _includedLibraryKeys.Clear();
+        foreach (var key in prefs.WatchStatsIncludedLibraries)
+        {
+            if (!string.IsNullOrWhiteSpace(key))
+                _includedLibraryKeys.Add(key.Trim());
+        }
+        _ = RefreshLibraryCatalogAsync();
         _showServerMetrics = prefs.ShowServerMetrics;
         _metricsHostLabel = prefs.MetricsHostLabel ?? "";
         _metricsDiskPath = prefs.MetricsDiskPath ?? "";
@@ -959,6 +1111,8 @@
             }
 
             await RefreshService.RefreshAsync(CancellationToken.None);
+            ActivityAnalytics.InvalidateCache();
+            WatchStats.InvalidateCache();
 
             foreach (var key in _credentialInputs.Keys.ToList())
                 _credentialInputs[key] = "";
@@ -1012,6 +1166,22 @@
         p.ShowEmbySessions = _showEmbySessions;
         p.ShowJellyfinSessions = _showJellyfinSessions;
         p.HideIdleSessions = _hideIdleSessions;
+        p.ShowPlexWatchStats = _showPlexWatchStats;
+        p.ShowEmbyWatchStats = _showEmbyWatchStats;
+        p.ShowJellyfinWatchStats = _showJellyfinWatchStats;
+        p.ShowCombinedWatchStats = _showCombinedWatchStats;
+        p.WatchStatsSyncEnabled = _watchStatsSyncEnabled;
+        p.WatchStatsSyncPlex = _watchStatsSyncPlex;
+        p.WatchStatsSyncEmby = _watchStatsSyncEmby;
+        p.WatchStatsSyncJellyfin = _watchStatsSyncJellyfin;
+        p.WatchStatsRetentionDays = Math.Clamp(_watchStatsRetentionDays, 0, 1825);
+        p.WatchStatsBackfillDays = Math.Clamp(_watchStatsBackfillDays, 0, 730);
+        p.WatchStatsSyncIntervalMinutes = Math.Clamp(_watchStatsSyncIntervalMinutes, 0, 240);
+        p.WatchStatsTopLimit = Math.Clamp(_watchStatsTopLimit, 3, 25);
+        p.UserAliases = ParseAliases(_watchStatsAliasesText);
+        p.WatchStatsIncludedLibraries = _includedLibraryKeys.Count == 0
+            ? []
+            : _includedLibraryKeys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
         p.ShowServerMetrics = _showServerMetrics;
         p.MetricsHostLabel = _metricsHostLabel.Trim();
         p.MetricsDiskPath = _metricsDiskPath.Trim();
@@ -1062,6 +1232,8 @@
         PlexToken = _credentialInputs.GetValueOrDefault("plex"),
         EmbyApiKey = _credentialInputs.GetValueOrDefault("emby"),
         JellyfinApiKey = _credentialInputs.GetValueOrDefault("jellyfin"),
+        TautulliApiKey = _credentialInputs.GetValueOrDefault("tautulli"),
+        TracearrApiKey = _credentialInputs.GetValueOrDefault("tracearr"),
         SonarrUrl = _urlInputs.GetValueOrDefault("sonarr"),
         RadarrUrl = _urlInputs.GetValueOrDefault("radarr"),
         LidarrUrl = _urlInputs.GetValueOrDefault("lidarr"),
@@ -1070,8 +1242,83 @@
         SlskdUrl = _urlInputs.GetValueOrDefault("slskd"),
         PlexUrl = _urlInputs.GetValueOrDefault("plex"),
         EmbyUrl = _urlInputs.GetValueOrDefault("emby"),
-        JellyfinUrl = _urlInputs.GetValueOrDefault("jellyfin")
+        JellyfinUrl = _urlInputs.GetValueOrDefault("jellyfin"),
+        TautulliUrl = _urlInputs.GetValueOrDefault("tautulli"),
+        TracearrUrl = _urlInputs.GetValueOrDefault("tracearr")
     };
+
+    private static string FormatAliases(IReadOnlyList<WatchStatsUserAlias> aliases) =>
+        string.Join('\n', aliases.Select(a => $"{a.CanonicalName}|{a.Source}|{a.SourceUserName}"));
+
+    private async Task RefreshLibraryCatalogAsync()
+    {
+        _librariesLoading = true;
+        try
+        {
+            _libraryCatalog = (await LibraryCatalog.ListAsync()).ToList();
+        }
+        catch
+        {
+            _libraryCatalog = [];
+        }
+        finally
+        {
+            _librariesLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool IsLibraryIncluded(string key) =>
+        _includedLibraryKeys.Count == 0 || _includedLibraryKeys.Contains(key);
+
+    private void ToggleLibrary(string key, bool included)
+    {
+        // Empty set means "all". First explicit toggle materializes the full catalog as selected,
+        // then applies the change so clearing one library works as expected.
+        if (_includedLibraryKeys.Count == 0)
+        {
+            foreach (var lib in _libraryCatalog)
+                _includedLibraryKeys.Add(lib.Key);
+        }
+
+        if (included)
+            _includedLibraryKeys.Add(key);
+        else
+            _includedLibraryKeys.Remove(key);
+
+        if (_includedLibraryKeys.Count == _libraryCatalog.Count
+            && _libraryCatalog.All(l => _includedLibraryKeys.Contains(l.Key)))
+            _includedLibraryKeys.Clear();
+
+        ScheduleLivePreviewNow();
+    }
+
+    private void SelectAllLibraries()
+    {
+        _includedLibraryKeys.Clear();
+        ScheduleLivePreviewNow();
+    }
+
+    private void ClearLibrarySelection()
+    {
+        _includedLibraryKeys.Clear();
+        ScheduleLivePreviewNow();
+    }
+
+    private static string LibraryCheckboxLabel(WatchStatsLibraryInfo lib) =>
+        string.IsNullOrWhiteSpace(lib.MediaType) ? lib.Name : $"{lib.Name} ({lib.MediaType})";
+
+    private static List<WatchStatsUserAlias> ParseAliases(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return [];
+
+        return text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries))
+            .Where(parts => parts.Length == 3 && parts.All(p => !string.IsNullOrWhiteSpace(p)))
+            .Select(parts => new WatchStatsUserAlias(parts[0], parts[1], parts[2]))
+            .ToList();
+    }
 
     private static bool HasAnySecretInput(ServiceSecretsFile updates) =>
         !string.IsNullOrWhiteSpace(updates.SonarrApiKey)
@@ -1083,6 +1330,8 @@
         || !string.IsNullOrWhiteSpace(updates.PlexToken)
         || !string.IsNullOrWhiteSpace(updates.EmbyApiKey)
         || !string.IsNullOrWhiteSpace(updates.JellyfinApiKey)
+        || !string.IsNullOrWhiteSpace(updates.TautulliApiKey)
+        || !string.IsNullOrWhiteSpace(updates.TracearrApiKey)
         || !string.IsNullOrWhiteSpace(updates.SonarrUrl)
         || !string.IsNullOrWhiteSpace(updates.RadarrUrl)
         || !string.IsNullOrWhiteSpace(updates.LidarrUrl)
@@ -1091,7 +1340,9 @@
         || !string.IsNullOrWhiteSpace(updates.SlskdUrl)
         || !string.IsNullOrWhiteSpace(updates.PlexUrl)
         || !string.IsNullOrWhiteSpace(updates.EmbyUrl)
-        || !string.IsNullOrWhiteSpace(updates.JellyfinUrl);
+        || !string.IsNullOrWhiteSpace(updates.JellyfinUrl)
+        || !string.IsNullOrWhiteSpace(updates.TautulliUrl)
+        || !string.IsNullOrWhiteSpace(updates.TracearrUrl);
 
     private void Cancel()
     {

@@ -53,7 +53,7 @@ curl -s http://127.0.0.1:7979/api/dashboard | jq '.updatedAt, .host'
 1. **Chaptarr** — upstream SQLite/disk errors surface as offline status; not an ArrDash bug
 2. **CPU graph** — first sample flat until second poll; window fills over ~15 minutes
 3. **Secrets in compose** — use `docker-compose.example.yml` in git; keep real keys in local `docker-compose.yml` (gitignored)
-4. **Tautulli** — config schema present; not wired to UI yet
+4. **Watch Stats** — Tautulli + Playback Reporting sync, SQLite/Postgres storage, combined rankings
 
 ## Old Python ArrDash
 

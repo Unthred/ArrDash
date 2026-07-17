@@ -1,0 +1,215 @@
+@using ArrDash.Models
+
+@if (_slices.Count == 0)
+{
+    <div class="activity-card-empty">No data</div>
+}
+else
+{
+    <div class="activity-pie-chart @(Centered ? "activity-pie-chart--centered" : null)">
+        <svg viewBox="0 0 @Size @Size" class="activity-pie-svg" role="img" aria-label="@AriaLabel">
+            @foreach (var slice in _slices)
+            {
+                var highlighted = IsHighlighted(slice.Label);
+                var dimmed = IsDimmed(slice.Label);
+                <g class="activity-pie-slice-group @(highlighted ? "is-highlighted" : null) @(dimmed ? "is-dimmed" : null)"
+                   transform="@SliceTransform(slice)"
+                   @onmouseenter="() => SetHovered(slice.Label)"
+                   @onmouseleave="ClearHovered">
+                    <path d="@slice.Path"
+                          fill="@slice.Color"
+                          class="activity-pie-slice"
+                          tabindex="0"
+                          role="button"
+                          aria-pressed="@IsSelected(slice.Label)"
+                          @onclick="() => ToggleSelection(slice.Label)"
+                          @onkeydown="e => OnSliceKeyDown(e, slice.Label)">
+                        <title>@slice.Label: @FormatValue(slice.Value) (@slice.Percent:0.#%)</title>
+                    </path>
+                </g>
+            }
+        </svg>
+        <div class="activity-pie-legend">
+            @foreach (var slice in _slices)
+            {
+                var highlighted = IsHighlighted(slice.Label);
+                var dimmed = IsDimmed(slice.Label);
+                <button type="button"
+                        class="activity-pie-legend-row @(highlighted ? "is-highlighted" : null) @(IsSelected(slice.Label) ? "is-selected" : null) @(dimmed ? "is-dimmed" : null)"
+                        title="@slice.Label — @FormatValue(slice.Value) (@slice.Percent.ToString("0.#")%)"
+                        @onclick="() => ToggleSelection(slice.Label)"
+                        @onmouseenter="() => SetHovered(slice.Label)"
+                        @onmouseleave="ClearHovered">
+                    <span class="activity-pie-swatch" style="background:@slice.Color"></span>
+                    <span class="activity-pie-legend-label">@slice.Label</span>
+                    <span class="activity-pie-legend-value">@FormatValue(slice.Value)</span>
+                    <span class="activity-pie-legend-pct">@slice.Percent.ToString("0.#")%</span>
+                </button>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<ActivityChartPoint> Rows { get; set; } = [];
+    [Parameter] public string AriaLabel { get; set; } = "Distribution chart";
+    [Parameter] public bool Hours { get; set; }
+    [Parameter] public bool Donut { get; set; } = true;
+    [Parameter] public bool Centered { get; set; } = true;
+    [Parameter] public int MaxSlices { get; set; } = 8;
+    [Parameter] public IReadOnlyList<string>? Colors { get; set; }
+    [Parameter] public string? SelectedLabel { get; set; }
+    [Parameter] public EventCallback<string?> SelectedLabelChanged { get; set; }
+
+    private const double Size = 120;
+    private double Cx => Size / 2;
+    private double _outerRadius => Size / 2 - 4;
+    private double _innerRadius => Donut ? _outerRadius * 0.58 : 0;
+    private const double HoverOffset = 5.5;
+
+    private static readonly string[] DefaultColors =
+    [
+        "#38bdf8", "#a855f7", "#22c55e", "#f59e0b", "#f97316", "#818cf8", "#ec4899", "#14b8a6", "#94a3b8"
+    ];
+
+    private List<PieSlice> _slices = [];
+    private string? _hoveredLabel;
+
+    protected override void OnParametersSet() => Build();
+
+    private bool IsSelected(string label) =>
+        !string.IsNullOrWhiteSpace(SelectedLabel)
+        && string.Equals(SelectedLabel, label, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsHovered(string label) =>
+        !string.IsNullOrWhiteSpace(_hoveredLabel)
+        && string.Equals(_hoveredLabel, label, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsHighlighted(string label) => IsHovered(label) || IsSelected(label);
+
+    private bool IsDimmed(string label)
+    {
+        if (!string.IsNullOrWhiteSpace(_hoveredLabel))
+            return !IsHovered(label);
+
+        return !string.IsNullOrWhiteSpace(SelectedLabel) && !IsSelected(label);
+    }
+
+    private void SetHovered(string label)
+    {
+        _hoveredLabel = label;
+    }
+
+    private void ClearHovered()
+    {
+        _hoveredLabel = null;
+    }
+
+    private string SliceTransform(PieSlice slice) =>
+        IsHovered(slice.Label)
+            ? $"translate({F(slice.HoverDx)}, {F(slice.HoverDy)})"
+            : string.Empty;
+
+    private async Task ToggleSelection(string label)
+    {
+        var next = IsSelected(label) ? null : label;
+        SelectedLabel = next;
+        await SelectedLabelChanged.InvokeAsync(next);
+    }
+
+    private async Task OnSliceKeyDown(KeyboardEventArgs e, string label)
+    {
+        if (e.Key is "Enter" or " ")
+            await ToggleSelection(label);
+    }
+
+    private void Build()
+    {
+        var palette = (Colors ?? DefaultColors).ToList();
+        var rows = Rows
+            .Where(r => r.Value > 0)
+            .OrderByDescending(r => r.Value)
+            .ToList();
+
+        if (rows.Count > MaxSlices)
+        {
+            var top = rows.Take(MaxSlices - 1).ToList();
+            var other = rows.Skip(MaxSlices - 1).Sum(r => r.Value);
+            rows = top;
+            if (other > 0)
+                rows.Add(new ActivityChartPoint("Other", other));
+        }
+
+        var total = rows.Sum(r => r.Value);
+        if (total <= 0)
+        {
+            _slices = [];
+            return;
+        }
+
+        var slices = new List<PieSlice>();
+        var startAngle = -90.0;
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            var sweep = row.Value / total * 360.0;
+            if (sweep <= 0)
+                continue;
+
+            var color = palette[i % palette.Count];
+            var percent = row.Value / total * 100.0;
+            var endAngle = startAngle + sweep;
+            var path = Donut
+                ? DescribeDonutSlice(Cx, Cx, _outerRadius, _innerRadius, startAngle, endAngle)
+                : DescribePieSlice(Cx, Cx, _outerRadius, startAngle, endAngle);
+
+            var midAngle = (startAngle + endAngle) / 2.0;
+            var rad = midAngle * Math.PI / 180.0;
+            var hoverDx = Math.Cos(rad) * HoverOffset;
+            var hoverDy = Math.Sin(rad) * HoverOffset;
+
+            slices.Add(new PieSlice(row.Label, row.Value, percent, color, path, hoverDx, hoverDy));
+            startAngle = endAngle;
+        }
+
+        _slices = slices;
+    }
+
+    private static string DescribePieSlice(double cx, double cy, double r, double startAngle, double endAngle)
+    {
+        var start = Polar(cx, cy, r, endAngle);
+        var end = Polar(cx, cy, r, startAngle);
+        var large = endAngle - startAngle <= 180 ? "0" : "1";
+        return $"M {F(cx)} {F(cy)} L {F(start.X)} {F(start.Y)} A {F(r)} {F(r)} 0 {large} 1 {F(end.X)} {F(end.Y)} Z";
+    }
+
+    private static string DescribeDonutSlice(double cx, double cy, double outer, double inner, double startAngle, double endAngle)
+    {
+        var oStart = Polar(cx, cy, outer, startAngle);
+        var oEnd = Polar(cx, cy, outer, endAngle);
+        var iEnd = Polar(cx, cy, inner, endAngle);
+        var iStart = Polar(cx, cy, inner, startAngle);
+        var large = endAngle - startAngle <= 180 ? "0" : "1";
+        return $"M {F(oStart.X)} {F(oStart.Y)} A {F(outer)} {F(outer)} 0 {large} 1 {F(oEnd.X)} {F(oEnd.Y)} L {F(iEnd.X)} {F(iEnd.Y)} A {F(inner)} {F(inner)} 0 {large} 0 {F(iStart.X)} {F(iStart.Y)} Z";
+    }
+
+    private static (double X, double Y) Polar(double cx, double cy, double r, double angle)
+    {
+        var rad = angle * Math.PI / 180.0;
+        return (cx + r * Math.Cos(rad), cy + r * Math.Sin(rad));
+    }
+
+    private static string F(double v) => $"{v:0.##}";
+
+    private string FormatValue(double value) =>
+        Hours ? $"{value:0.#}h" : value >= 100 ? value.ToString("0") : value.ToString("0.#");
+
+    private sealed record PieSlice(
+        string Label,
+        double Value,
+        double Percent,
+        string Color,
+        string Path,
+        double HoverDx,
+        double HoverDy);
+}

@@ -1,0 +1,82 @@
+@using ArrDash.Models
+
+<div class="activity-leaderboard @(Compact ? "activity-leaderboard--compact" : null)">
+    @if (Rows.Count == 0)
+    {
+        <div class="activity-card-empty">No data in this period</div>
+    }
+    else
+    {
+        <div class="activity-leaderboard-list">
+            @foreach (var (row, index) in Rows.Select((r, i) => (r, i)))
+            {
+                var rank = index + 1;
+                var clickable = row.DrilldownKind is not null && !string.IsNullOrWhiteSpace(row.DrilldownKey);
+                <button type="button"
+                        class="activity-leaderboard-row @(clickable ? "is-clickable" : "")"
+                        disabled="@(!clickable)"
+                        @onclick="() => OnRowSelected(row)">
+                    <span class="activity-leaderboard-rank">@rank</span>
+                    @if (Mode == ActivityLeaderboardMode.User)
+                    {
+                        @if (!string.IsNullOrWhiteSpace(row.ThumbUrl))
+                        {
+                            <img class="activity-leaderboard-avatar" src="@row.ThumbUrl" alt="" loading="lazy" />
+                        }
+                        else
+                        {
+                            <span class="activity-leaderboard-avatar activity-leaderboard-avatar-fallback">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                            </span>
+                        }
+                    }
+                    else
+                    {
+                        @if (!string.IsNullOrWhiteSpace(row.ThumbUrl))
+                        {
+                            <img class="activity-leaderboard-thumb" src="@row.ThumbUrl" alt="" loading="lazy" />
+                        }
+                        else
+                        {
+                            <span class="activity-leaderboard-thumb activity-leaderboard-thumb-fallback">
+                                <MudIcon Icon="@(row.DrilldownKind == ActivityDrilldownKind.Genre ? Icons.Material.Filled.Category : Icons.Material.Filled.Movie)" Size="Size.Small" />
+                            </span>
+                        }
+                    }
+                    <div class="activity-leaderboard-body">
+                        <div class="activity-leaderboard-title">@row.Title</div>
+                        @if (!string.IsNullOrWhiteSpace(row.Subtitle))
+                        {
+                            <div class="activity-leaderboard-sub">@row.Subtitle</div>
+                        }
+                    </div>
+                    <div class="activity-leaderboard-meta">
+                        <span class="activity-leaderboard-hours">@row.Hours.ToString("0.#")h</span>
+                        <span class="activity-leaderboard-plays">@row.Plays plays</span>
+                    </div>
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    public enum ActivityLeaderboardMode
+    {
+        User,
+        Media
+    }
+
+    [Parameter] public IReadOnlyList<WatchStatRow> Rows { get; set; } = [];
+    [Parameter] public ActivityLeaderboardMode Mode { get; set; } = ActivityLeaderboardMode.Media;
+    [Parameter] public bool Compact { get; set; }
+    [Parameter] public EventCallback<WatchStatRow> OnRowClick { get; set; }
+
+    private Task OnRowSelected(WatchStatRow row)
+    {
+        if (row.DrilldownKind is null || string.IsNullOrWhiteSpace(row.DrilldownKey))
+            return Task.CompletedTask;
+
+        return OnRowClick.InvokeAsync(row);
+    }
+}

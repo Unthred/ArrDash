@@ -282,6 +282,7 @@ public sealed class UserLayoutPreferences
     public List<string> PanelOrder { get; set; } =
     [
         "now-playing",
+        "watch-stats",
         "libraries",
         "recent-tv",
         "recent-movies",
@@ -294,6 +295,7 @@ public sealed class UserLayoutPreferences
     public Dictionary<string, string> PanelAccentColors { get; set; } = new()
     {
         ["now-playing"] = "#818cf8",
+        ["watch-stats"] = "#a855f7",
         ["libraries"] = "#22c55e",
         ["recent-tv"] = "#35c5f4",
         ["recent-movies"] = "#f5c518",
@@ -313,6 +315,22 @@ public sealed class UserLayoutPreferences
     public bool ShowEmbySessions { get; set; } = true;
     public bool ShowJellyfinSessions { get; set; } = true;
     public bool HideIdleSessions { get; set; }
+    public bool ShowPlexWatchStats { get; set; } = true;
+    public bool ShowEmbyWatchStats { get; set; } = true;
+    public bool ShowJellyfinWatchStats { get; set; } = true;
+    public bool ShowCombinedWatchStats { get; set; } = true;
+    public bool WatchStatsSyncEnabled { get; set; } = true;
+    public bool WatchStatsSyncPlex { get; set; } = true;
+    public bool WatchStatsSyncEmby { get; set; } = true;
+    public bool WatchStatsSyncJellyfin { get; set; } = true;
+    public int WatchStatsRetentionDays { get; set; }
+    public int WatchStatsBackfillDays { get; set; }
+    public int WatchStatsSyncIntervalMinutes { get; set; }
+    public int WatchStatsTopLimit { get; set; } = 10;
+    /// <summary>Composite keys <c>source:libraryExternalId</c>. Empty = include all libraries.</summary>
+    public List<string> WatchStatsIncludedLibraries { get; set; } = [];
+    public List<WatchStatsUserAlias> UserAliases { get; set; } = [];
+    public List<ActivityLayoutItem> ActivityLayout { get; set; } = [];
     public bool ShowServerMetrics { get; set; } = true;
     public string MetricsHostLabel { get; set; } = "";
     public string MetricsDiskPath { get; set; } = "";

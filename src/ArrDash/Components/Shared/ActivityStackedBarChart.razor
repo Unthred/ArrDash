@@ -1,0 +1,262 @@
+@using ArrDash.Models
+
+<div class="activity-stacked-chart-wrap">
+    <div class="activity-timeline-chart-y">
+        <span>@_maxLabel</span>
+        <span>0</span>
+    </div>
+    <div class="activity-timeline-chart-main">
+        <svg viewBox="0 0 @Width @Height" preserveAspectRatio="none" class="activity-timeline-chart" role="img" aria-label="@AriaLabel">
+            @if (_buckets.Count > 0)
+            {
+                @foreach (var y in _gridYs)
+                {
+                    <line x1="0" y1="@F(y)" x2="@Width" y2="@F(y)" class="activity-line-chart-grid" />
+                }
+                @foreach (var (bucket, i) in _buckets.Select((b, idx) => (b, idx)))
+                {
+                    var x = i * _gap + (_gap - _barWidth) / 2;
+                    var stackTop = Height - _padBottom;
+                    @foreach (var segment in bucket.Segments)
+                    {
+                        var h = _maxValue > 0 ? (segment.Value / _maxValue) * _plotHeight : 0;
+                        if (h <= 0)
+                            continue;
+
+                        stackTop -= h;
+                        var series = segment.Series ?? "Other";
+                        var highlighted = IsHighlighted(series);
+                        var dimmed = IsDimmed(series);
+                        <g class="activity-stacked-bar-segment @(highlighted ? "is-highlighted" : null) @(dimmed ? "is-dimmed" : null)"
+                           @onmouseenter="() => SetHovered(series)"
+                           @onmouseleave="ClearHovered">
+                            <rect x="@F(x)"
+                                  y="@F(stackTop)"
+                                  width="@F(_barWidth)"
+                                  height="@F(Math.Max(h, 1))"
+                                  rx="1.5"
+                                  fill="@ColorFor(series)"
+                                  class="activity-stacked-bar-rect"
+                                  tabindex="0"
+                                  role="button"
+                                  aria-pressed="@IsSelected(series)"
+                                  @onclick="() => ToggleSelection(series)"
+                                  @onkeydown="e => OnSegmentKeyDown(e, series)">
+                                <title>@bucket.Label · @series: @FormatValue(segment.Value)@(_showTotals ? $" (total {FormatValue(bucket.Total)})" : "")</title>
+                            </rect>
+                        </g>
+                    }
+                }
+            }
+        </svg>
+        <div class="activity-line-chart-x">
+            @foreach (var label in _xLabels)
+            {
+                <span style="left:@($"{label.Pct:0.#}%")">@label.Text</span>
+            }
+        </div>
+    </div>
+</div>
+
+@if (_legendSeries.Count > 0)
+{
+    <div class="activity-stacked-chart-legend">
+        @foreach (var series in _legendSeries)
+        {
+            var highlighted = IsHighlighted(series);
+            var dimmed = IsDimmed(series);
+            if (string.Equals(series, "Total", StringComparison.OrdinalIgnoreCase))
+            {
+                <span class="activity-stacked-chart-legend-item activity-stacked-chart-legend-total" title="@HintFor(series)">
+                    <span class="activity-stacked-chart-swatch" style="background:@ColorFor(series)"></span>
+                    @series
+                </span>
+            }
+            else
+            {
+                <button type="button"
+                        class="activity-stacked-chart-legend-item @(highlighted ? "is-highlighted" : null) @(IsSelected(series) ? "is-selected" : null) @(dimmed ? "is-dimmed" : null)"
+                        title="@HintFor(series)"
+                        @onclick="() => ToggleSelection(series)"
+                        @onmouseenter="() => SetHovered(series)"
+                        @onmouseleave="ClearHovered">
+                    <span class="activity-stacked-chart-swatch" style="background:@ColorFor(series)"></span>
+                    @series
+                </button>
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<ActivityChartPoint> Points { get; set; } = [];
+    [Parameter] public double Width { get; set; } = 640;
+    [Parameter] public double Height { get; set; } = 180;
+    [Parameter] public string AriaLabel { get; set; } = "Stacked chart";
+    [Parameter] public bool Hours { get; set; }
+    [Parameter] public bool ShowTotalsInLegend { get; set; }
+    [Parameter] public IReadOnlyList<string>? SeriesOrder { get; set; }
+    [Parameter] public IReadOnlyDictionary<string, string>? SeriesHints { get; set; }
+    [Parameter] public string? SelectedLabel { get; set; }
+    [Parameter] public EventCallback<string?> SelectedLabelChanged { get; set; }
+
+    private sealed record ChartBucket(string Label, double Total, IReadOnlyList<ActivityChartPoint> Segments);
+
+    private string _maxLabel = "0";
+    private double _maxValue;
+    private double _plotHeight;
+    private double _barWidth;
+    private double _gap;
+    private bool _showTotals;
+    private const double _padTop = 8;
+    private const double _padBottom = 4;
+    private List<ChartBucket> _buckets = [];
+    private List<double> _gridYs = [];
+    private List<(string Text, double Pct)> _xLabels = [];
+    private List<string> _legendSeries = [];
+    private string? _hoveredLabel;
+
+    private static readonly Dictionary<string, string> Colors = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Plex"] = "#e5a00d",
+        ["Emby"] = "#52b54b",
+        ["Jellyfin"] = "#aa5cc3",
+        ["Total"] = "#94a3b8",
+        ["Direct play"] = "#22c55e",
+        ["Direct stream"] = "#38bdf8",
+        ["Transcode"] = "#f97316"
+    };
+
+    protected override void OnParametersSet() => Build();
+
+    private bool IsSelected(string label) =>
+        !string.IsNullOrWhiteSpace(SelectedLabel)
+        && string.Equals(SelectedLabel, label, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsHovered(string label) =>
+        !string.IsNullOrWhiteSpace(_hoveredLabel)
+        && string.Equals(_hoveredLabel, label, StringComparison.OrdinalIgnoreCase);
+
+    private bool IsHighlighted(string label) => IsHovered(label) || IsSelected(label);
+
+    private bool IsDimmed(string label)
+    {
+        if (!string.IsNullOrWhiteSpace(_hoveredLabel))
+            return !IsHovered(label);
+
+        return !string.IsNullOrWhiteSpace(SelectedLabel) && !IsSelected(label);
+    }
+
+    private void SetHovered(string label) => _hoveredLabel = label;
+
+    private void ClearHovered() => _hoveredLabel = null;
+
+    private async Task ToggleSelection(string label)
+    {
+        var next = IsSelected(label) ? null : label;
+        SelectedLabel = next;
+        await SelectedLabelChanged.InvokeAsync(next);
+    }
+
+    private async Task OnSegmentKeyDown(KeyboardEventArgs e, string label)
+    {
+        if (e.Key is "Enter" or " ")
+            await ToggleSelection(label);
+    }
+
+    private void Build()
+    {
+        _buckets = [];
+        _gridYs = [];
+        _xLabels = [];
+        _legendSeries = [];
+        _showTotals = ShowTotalsInLegend;
+
+        var stackPoints = Points
+            .Where(p => !string.Equals(p.Series, "Total", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (stackPoints.Count == 0)
+        {
+            _maxValue = 0;
+            _maxLabel = "0";
+            return;
+        }
+
+        var order = SeriesOrder ?? stackPoints
+            .Select(p => p.Series ?? "Other")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(SeriesRank)
+            .ToList();
+
+        _buckets = stackPoints
+            .GroupBy(p => p.Label, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var segments = order
+                    .Select(series => g.FirstOrDefault(p => string.Equals(p.Series, series, StringComparison.OrdinalIgnoreCase)))
+                    .Where(p => p is not null)
+                    .Cast<ActivityChartPoint>()
+                    .ToList();
+                var total = g.Where(p => string.Equals(p.Series, "Total", StringComparison.OrdinalIgnoreCase))
+                    .Select(p => p.Value)
+                    .DefaultIfEmpty(segments.Sum(s => s.Value))
+                    .First();
+                return new ChartBucket(g.Key, total, segments);
+            })
+            .ToList();
+
+        _gap = Width / _buckets.Count;
+        _barWidth = Math.Max(2, _gap * 0.72);
+        _maxValue = _buckets.Max(b => b.Total);
+        if (_maxValue <= 0)
+            _maxValue = _buckets.Max(b => b.Segments.Sum(s => s.Value));
+        if (_maxValue <= 0)
+            _maxValue = 1;
+
+        _maxLabel = FormatValue(_maxValue);
+        _plotHeight = Height - _padTop - _padBottom;
+        _gridYs = [_padTop, _padTop + _plotHeight * 0.5, Height - _padBottom];
+
+        var labelIndexes = PickLabelIndexes(_buckets.Count);
+        _xLabels = labelIndexes
+            .Select(i => (
+                Text: _buckets[i].Label,
+                Pct: _buckets.Count == 1 ? 50 : i * 100.0 / (_buckets.Count - 1)))
+            .ToList();
+
+        _legendSeries = order.ToList();
+        if (_showTotals)
+            _legendSeries.Add("Total");
+    }
+
+    private static int SeriesRank(string series) => series switch
+    {
+        "Plex" => 0,
+        "Emby" => 1,
+        "Jellyfin" => 2,
+        "Direct play" => 0,
+        "Direct stream" => 1,
+        "Transcode" => 2,
+        _ => 50
+    };
+
+    private static string ColorFor(string? series) =>
+        series is not null && Colors.TryGetValue(series, out var color) ? color : "#64748b";
+
+    private string HintFor(string series) =>
+        SeriesHints is not null && SeriesHints.TryGetValue(series, out var hint) ? hint : series;
+
+    private static IReadOnlyList<int> PickLabelIndexes(int count)
+    {
+        if (count <= 1) return [0];
+        if (count <= 6) return Enumerable.Range(0, count).ToList();
+        if (count <= 12) return [0, count / 3, (count * 2) / 3, count - 1];
+        return [0, count / 4, count / 2, (count * 3) / 4, count - 1];
+    }
+
+    private string FormatValue(double value) =>
+        Hours ? $"{value:0.#}h" : value >= 100 ? value.ToString("0") : value.ToString("0.#");
+
+    private static string F(double v) => $"{v:0.##}";
+}

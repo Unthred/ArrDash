@@ -41,6 +41,17 @@ Each service uses a URL and credential env var:
 | Jellyfin | `JELLYFIN_URL` | `JELLYFIN_API_KEY` |
 | Tautulli | `TAUTULLI_URL` | `TAUTULLI_API_KEY` |
 
+### Database (Watch Stats)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ARRDASH_DB_PROVIDER` | `Sqlite` | `Sqlite` or `Postgres` |
+| `ARRDASH_DB_SQLITE_PATH` | `/config/arrdash.db` | SQLite file on the config volume |
+| `ARRDASH_DB_CONNECTION_STRING` | empty | Npgsql connection string when using Postgres |
+| `ARRDASH_WATCH_STATS_SYNC_MINUTES` | `20` | Background history sync interval |
+| `ARRDASH_WATCH_STATS_BACKFILL_DAYS` | `90` | Initial history backfill depth |
+| `ARRDASH_WATCH_STATS_RETENTION_DAYS` | `365` | Delete play events older than this |
+
 Optional tuning:
 
 | Variable | Default | Description |

@@ -27,6 +27,8 @@ public static class ServiceCredentialCatalog
         ("slskd", "slskd", "In slskd: Settings → copy the API key (if API auth is enabled).", "https://github.com/slskd/slskd"),
         ("plex", "Plex", "Sign in to Plex → Settings → Account → Authorized devices, or use a token from plex.tv/account. Paste the X-Plex-Token value.", "https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/"),
         ("emby", "Emby", "In Emby: Dashboard → Advanced → API Keys → create or copy an existing key.", "https://emby.media/support/articles/API-Keys.html"),
-        ("jellyfin", "Jellyfin", "In Jellyfin: Dashboard → Advanced → API Keys → create or copy an existing key.", "https://jellyfin.org/docs/general/server/api/")
+        ("jellyfin", "Jellyfin", "In Jellyfin: Dashboard → Advanced → API Keys → create or copy an existing key.", "https://jellyfin.org/docs/general/server/api/"),
+        ("tautulli", "Tautulli", "In Tautulli: Settings → Web Interface → copy the API key. Powers live Plex watch stats in ArrDash.", "https://docs.tautulli.com/extending-tautulli/api-reference"),
+        ("tracearr", "Tracearr", "In Tracearr: Settings → General → Public API → generate a token (format trr_pub_…). Powers Emby/Jellyfin stats and complements Plex.", "https://tracearr.yeradonkey.com/api/v1/public/docs")
     ];
 }

@@ -1,0 +1,63 @@
+@inject IJSRuntime Js
+
+<div class="activity-layout-item @LayoutClass @(_isDragging ? "is-dragging-source" : null)"
+     data-section-id="@Item.Id">
+    <MudPaper Class="@($"activity-card activity-section-card {(IsLeaderboard ? "activity-card-wide" : "activity-card-chart")}")" Elevation="0">
+        <div class="activity-section-header">
+            <div class="activity-section-titles">
+                <div class="activity-card-title">@Title</div>
+                @if (!string.IsNullOrWhiteSpace(Hint))
+                {
+                    <div class="activity-card-hint">@Hint</div>
+                }
+            </div>
+            <div class="activity-section-handle" draggable="true" @ref="_handleRef"
+                 @ondragstart="OnDragStart" @ondragstart:stopPropagation="true"
+                 @ondragend="OnDragEnd"
+                 title="Drag to rearrange">
+                <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" />
+            </div>
+        </div>
+        <div class="activity-section-body">
+            @ChildContent
+        </div>
+    </MudPaper>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ActivityLayoutItem Item { get; set; } = new();
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public bool IsLeaderboard { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? DraggingId { get; set; }
+    [Parameter] public EventCallback<string> DragStart { get; set; }
+    [Parameter] public EventCallback DragEnd { get; set; }
+
+    private ElementReference _handleRef;
+
+    private bool _isDragging =>
+        !string.IsNullOrWhiteSpace(DraggingId)
+        && string.Equals(DraggingId, Item.Id, StringComparison.OrdinalIgnoreCase);
+
+    private string LayoutClass => Item.Span == 2
+        ? "span-full"
+        : Item.Column == 2
+            ? "span-half col-right"
+            : Item.Column == 1
+                ? "span-half col-left"
+                : "span-half";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await Js.InvokeVoidAsync("arrdashDrag.attachGhost", _handleRef);
+    }
+
+    private Task OnDragStart()
+    {
+        return DragStart.InvokeAsync(Item.Id);
+    }
+
+    private Task OnDragEnd() => DragEnd.InvokeAsync();
+}

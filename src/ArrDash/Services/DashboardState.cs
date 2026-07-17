@@ -272,6 +272,13 @@ public sealed class LayoutPreferencesService(IWebHostEnvironment env, ILogger<La
         await SaveAsync(current, ct);
     }
 
+    public async Task UpdateActivityLayoutAsync(IReadOnlyList<ActivityLayoutItem> layout, CancellationToken ct = default)
+    {
+        await UpdateAsync(p => p.ActivityLayout = layout
+            .Select(item => new ActivityLayoutItem(item.Id, item.Span, item.Column))
+            .ToList(), ct);
+    }
+
     public async Task UpdatePanelViewModeAsync(string panelId, PanelViewMode mode, CancellationToken ct = default)
     {
         var current = Current;
@@ -360,6 +367,9 @@ public sealed class LayoutPreferencesService(IWebHostEnvironment env, ILogger<La
         KioskScreensaverMinutes = p.KioskScreensaverMinutes,
         KioskRotate = p.KioskRotate,
         KioskRotateSeconds = p.KioskRotateSeconds,
-        ShowSettingsHelp = p.ShowSettingsHelp
+        ShowSettingsHelp = p.ShowSettingsHelp,
+        ActivityLayout = p.ActivityLayout
+            .Select(item => new ActivityLayoutItem(item.Id, item.Span, item.Column))
+            .ToList()
     };
 }

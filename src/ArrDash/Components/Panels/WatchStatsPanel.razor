@@ -1,0 +1,209 @@
+@using ArrDash.Models
+@using ArrDash.Services
+@implements IDisposable
+
+<MudPaper Class="@ShellClass" Elevation="0">
+    <div class="panel-header panel-header-rollup @(IsRefreshing ? "is-refreshing" : "")"
+         style="--accent:@Accent"
+         title="Double-click to expand or collapse"
+         @ondblclick="ToggleRollup">
+        <div class="panel-title-wrap">
+            @if (DragHandle is not null)
+            {
+                @DragHandle
+            }
+            <MudIcon Icon="@Icons.Material.Filled.Insights" Class="panel-icon" />
+            <div>
+                <a href="/activity" class="panel-title panel-title-link" @onclick:stopPropagation="true">Activity</a>
+                @if (!RolledUp)
+                {
+                    <div class="panel-sub">@_headerSubtitle</div>
+                }
+            </div>
+        </div>
+
+        @if (RolledUp)
+        {
+            <div class="rollup-summary panel-content-rollup">
+                @if (RollupPosters.Count > 0)
+                {
+                    <WatchStatsMiniPosterStrip Rows="RollupPosters" />
+                }
+                <span class="rollup-stat rollup-stat-wide">@RollupSummaryText</span>
+            </div>
+        }
+    </div>
+
+    @if (!RolledUp)
+    {
+        <div class="watch-stats-panel-body">
+            @if (ShowInitialLoading)
+            {
+                <div class="empty-state">
+                    <MudProgressCircular Indeterminate="true" Size="Size.Medium" />
+                    <div>Loading activity…</div>
+                </div>
+            }
+            else if (_activity is null || _activity.Summary.TotalPlays == 0)
+            {
+                <div class="empty-state">
+                    <MudIcon Icon="@Icons.Material.Outlined.History" Size="Size.Large" />
+                    <div>@_statusText</div>
+                    <MudText Typo="Typo.caption" Class="muted mt-2">Configure Tautulli + Tracearr in Settings, or open full activity and try Year.</MudText>
+                </div>
+            }
+            else
+            {
+                <div class="ws-activity">
+                    <div class="ws-activity-hero">
+                        <div class="ws-metric-strip">
+                            <div class="ws-metric ws-metric-primary">
+                                <span class="ws-metric-value">@_activity.Summary.TotalHours.ToString("0.#")<span class="ws-metric-unit">h</span></span>
+                                <span class="ws-metric-label">Watched</span>
+                            </div>
+                            <div class="ws-metric">
+                                <span class="ws-metric-value">@_activity.Summary.TotalPlays.ToString("N0")</span>
+                                <span class="ws-metric-label">Plays</span>
+                            </div>
+                            <div class="ws-metric">
+                                <span class="ws-metric-value">@_activity.Summary.UniqueUsers</span>
+                                <span class="ws-metric-label">Users</span>
+                            </div>
+                            @if (_activity.ActiveStreams > 0)
+                            {
+                                <div class="ws-metric ws-metric-live">
+                                    <span class="ws-metric-value">@_activity.ActiveStreams</span>
+                                    <span class="ws-metric-label">Live now</span>
+                                </div>
+                            }
+                        </div>
+
+                        @if (_playsSparkline.Count > 1)
+                        {
+                            <figure class="ws-hero-chart">
+                                <figcaption class="ws-hero-chart-cap">Most active months</figcaption>
+                                <ActivityTimelineBarChart Points="_playsSparkline" Width="560" Height="96" Accent="@Accent" ShowAllLabels="true" />
+                            </figure>
+                        }
+                    </div>
+
+                    <div class="ws-rankings">
+                        <WatchStatsMiniList Title="Top users"
+                                            Rows="@(_activity.Leaderboards?.TopUsers ?? [])"
+                                            ShowThumb="true"
+                                            UseAvatar="true"
+                                            ShowRank="true" />
+                        <WatchStatsMiniList Title="Top movies"
+                                            Rows="@(_activity.Leaderboards?.TopMovies ?? [])"
+                                            ShowThumb="true"
+                                            ShowRank="true" />
+                        <WatchStatsMiniList Title="Top TV"
+                                            Rows="@(_activity.Leaderboards?.TopTv ?? [])"
+                                            ShowThumb="true"
+                                            ShowRank="true" />
+                    </div>
+
+                    @if ((_activity.Leaderboards?.Recent?.Count ?? 0) > 0)
+                    {
+                        <div class="ws-recent">
+                            <div class="ws-recent-head">Recently watched</div>
+                            <WatchStatsMiniPosterStrip Rows="@(_activity.Leaderboards!.Recent)" MaxItems="10" />
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    private const string PanelId = "watch-stats";
+
+    [Parameter, EditorRequired] public string Accent { get; set; } = "#a855f7";
+    [Parameter] public bool ShowCombined { get; set; } = true;
+    [Parameter] public bool ShowPlex { get; set; } = true;
+    [Parameter] public bool ShowEmby { get; set; } = true;
+    [Parameter] public bool ShowJellyfin { get; set; } = true;
+    [Parameter] public RenderFragment? DragHandle { get; set; }
+
+    [Inject] private LayoutPreferencesService Prefs { get; set; } = default!;
+    [Inject] private ActivityAnalyticsService ActivityAnalytics { get; set; } = default!;
+    [Inject] private DashboardState DashState { get; set; } = default!;
+
+    private ActivityAnalyticsSnapshot? _activity;
+    private bool _refreshing;
+    private bool _hasLoaded;
+    private PanelRefreshSubscription? _refreshSubscription;
+
+    private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
+    private string ShellClass => RolledUp ? "panel-shell is-rolled-up" : "panel-shell";
+    private string _headerSubtitle => $"{WatchStatsPeriodHelper.Label(_summaryPeriod)} · combined";
+    private static readonly WatchStatsPeriod _summaryPeriod = WatchStatsPeriod.Year;
+
+    private bool ShowInitialLoading => !_hasLoaded && _refreshing;
+    private bool IsRefreshing => _hasLoaded && _refreshing;
+
+    private IReadOnlyList<ActivityChartPoint> _playsSparkline =>
+        _activity is null
+            ? []
+            : ActivityChartSeriesHelper.SelectSeries(_activity.PlaysOverTime, "Total");
+
+    private string _statusText => "No plays in this period — try Year on the activity page";
+
+    private string RollupSummaryText => _activity is { Summary.TotalPlays: > 0 } activity
+        ? $"{activity.Summary.TotalHours:0.#}h · {activity.Summary.TotalPlays:N0} plays · {activity.Summary.UniqueUsers} users"
+        : ShowInitialLoading ? "Loading activity…" : _statusText;
+
+    private IReadOnlyList<WatchStatRow> RollupPosters
+    {
+        get
+        {
+            if (_activity?.Leaderboards is not { } lb)
+                return [];
+
+            var posters = lb.Recent
+                .Concat(lb.TopMovies)
+                .Concat(lb.TopTv)
+                .Where(r => !string.IsNullOrWhiteSpace(r.ThumbUrl))
+                .DistinctBy(r => r.ThumbUrl)
+                .Take(8)
+                .ToList();
+            return posters;
+        }
+    }
+
+    private async Task ToggleRollup() => await Prefs.TogglePanelRollupAsync(PanelId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _refreshSubscription = new PanelRefreshSubscription(Prefs, DashState, force => _ = RefreshAsync(force));
+        await RefreshAsync(force: true);
+    }
+
+    private async Task RefreshAsync(bool force)
+    {
+        if (_refreshing)
+            return;
+
+        _refreshing = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var filter = ShowCombined
+                ? WatchStatsSourceFilter.Combined
+                : ShowPlex ? WatchStatsSourceFilter.Plex
+                : ShowEmby ? WatchStatsSourceFilter.Emby
+                : WatchStatsSourceFilter.Jellyfin;
+            _activity = await ActivityAnalytics.GetAsync(WatchStatsRange.Year, filter, force: false);
+            _hasLoaded = true;
+        }
+        finally
+        {
+            _refreshing = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public void Dispose() => _refreshSubscription?.Dispose();
+}

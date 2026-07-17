@@ -93,4 +93,22 @@ public static class SettingsHelpTexts
 
     public static string PanelAccent(string panelLabel) =>
         $"Highlight colour for the {panelLabel} panel.";
+
+    public const string WatchStatsSyncEnabled = "Optional background import into the local database. Live stats on the dashboard come from Tautulli and Tracearr APIs — sync is not required to see data.";
+    public const string WatchStatsSyncPlex = "Import Plex history via Tautulli into the local cache (optional; live Plex stats always use Tautulli).";
+    public const string WatchStatsSyncEmby = "Import Emby history via Playback Reporting into the local cache. Live Emby stats prefer Tracearr when configured.";
+    public const string WatchStatsSyncJellyfin = "Import Jellyfin history via Playback Reporting into the local cache. Live Jellyfin stats prefer Tracearr when configured.";
+    public const string WatchStatsRetentionDays = "Delete play events older than this many days. 0 uses the server default (365).";
+    public const string WatchStatsBackfillDays = "On first sync, how many days of history to pull. 0 uses the server default (90).";
+    public const string WatchStatsSyncInterval = "Minutes between background history sync runs. 0 uses the server default (20).";
+    public const string WatchStatsTopLimit = "How many rows to show in each Watch Stats leaderboard.";
+    public const string ShowCombinedWatchStats = "Show a merged Plex + Emby + Jellyfin view in the Watch Stats panel.";
+    public const string ShowPlexWatchStats = "Include Plex stats in the Watch Stats panel.";
+    public const string ShowEmbyWatchStats = "Include Emby stats in the Watch Stats panel.";
+    public const string ShowJellyfinWatchStats = "Include Jellyfin stats in the Watch Stats panel.";
+    public const string WatchStatsUserAliases = "Map usernames across servers for combined rankings. One per line: canonical|source|username (e.g. Mom|plex|Margaret).";
+    public const string WatchStatsIncludedLibraries = "Choose which media libraries count toward Activity stats. Leave all unchecked (or clear) to include every library. Uses each server's real library names — not hardcoded TV Shows / Movies.";
+    public const string WatchStatsLiveSources = "Live stats are fetched directly from these services. Configure URL and API key on the API keys tab.";
+    public const string WatchStatsTautulliSource = "Plex leaderboards and recently watched — same data as the Tautulli home dashboard.";
+    public const string WatchStatsTracearrSource = "Emby and Jellyfin stats — session history and platforms from Tracearr. Generate a Public API token in Tracearr Settings → General.";
 }

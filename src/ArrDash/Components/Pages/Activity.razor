@@ -1,0 +1,866 @@
+@page "/activity"
+@using System.Text.Json.Serialization
+@using ArrDash.Models
+@using ArrDash.Components.Activity
+@using ArrDash.Services
+@inject ActivityAnalyticsService ActivityAnalytics
+@inject ActivitySourceAvailability SourceAvailability
+@inject LayoutPreferencesService Prefs
+@inject IJSRuntime Js
+@implements IDisposable
+
+<PageTitle>Activity · ArrDash</PageTitle>
+
+<div class="activity-page">
+    <header class="activity-page-header">
+        <div class="activity-page-header-main">
+            <h1 class="activity-page-title">Watch activity</h1>
+            @if (_refreshing)
+            {
+                <div class="activity-refresh-banner" role="status" aria-live="polite">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <span>@(_hasLoaded ? _refreshStatusText : "Loading activity…")</span>
+                </div>
+            }
+            <p class="activity-page-sub">@_filterSubtitle — click any row to drill down</p>
+        </div>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Dashboard" Href="/">
+            Dashboard
+        </MudButton>
+    </header>
+
+    <nav class="activity-subnav">
+        <MudButton Variant="Variant.Filled" Href="/activity" Class="activity-subnav-link is-active">Overview</MudButton>
+        <MudButton Variant="Variant.Text" Href="/activity/users" Class="activity-subnav-link">Users</MudButton>
+    </nav>
+
+    <div class="activity-toolbar">
+        <ActivityPeriodFilter Period="_range.Period"
+                              CustomStartUtc="_range.CustomStartUtc"
+                              CustomEndUtc="_range.CustomEndUtc"
+                              RangeChanged="OnRangeChanged"
+                              Disabled="_refreshing" />
+
+        @if (_filters.Count > 0)
+        {
+            <MudToggleGroup T="WatchStatsSourceFilter"
+                            Value="_source"
+                            ValueChanged="SetSource"
+                            Rounded="true"
+                            SelectedClass="segmented-toggle-selected"
+                            Class="arrdash-segmented-toggle watch-stats-chips activity-filter-toggle"
+                            Disabled="_refreshing">
+                @foreach (var filter in _filters)
+                {
+                    <MudToggleItem T="WatchStatsSourceFilter" Value="filter" Text="@FilterLabel(filter)" />
+                }
+            </MudToggleGroup>
+        }
+    </div>
+
+    @if (_plexDataWarning is not null)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="activity-source-warning" Dense="true">
+            @_plexDataWarning
+        </MudAlert>
+    }
+
+    @if (_filteredSources.Count > 0)
+    {
+        <div class="activity-source-chips">
+            @foreach (var source in _filteredSources)
+            {
+                <MudChip T="string" Size="Size.Small"
+                         Color="@(source.Error is not null ? Color.Warning : source.Configured ? Color.Success : Color.Default)"
+                         Variant="Variant.Outlined"
+                         Title="@source.Error">
+                    @source.Label
+                </MudChip>
+            }
+        </div>
+    }
+
+    @if (_filters.Count == 0)
+    {
+        <div class="activity-empty">No watch stats sources configured. Add Tautulli and/or Tracearr in Settings.</div>
+    }
+    else if (_snapshot is not null)
+    {
+        <div class="activity-page-body" @key="@_layoutRenderKey">
+        <div class="activity-kpi-grid">
+            <div class="activity-kpi-card accent-sky">
+                <div class="activity-kpi-label">Watch time</div>
+                <div class="activity-kpi-hint">Total hours watched in this period</div>
+                <div class="activity-kpi-value">@_snapshot.Summary.TotalHours.ToString("0.#")<span>h</span></div>
+            </div>
+            <div class="activity-kpi-card accent-violet">
+                <div class="activity-kpi-label">Plays</div>
+                <div class="activity-kpi-hint">Play sessions started (movies, episodes, music)</div>
+                <div class="activity-kpi-value">@_snapshot.Summary.TotalPlays.ToString("N0")</div>
+            </div>
+            <div class="activity-kpi-card accent-emerald">
+                <div class="activity-kpi-label">Users</div>
+                <div class="activity-kpi-hint">Distinct users with at least one play</div>
+                <div class="activity-kpi-value">@_snapshot.Summary.UniqueUsers</div>
+            </div>
+            <div class="activity-kpi-card accent-amber">
+                <div class="activity-kpi-label">Active streams</div>
+                <div class="activity-kpi-hint">@(_source == WatchStatsSourceFilter.Combined ? "Live streams right now (Tracearr)" : $"Live {_source} streams right now")</div>
+                <div class="activity-kpi-value">@_snapshot.ActiveStreams</div>
+            </div>
+        </div>
+
+        <div class="activity-layout-grid @(_draggingSectionId is not null ? "is-dragging" : null)"
+             @ref="_layoutGrid"
+             @ondragover:preventDefault="true"
+             @ondrop="OnGridDrop" @ondrop:preventDefault="true">
+            @foreach (var item in VisibleLayout)
+            {
+                <ActivitySectionShell @key="item.Id"
+                                      Item="item"
+                                      Title="@GetSectionTitle(item.Id)"
+                                      Hint="@GetSectionHint(item.Id)"
+                                      IsLeaderboard="@IsLeaderboardSection(item.Id)"
+                                      DraggingId="_draggingSectionId"
+                                      DragStart="OnSectionDragStart"
+                                      DragEnd="OnSectionDragEnd">
+                    @RenderSectionBody(item.Id)
+                </ActivitySectionShell>
+            }
+        </div>
+        </div>
+    }
+</div>
+
+<ActivityDetailDrawer @ref="_drawer" />
+
+@code {
+    private static readonly string[] QualityColors = ["#22c55e", "#38bdf8", "#f97316"];
+
+    private WatchStatsRange _range = WatchStatsRange.Year;
+    private WatchStatsSourceFilter _source = WatchStatsSourceFilter.Combined;
+    private ActivityAnalyticsSnapshot? _snapshot;
+    private IReadOnlyList<WatchStatsSourceFilter> _filters = [];
+    private IReadOnlyList<string> _configuredSources = [];
+    private bool _refreshing;
+    private bool _hasLoaded;
+    private int _refreshGeneration;
+    private string? _selectedPlatform;
+    private string? _selectedQuality;
+    private string? _selectedMediaMix;
+    private string? _selectedPlaysSeries;
+    private string? _selectedConcurrentSeries;
+    private ActivityDetailDrawer? _drawer;
+    private List<ActivityLayoutItem> _layout = [];
+    private string? _draggingSectionId;
+    private ElementReference _layoutGrid;
+
+    private string _refreshStatusText =>
+        $"Updating {WatchStatsPeriodHelper.Label(_range)} · {FilterLabel(_source)}…";
+
+    private IReadOnlyList<ActivityChartPoint> _concurrentSeries =>
+        _snapshot is null ? [] : ActivityChartSeriesHelper.BuildConcurrentSeries(_snapshot.ConcurrentStreams);
+
+    private string _concurrentEmptyMessage => _source switch
+    {
+        WatchStatsSourceFilter.Plex => "Peak concurrent breakdown is tracked via Tracearr (Emby/Jellyfin only)",
+        WatchStatsSourceFilter.Emby or WatchStatsSourceFilter.Jellyfin => "No concurrent stream data for this period",
+        _ => "No concurrent stream data"
+    };
+
+    private string _filterSubtitle =>
+        $"{WatchStatsPeriodHelper.Label(_range)} · {FilterLabel(_source)}";
+
+    private string _layoutRenderKey =>
+        $"{WatchStatsPeriodHelper.Label(_range)}|{_source}";
+
+    private IReadOnlyList<ActivityDataSourceStatus> _filteredSources =>
+        _snapshot?.Sources.Where(MatchesSourceFilter).ToList() ?? [];
+
+    private string? _plexDataWarning =>
+        _filteredSources.FirstOrDefault(s => string.Equals(s.Key, WatchStatsSources.Plex, StringComparison.OrdinalIgnoreCase))?.Error;
+
+    private bool MatchesSourceFilter(ActivityDataSourceStatus source) => _source switch
+    {
+        WatchStatsSourceFilter.Combined => true,
+        WatchStatsSourceFilter.Plex => string.Equals(source.Key, WatchStatsSources.Plex, StringComparison.OrdinalIgnoreCase),
+        WatchStatsSourceFilter.Emby => string.Equals(source.Key, WatchStatsSources.Emby, StringComparison.OrdinalIgnoreCase),
+        WatchStatsSourceFilter.Jellyfin => string.Equals(source.Key, WatchStatsSources.Jellyfin, StringComparison.OrdinalIgnoreCase),
+        _ => true
+    };
+
+    private bool _hasMusic => _snapshot?.Leaderboards?.TopMusic.Count > 0;
+
+    private bool _hasGenres => _snapshot?.Leaderboards?.TopGenres.Count > 0;
+
+    private IEnumerable<ActivityLayoutItem> VisibleLayout =>
+        _layout.Where(item => ActivityLayoutCatalog.IsVisible(item.Id, _source, _configuredSources, _hasMusic, _hasGenres));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _layout = ActivityLayoutCatalog.Normalize(Prefs.Current.ActivityLayout).ToList();
+        Prefs.Changed += OnPrefsChanged;
+        _filters = await SourceAvailability.GetAvailableFiltersAsync();
+        _configuredSources = await SourceAvailability.GetConfiguredSourcesAsync();
+        if (_filters.Count > 0 && !_filters.Contains(_source))
+            _source = _filters[0];
+        await RefreshAsync();
+    }
+
+    private static bool IsLeaderboardSection(string id) =>
+        id.StartsWith("top-", StringComparison.OrdinalIgnoreCase)
+        || id.StartsWith("popular-", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(id, "recently-watched", StringComparison.OrdinalIgnoreCase);
+
+    private string GetSectionTitle(string id) => id switch
+    {
+        "plays-over-time" => "Plays over time",
+        "peak-concurrent" => "Peak concurrent streams",
+        "media-mix" => "Media mix",
+        "platforms" => "Platforms",
+        "stream-quality" => "Stream quality",
+        "by-day" => "By day of week",
+        "by-hour" => "By hour",
+        "top-users" => "Top users",
+        "top-movies" => "Top movies",
+        "top-tv" => "Top TV",
+        "top-music" => "Top music",
+        "top-genres" => "Top genres",
+        "popular-movies" => "Popular movies",
+        "popular-tv" => "Popular TV",
+        "top-libraries" => "Top libraries",
+        "recently-watched" => "Recently watched",
+        _ => id
+    };
+
+    private string GetSectionHint(string id)
+    {
+        var bucket = WatchStatsPeriodHelper.UsesMonthlyBuckets(_range.Period) ? "month" : "day";
+        return id switch
+        {
+            "plays-over-time" => $"Each bar is a {bucket}. Colours are stacked by server — hover the legend for what each colour means.",
+            "peak-concurrent" => $"Peak simultaneous streams per {bucket}, split by how they were delivered. Hover legend items for detail.",
+            "media-mix" => "Share of watch time by type (movies, TV, music). Click a slice to see titles and viewers.",
+            "platforms" => "Client apps and devices — Chrome, Tizen, tvOS, Android TV, etc. Click a slice to see who used it.",
+            "stream-quality" => "How streams were delivered. Click Direct Play / Transcode to see those plays.",
+            "by-day" => "Total plays on each weekday — spot your household's heavy viewing days.",
+            "by-hour" => "Plays by hour of day (local server time) — when people actually press play.",
+            "top-users" => "Ranked by watch time. Click a user for genres, titles, and plays.",
+            "top-movies" => "Most-watched films by hours played. Click for who watched and recent plays.",
+            "top-tv" => "Most-watched series by hours played. Click for viewers and episode history.",
+            "top-music" => "Most-listened artists or albums in this period. Click for listeners.",
+            "top-genres" => "Genres with the most watch time. Click for titles and viewers in that genre.",
+            "popular-movies" => "Films watched by the most different people (not just the longest binge).",
+            "popular-tv" => "Series watched by the most different people in this period.",
+            "top-libraries" => "Plex/Emby/Jellyfin libraries with the most plays.",
+            "recently-watched" => "Latest play sessions in this period, newest first. Click a title for its profile.",
+            _ => ""
+        };
+    }
+
+    private RenderFragment RenderSectionBody(string id) => builder =>
+    {
+        if (_snapshot is null)
+            return;
+
+        switch (id)
+        {
+            case "plays-over-time":
+                if (_snapshot.PlaysOverTime.Count > 0)
+                {
+                    builder.OpenComponent<ActivityStackedBarChart>(0);
+                    builder.AddAttribute(1, "Points", _snapshot.PlaysOverTime);
+                    builder.AddAttribute(2, "Height", 130.0);
+                    builder.AddAttribute(3, "SeriesOrder", ActivityChartSeriesHelper.ServerSeriesOrder);
+                    builder.AddAttribute(4, "SeriesHints", ActivityChartSeriesHelper.ServerSeriesHints);
+                    builder.AddAttribute(5, "ShowTotalsInLegend", true);
+                    builder.AddAttribute(6, "AriaLabel", "Plays over time by media server");
+                    builder.AddAttribute(7, "SelectedLabel", _selectedPlaysSeries);
+                    builder.AddAttribute(8, "SelectedLabelChanged", EventCallback.Factory.Create<string?>(this, v => OnBarSeriesSelected(nameof(_selectedPlaysSeries), v)));
+                    builder.CloseComponent();
+                }
+                else
+                    builder.AddContent(7, Empty("No plays in this period"));
+                break;
+
+            case "peak-concurrent":
+                if (_concurrentSeries.Count > 0)
+                {
+                    builder.OpenComponent<ActivityStackedBarChart>(10);
+                    builder.AddAttribute(11, "Points", _concurrentSeries);
+                    builder.AddAttribute(12, "Height", 130.0);
+                    builder.AddAttribute(13, "SeriesOrder", ActivityChartSeriesHelper.DeliverySeriesOrder);
+                    builder.AddAttribute(14, "SeriesHints", ActivityChartSeriesHelper.DeliverySeriesHints);
+                    builder.AddAttribute(15, "AriaLabel", "Peak concurrent streams by delivery mode");
+                    builder.AddAttribute(16, "SelectedLabel", _selectedConcurrentSeries);
+                    builder.AddAttribute(17, "SelectedLabelChanged", EventCallback.Factory.Create<string?>(this, v => OnBarSeriesSelected(nameof(_selectedConcurrentSeries), v)));
+                    builder.CloseComponent();
+                }
+                else
+                    builder.AddContent(16, Empty(_concurrentEmptyMessage));
+                break;
+
+            case "media-mix":
+                if (_snapshot.MediaMix is { } mix && BuildMediaMixRows(mix).Count > 0)
+                {
+                    builder.OpenComponent<ActivityPieChart>(20);
+                    builder.AddAttribute(21, "Rows", BuildMediaMixRows(mix));
+                    builder.AddAttribute(22, "Hours", true);
+                    builder.AddAttribute(23, "AriaLabel", "Media mix");
+                    builder.AddAttribute(24, "SelectedLabel", _selectedMediaMix);
+                    builder.AddAttribute(25, "SelectedLabelChanged", EventCallback.Factory.Create<string?>(this, v => OnPieSelected(nameof(_selectedMediaMix), v)));
+                    builder.CloseComponent();
+                }
+                else
+                    builder.AddContent(26, Empty("No media mix for this period"));
+                break;
+
+            case "platforms":
+                if (_snapshot.Platforms.Count > 0)
+                {
+                    builder.OpenComponent<ActivityPieChart>(30);
+                    builder.AddAttribute(31, "Rows", _snapshot.Platforms);
+                    builder.AddAttribute(32, "AriaLabel", "Platforms");
+                    builder.AddAttribute(33, "MaxSlices", 14);
+                    builder.AddAttribute(34, "SelectedLabel", _selectedPlatform);
+                    builder.AddAttribute(35, "SelectedLabelChanged", EventCallback.Factory.Create<string?>(this, v => OnPieSelected(nameof(_selectedPlatform), v)));
+                    builder.CloseComponent();
+                }
+                else
+                    builder.AddContent(36, Empty("No platform data"));
+                break;
+
+            case "stream-quality":
+                if (BuildQualityRows(_snapshot).Count > 0)
+                {
+                    builder.OpenComponent<ActivityPieChart>(40);
+                    builder.AddAttribute(41, "Rows", BuildQualityRows(_snapshot));
+                    builder.AddAttribute(42, "AriaLabel", "Stream quality");
+                    builder.AddAttribute(43, "Colors", QualityColors);
+                    builder.AddAttribute(44, "SelectedLabel", _selectedQuality);
+                    builder.AddAttribute(45, "SelectedLabelChanged", EventCallback.Factory.Create<string?>(this, v => OnPieSelected(nameof(_selectedQuality), v)));
+                    builder.CloseComponent();
+                }
+                else
+                    builder.AddContent(46, Empty("No stream quality data"));
+                break;
+
+            case "by-day":
+                if (_snapshot.ByDayOfWeek.Count > 0)
+                {
+                    builder.OpenComponent<ActivityTimelineBarChart>(50);
+                    builder.AddAttribute(51, "Points", _snapshot.ByDayOfWeek);
+                    builder.AddAttribute(52, "Height", 110.0);
+                    builder.AddAttribute(53, "Accent", "#22c55e");
+                    builder.AddAttribute(54, "ShowAllLabels", true);
+                    builder.AddAttribute(55, "AriaLabel", "Plays by day of week");
+                    builder.CloseComponent();
+                }
+                else
+                    builder.AddContent(56, Empty("No data"));
+                break;
+
+            case "by-hour":
+                if (_snapshot.ByHourOfDay.Count > 0)
+                {
+                    builder.OpenComponent<ActivityTimelineBarChart>(60);
+                    builder.AddAttribute(61, "Points", _snapshot.ByHourOfDay);
+                    builder.AddAttribute(62, "Height", 110.0);
+                    builder.AddAttribute(63, "Accent", "#f59e0b");
+                    builder.AddAttribute(64, "ShowAllLabels", true);
+                    builder.AddAttribute(65, "AriaLabel", "Plays by hour");
+                    builder.CloseComponent();
+                }
+                else
+                    builder.AddContent(66, Empty("No data"));
+                break;
+
+            default:
+                if (_snapshot.Leaderboards is not { } lb)
+                    break;
+
+                IReadOnlyList<WatchStatRow> rows = id switch
+                {
+                    "top-users" => lb.TopUsers,
+                    "top-movies" => lb.TopMovies,
+                    "top-tv" => lb.TopTv,
+                    "top-music" => lb.TopMusic,
+                    "top-genres" => lb.TopGenres,
+                    "popular-movies" => lb.TopPopularMovies ?? [],
+                    "popular-tv" => lb.TopPopularTv ?? [],
+                    "top-libraries" => lb.TopLibraries ?? [],
+                    "recently-watched" => lb.Recent,
+                    _ => []
+                };
+
+                if (rows.Count == 0)
+                {
+                    builder.AddContent(70, Empty("No data"));
+                    break;
+                }
+
+                builder.OpenComponent<ActivityLeaderboard>(71);
+                builder.AddAttribute(72, "Rows", rows);
+                builder.AddAttribute(73, "OnRowClick", EventCallback.Factory.Create<WatchStatRow>(this, OpenDrilldown));
+                if (string.Equals(id, "top-users", StringComparison.OrdinalIgnoreCase))
+                    builder.AddAttribute(74, "Mode", ActivityLeaderboard.ActivityLeaderboardMode.User);
+                builder.CloseComponent();
+                break;
+        }
+    };
+
+    private static RenderFragment Empty(string message) => builder =>
+    {
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", "activity-card-empty");
+        builder.AddContent(2, message);
+        builder.CloseElement();
+    };
+
+    private void OnPrefsChanged()
+    {
+        _layout = ActivityLayoutCatalog.Normalize(Prefs.Current.ActivityLayout).ToList();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnSectionDragStart(string id)
+    {
+        _draggingSectionId = id;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnSectionDragEnd()
+    {
+        _draggingSectionId = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnGridDrop(DragEventArgs e)
+    {
+        var draggedId = _draggingSectionId;
+        _draggingSectionId = null;
+
+        if (draggedId is null)
+            return;
+
+        ActivityDropResolveResult? resolved;
+        try
+        {
+            resolved = await Js.InvokeAsync<ActivityDropResolveResult?>(
+                "arrdashDrag.resolveActivityDrop",
+                _layoutGrid,
+                e.ClientX,
+                e.ClientY,
+                draggedId);
+        }
+        catch
+        {
+            return;
+        }
+
+        if (resolved is null || string.IsNullOrWhiteSpace(resolved.Placement))
+            return;
+
+        var draggedIndex = _layout.FindIndex(item => string.Equals(item.Id, draggedId, StringComparison.OrdinalIgnoreCase));
+        if (draggedIndex < 0)
+            return;
+
+        switch (resolved.Action)
+        {
+            case "splitFull" when !string.IsNullOrWhiteSpace(resolved.TargetId):
+                await ApplySplitDropAsync(draggedIndex, resolved.TargetId, resolved.Placement);
+                return;
+            case "replaceFull" when !string.IsNullOrWhiteSpace(resolved.TargetId):
+                await ApplyReplaceFullDropAsync(draggedIndex, resolved.TargetId);
+                return;
+            case "expandToFull":
+                await ApplyExpandToFullDropAsync(draggedIndex);
+                return;
+            case "swapPair" when !string.IsNullOrWhiteSpace(resolved.TargetId):
+                await ApplySwapPairDropAsync(draggedIndex, resolved.TargetId);
+                return;
+        }
+
+        var visibleIds = VisibleLayout.Select(item => item.Id).ToList();
+        var insertVisibleIndex = Math.Clamp(resolved.InsertIndex, 0, visibleIds.Count);
+
+        var updated = ApplyPlacement(_layout[draggedIndex], resolved.Placement);
+        var currentVisibleIndex = visibleIds.FindIndex(id => string.Equals(id, draggedId, StringComparison.OrdinalIgnoreCase));
+
+        // Same visual slot — resize only.
+        if (currentVisibleIndex == insertVisibleIndex)
+        {
+            _layout[draggedIndex] = updated;
+            await SaveLayoutAsync();
+            return;
+        }
+
+        _layout.RemoveAt(draggedIndex);
+
+        int insertFullIndex;
+        if (insertVisibleIndex >= visibleIds.Count)
+        {
+            insertFullIndex = _layout.Count;
+        }
+        else
+        {
+            var beforeId = visibleIds[insertVisibleIndex];
+            insertFullIndex = _layout.FindIndex(item => string.Equals(item.Id, beforeId, StringComparison.OrdinalIgnoreCase));
+            if (insertFullIndex < 0)
+                insertFullIndex = _layout.Count;
+        }
+
+        insertFullIndex = Math.Clamp(insertFullIndex, 0, _layout.Count);
+        _layout.Insert(insertFullIndex, updated);
+
+        await SaveLayoutAsync();
+    }
+
+    private async Task ApplySplitDropAsync(int draggedIndex, string targetId, string placement)
+    {
+        var targetIndex = _layout.FindIndex(item => string.Equals(item.Id, targetId, StringComparison.OrdinalIgnoreCase));
+        if (targetIndex < 0)
+            return;
+
+        var dragged = _layout[draggedIndex];
+        _layout.RemoveAt(draggedIndex);
+        if (draggedIndex < targetIndex)
+            targetIndex--;
+
+        var incumbent = _layout[targetIndex];
+
+        if (string.Equals(placement, "left", StringComparison.OrdinalIgnoreCase))
+        {
+            var draggedLeft = new ActivityLayoutItem(dragged.Id, 1, 1);
+            var incumbentRight = new ActivityLayoutItem(incumbent.Id, 1, 2);
+            _layout[targetIndex] = incumbentRight;
+            _layout.Insert(targetIndex, draggedLeft);
+        }
+        else
+        {
+            var incumbentLeft = new ActivityLayoutItem(incumbent.Id, 1, 1);
+            var draggedRight = new ActivityLayoutItem(dragged.Id, 1, 2);
+            _layout[targetIndex] = incumbentLeft;
+            _layout.Insert(targetIndex + 1, draggedRight);
+        }
+
+        await SaveLayoutAsync();
+    }
+
+    private async Task ApplyReplaceFullDropAsync(int draggedIndex, string targetId)
+    {
+        var targetIndex = _layout.FindIndex(item => string.Equals(item.Id, targetId, StringComparison.OrdinalIgnoreCase));
+        if (targetIndex < 0)
+            return;
+
+        if (draggedIndex == targetIndex)
+        {
+            _layout[draggedIndex] = ApplyPlacement(_layout[draggedIndex], "full");
+            await SaveLayoutAsync();
+            return;
+        }
+
+        var dragged = _layout[draggedIndex];
+        _layout.RemoveAt(draggedIndex);
+        if (draggedIndex < targetIndex)
+            targetIndex--;
+
+        var incumbent = _layout[targetIndex];
+        _layout[targetIndex] = ApplyPlacement(dragged, "full");
+        _layout.Insert(targetIndex + 1, ApplyPlacement(incumbent, "full"));
+
+        await SaveLayoutAsync();
+    }
+
+    private async Task ApplyExpandToFullDropAsync(int draggedIndex)
+    {
+        var dragged = _layout[draggedIndex];
+        var partnerIndex = FindRowPartnerIndex(draggedIndex);
+        if (partnerIndex < 0)
+        {
+            _layout[draggedIndex] = ApplyPlacement(dragged, "full");
+            await SaveLayoutAsync();
+            return;
+        }
+
+        var partner = _layout[partnerIndex];
+        var rowStart = Math.Min(draggedIndex, partnerIndex);
+
+        _layout.RemoveAt(Math.Max(draggedIndex, partnerIndex));
+        _layout.RemoveAt(Math.Min(draggedIndex, partnerIndex));
+
+        _layout.Insert(rowStart, ApplyPlacement(dragged, "full"));
+        _layout.Insert(rowStart + 1, new ActivityLayoutItem(partner.Id, 1, 1));
+
+        await SaveLayoutAsync();
+    }
+
+    private async Task ApplySwapPairDropAsync(int draggedIndex, string rowStartId)
+    {
+        var leftIndex = _layout.FindIndex(item => string.Equals(item.Id, rowStartId, StringComparison.OrdinalIgnoreCase));
+        if (leftIndex < 0 || leftIndex >= _layout.Count - 1)
+            return;
+
+        if (_layout[leftIndex].Span != 1 || _layout[leftIndex + 1].Span != 1)
+            return;
+
+        if (draggedIndex != leftIndex && draggedIndex != leftIndex + 1)
+            return;
+
+        var left = _layout[leftIndex];
+        var right = _layout[leftIndex + 1];
+
+        _layout[leftIndex] = new ActivityLayoutItem(right.Id, 1, 1);
+        _layout[leftIndex + 1] = new ActivityLayoutItem(left.Id, 1, 2);
+
+        await SaveLayoutAsync();
+    }
+
+    private int FindRowPartnerIndex(int index)
+    {
+        if (index < 0 || index >= _layout.Count)
+            return -1;
+
+        if (_layout[index].Span != 1)
+            return -1;
+
+        if (index > 0 && _layout[index - 1].Span == 1)
+            return index - 1;
+
+        if (index < _layout.Count - 1 && _layout[index + 1].Span == 1)
+            return index + 1;
+
+        return -1;
+    }
+
+    private static ActivityLayoutItem ApplyPlacement(ActivityLayoutItem item, string placement) =>
+        placement switch
+        {
+            "left" => new ActivityLayoutItem(item.Id, 1, 1),
+            "right" => new ActivityLayoutItem(item.Id, 1, 2),
+            _ => new ActivityLayoutItem(item.Id, 2, 0)
+        };
+
+    private async Task SaveLayoutAsync()
+    {
+        await Prefs.UpdateActivityLayoutAsync(_layout);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private sealed class ActivityDropResolveResult
+    {
+        [JsonPropertyName("action")]
+        public string Action { get; set; } = "insert";
+
+        [JsonPropertyName("insertIndex")]
+        public int InsertIndex { get; set; }
+
+        [JsonPropertyName("placement")]
+        public string Placement { get; set; } = "full";
+
+        [JsonPropertyName("targetId")]
+        public string? TargetId { get; set; }
+    }
+
+    private static string FilterLabel(WatchStatsSourceFilter filter) => filter switch
+    {
+        WatchStatsSourceFilter.Combined => "Combined",
+        WatchStatsSourceFilter.Plex => "Plex",
+        WatchStatsSourceFilter.Emby => "Emby",
+        WatchStatsSourceFilter.Jellyfin => "Jellyfin",
+        _ => filter.ToString()
+    };
+
+    private async Task OnRangeChanged((WatchStatsPeriod Period, DateTime? StartUtc, DateTime? EndUtc) args)
+    {
+        var next = new WatchStatsRange(args.Period, args.StartUtc, args.EndUtc);
+        if (!next.IsQueryable || WatchStatsPeriodHelper.RangesEqual(_range, next))
+            return;
+
+        _range = next;
+        _selectedPlatform = null;
+        _selectedQuality = null;
+        _selectedMediaMix = null;
+        _selectedPlaysSeries = null;
+        _selectedConcurrentSeries = null;
+        await RefreshAsync();
+    }
+
+    private Task OnBarSeriesSelected(string field, string? value)
+    {
+        switch (field)
+        {
+            case nameof(_selectedPlaysSeries):
+                _selectedPlaysSeries = _selectedPlaysSeries == value ? null : value;
+                break;
+            case nameof(_selectedConcurrentSeries):
+                _selectedConcurrentSeries = _selectedConcurrentSeries == value ? null : value;
+                break;
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnPieSelected(string field, string? value)
+    {
+        string? selected = null;
+        switch (field)
+        {
+            case nameof(_selectedPlatform):
+                selected = _selectedPlatform == value ? null : value;
+                _selectedPlatform = selected;
+                _selectedQuality = null;
+                _selectedMediaMix = null;
+                break;
+            case nameof(_selectedQuality):
+                selected = _selectedQuality == value ? null : value;
+                _selectedQuality = selected;
+                _selectedPlatform = null;
+                _selectedMediaMix = null;
+                break;
+            default:
+                selected = _selectedMediaMix == value ? null : value;
+                _selectedMediaMix = selected;
+                _selectedPlatform = null;
+                _selectedQuality = null;
+                break;
+        }
+
+        await InvokeAsync(StateHasChanged);
+
+        if (string.IsNullOrWhiteSpace(selected) || _drawer is null)
+            return;
+
+        var (kind, key) = field switch
+        {
+            nameof(_selectedPlatform) => (ActivityDrilldownKind.Platform, selected),
+            nameof(_selectedQuality) => (ActivityDrilldownKind.Quality, selected),
+            _ => (ActivityDrilldownKind.MediaType, selected)
+        };
+
+        var row = new WatchStatRow(
+            selected,
+            null,
+            0,
+            0,
+            null,
+            null,
+            null,
+            DrilldownKey: key,
+            DrilldownKind: kind);
+
+        await OpenDrilldown(row);
+    }
+
+    private async Task SetSource(WatchStatsSourceFilter source)
+    {
+        if (_source == source) return;
+        _source = source;
+        _selectedPlatform = null;
+        _selectedQuality = null;
+        _selectedMediaMix = null;
+        _selectedPlaysSeries = null;
+        _selectedConcurrentSeries = null;
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        var generation = ++_refreshGeneration;
+        using var spinnerDelay = new CancellationTokenSource();
+        _ = ShowSpinnerAfterDelayAsync(generation, spinnerDelay.Token);
+
+        try
+        {
+            var snapshot = await ActivityAnalytics.GetAsync(_range, _source, force: false);
+            if (generation != _refreshGeneration)
+                return;
+
+            _snapshot = snapshot;
+            _hasLoaded = true;
+        }
+        finally
+        {
+            spinnerDelay.Cancel();
+            if (generation == _refreshGeneration)
+            {
+                _refreshing = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task ShowSpinnerAfterDelayAsync(int generation, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(150, ct);
+            if (ct.IsCancellationRequested || generation != _refreshGeneration)
+                return;
+
+            _refreshing = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+            // Refresh finished before the delay elapsed.
+        }
+    }
+
+    private async Task OpenDrilldown(WatchStatRow row)
+    {
+        if (_drawer is null)
+            return;
+
+        var sourceFilter = _source switch
+        {
+            WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
+            WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
+            WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
+            _ => row.Source
+        };
+
+        await _drawer.OpenAsync(row, _range, sourceFilter);
+    }
+
+    private static IReadOnlyList<ActivityChartPoint> BuildMediaMixRows(ActivityMediaMix mix)
+    {
+        var totals = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var series in mix.Series.Where(s => !string.Equals(s.Name, "Total", StringComparison.OrdinalIgnoreCase)))
+        {
+            var name = NormalizeMediaMixLabel(series.Name);
+            totals[name] = totals.GetValueOrDefault(name) + series.Values.Sum();
+        }
+
+        return totals
+            .Select(kv => new ActivityChartPoint(kv.Key, kv.Value / 3600.0))
+            .Where(p => p.Value > 0)
+            .OrderByDescending(p => p.Value)
+            .ToList();
+    }
+
+    private static string NormalizeMediaMixLabel(string name) => name switch
+    {
+        "Movies" or "Movie" => "Movies",
+        "TV" or "Episodes" or "Episode" => "TV",
+        "Music" or "Tracks" => "Music",
+        _ => name
+    };
+
+    private static IReadOnlyList<ActivityChartPoint> BuildQualityRows(ActivityAnalyticsSnapshot snapshot)
+    {
+        if (snapshot.QualityStats is { Total: > 0 } qs)
+        {
+            return
+            [
+                new ActivityChartPoint("Direct play", qs.DirectPlay),
+                new ActivityChartPoint("Direct stream", qs.DirectStream),
+                new ActivityChartPoint("Transcode", qs.Transcode)
+            ];
+        }
+
+        return snapshot.Quality.Where(p => p.Value > 0).ToList();
+    }
+
+    public void Dispose() => Prefs.Changed -= OnPrefsChanged;
+}

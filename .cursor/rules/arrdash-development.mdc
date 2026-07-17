@@ -35,14 +35,45 @@ Required when touching:
 - `ThemeBuilder`, filters, merge logic
 - Settings form wiring (`SettingsConsumptionTests`, `SettingsFormCoverageTests`)
 
-## Deploy (Unraid)
+## Deploy (Unraid) — always after code changes
+
+On this host the live app is **`/mnt/user/projects/arrdash-blazor`**, container name **`arrdash`**, port **7979**.
+
+**Always build and redeploy** when you change application code — do not leave a built image sitting unused.
 
 ```bash
-cd /path/to/ArrDash
-docker compose build && docker compose up -d
+# 1. Build (SDK is inside the Docker build stage — not on the Unraid host)
+docker build -t arrdash:latest /mnt/user/projects/arrdash-blazor
+
+# 2. Recreate container preserving config/volumes/env
+docker inspect arrdash --format '{{range .Config.Env}}{{println .}}{{end}}' > /tmp/arrdash-env.txt
+docker stop arrdash && docker rm arrdash
+docker run -d --name arrdash --restart unless-stopped --init \
+  -p 7979:8080 \
+  -v /mnt/user/appdata/arrdash:/config:rw \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -v /var/local/emhttp/disks.ini:/var/local/emhttp/disks.ini:ro \
+  -v /var/local/emhttp/var.ini:/var/local/emhttp/var.ini:ro \
+  -v /proc:/host/proc:ro \
+  -v /mnt/user:/mnt/user:ro \
+  --env-file /tmp/arrdash-env.txt \
+  arrdash:latest
+rm -f /tmp/arrdash-env.txt
+
+# 3. Verify
+curl -s http://127.0.0.1:7979/health
 ```
 
-Config persists in mounted `/config` (`user-layout.json`, `service-secrets.json`).
+**Do not** `docker exec arrdash dotnet build` — the running container is aspnet **runtime only** (no SDK).
+
+Optional tests without host SDK:
+
+```bash
+docker run --rm -v /mnt/user/projects/arrdash-blazor:/src -w /src/tests/ArrDash.Tests \
+  mcr.microsoft.com/dotnet/sdk:10.0 dotnet test
+```
+
+Config persists in mounted `/config` (`user-layout.json`, `service-secrets.json`, `arrdash.db`).
 
 ## Key files
 

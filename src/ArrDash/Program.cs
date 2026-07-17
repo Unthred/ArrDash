@@ -12,6 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<MediaServiceOptions>(builder.Configuration.GetSection(MediaServiceOptions.SectionName));
 BindEnvironmentOverrides(builder.Configuration);
+builder.Services.AddArrDashDatabase(builder.Configuration);
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -30,8 +31,13 @@ builder.Services.AddHttpClient<LidarrClient>(c => c.Timeout = TimeSpan.FromSecon
 builder.Services.AddHttpClient<ChaptarrClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<AudiobookShelfClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<PlexClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddHttpClient<PlexHistoryClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddHttpClient<EmbyClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<JellyfinClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddHttpClient<TautulliClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<TracearrClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<EmbyPlaybackReportingClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<JellyfinPlaybackReportingClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient(nameof(PosterProxyService), c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient(nameof(ServiceConnectionTester), c => c.Timeout = TimeSpan.FromSeconds(15));
 
@@ -50,6 +56,18 @@ builder.Services.AddSingleton<NetworkBandwidthService>();
 builder.Services.AddSingleton<AudiobookShelfActivityTracker>();
 builder.Services.AddHostedService<AudiobookShelfActivityHostedService>();
 builder.Services.AddSingleton<LibraryStatsService>();
+builder.Services.AddSingleton<WatchStatsRepository>();
+builder.Services.AddSingleton<WatchStatsLibraryCatalog>();
+builder.Services.AddSingleton<ActivitySourceAvailability>();
+builder.Services.AddSingleton<LiveWatchStatsProvider>();
+builder.Services.AddSingleton<ActivitySnapshotFileCache>();
+builder.Services.AddSingleton<WatchStatsSnapshotFileCache>();
+builder.Services.AddSingleton<ActivityAnalyticsService>();
+builder.Services.AddSingleton<UserActivityService>();
+builder.Services.AddSingleton<WatchStatsService>();
+builder.Services.AddSingleton<WatchHistorySyncService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<WatchHistorySyncService>());
+builder.Services.AddHostedService<ActivityStatsWarmupService>();
 builder.Services.AddSingleton<ChaptarrSyncStatusService>();
 builder.Services.AddSingleton<DashboardState>();
 builder.Services.AddSingleton<DashboardCircuitNotifier>();
@@ -76,6 +94,7 @@ await prefs.LoadAsync();
 var secrets = app.Services.GetRequiredService<ServiceSecretsStore>();
 await secrets.LoadAsync();
 app.Services.GetRequiredService<MediaServiceOptionsAccessor>().Reload();
+await app.InitializeDatabaseAsync();
 
 if (!app.Environment.IsDevelopment())
 {
@@ -92,6 +111,83 @@ app.MapRazorComponents<App>()
 app.MapHub<DashboardHub>("/hubs/dashboard");
 app.MapGet("/health", () => Results.Ok(new { status = "ok", app = "arrdash" }));
 app.MapGet("/api/dashboard", (DashboardState state) => Results.Json(state.Current));
+app.MapGet("/api/watch-stats", async (
+    string? period,
+    string? startDate,
+    string? endDate,
+    string? source,
+    WatchStatsService watchStats,
+    CancellationToken ct,
+    bool force = false) =>
+{
+    var range = WatchStatsPeriodHelper.ParseRange(period, startDate, endDate);
+    var parsedSource = Enum.TryParse<WatchStatsSourceFilter>(source, ignoreCase: true, out var s)
+        ? s
+        : WatchStatsSourceFilter.Combined;
+    var snapshot = await watchStats.GetAsync(range, parsedSource, force, ct);
+    return Results.Json(snapshot);
+});
+app.MapGet("/api/activity", async (
+    string? period,
+    string? startDate,
+    string? endDate,
+    string? source,
+    ActivityAnalyticsService activity,
+    CancellationToken ct,
+    bool force = false) =>
+{
+    var range = WatchStatsPeriodHelper.ParseRange(period, startDate, endDate);
+    var parsedSource = Enum.TryParse<WatchStatsSourceFilter>(source, ignoreCase: true, out var s)
+        ? s
+        : WatchStatsSourceFilter.Combined;
+    var snapshot = await activity.GetAsync(range, parsedSource, force, ct);
+    return Results.Json(snapshot);
+});
+app.MapGet("/api/activity/users", async (
+    string? period,
+    string? startDate,
+    string? endDate,
+    string? source,
+    UserActivityService users,
+    CancellationToken ct,
+    bool force = false) =>
+{
+    var range = WatchStatsPeriodHelper.ParseRange(period, startDate, endDate);
+    var parsedSource = Enum.TryParse<WatchStatsSourceFilter>(source, ignoreCase: true, out var s)
+        ? s
+        : WatchStatsSourceFilter.Combined;
+    var snapshot = await users.GetAsync(range, parsedSource, force, ct);
+    return Results.Json(snapshot);
+});
+app.MapGet("/api/activity/drilldown", async (
+    string kind,
+    string key,
+    string title,
+    string? source,
+    string? period,
+    string? startDate,
+    string? endDate,
+    ActivityAnalyticsService activity,
+    CancellationToken ct) =>
+{
+    if (!Enum.TryParse<ActivityDrilldownKind>(kind, ignoreCase: true, out var parsedKind))
+        return Results.BadRequest(new { error = "kind must be user, media, genre, platform, mediatype, quality, or library" });
+
+    var range = WatchStatsPeriodHelper.ParseRange(period, startDate, endDate);
+
+    var snapshot = await activity.GetDrilldownAsync(
+        new ActivityDrilldownRequest(
+            parsedKind,
+            key,
+            title,
+            source,
+            range.Period,
+            range.CustomStartUtc,
+            range.CustomEndUtc),
+        ct);
+    return Results.Json(snapshot);
+});
+app.MapGet("/api/watch-stats/sync", (WatchHistorySyncService sync) => Results.Json(sync.CurrentStatus));
 app.MapGet("/api/services/{serviceKey}/detail", async (string serviceKey, ServiceDetailService details, CancellationToken ct) =>
 {
     var detail = await details.FetchAsync(serviceKey, ct);
@@ -123,6 +219,8 @@ app.MapGet("/api/poster/audiobookshelf/{itemId}", (string itemId, PosterProxySer
     proxy.FetchAudiobookShelfCoverAsync(itemId, ct));
 app.MapGet("/api/thumbnail/plex", (string path, PosterProxyService proxy, CancellationToken ct) =>
     proxy.FetchStreamingThumbnailAsync("plex", path, ct));
+app.MapGet("/api/thumbnail/tracearr", (string path, PosterProxyService proxy, CancellationToken ct) =>
+    proxy.FetchStreamingThumbnailAsync("tracearr", path, ct));
 app.MapGet("/api/thumbnail/emby/{itemId}", (string itemId, PosterProxyService proxy, CancellationToken ct) =>
     proxy.FetchStreamingThumbnailAsync("emby", itemId, ct));
 app.MapGet("/api/thumbnail/jellyfin/{itemId}", (string itemId, PosterProxyService proxy, CancellationToken ct) =>
@@ -147,6 +245,7 @@ static void WarnPrivateServiceUrls(WebApplication app)
         ("Emby", options.Emby.Url),
         ("Jellyfin", options.Jellyfin.Url),
         ("Tautulli", options.Tautulli.Url),
+        ("Tracearr", options.Tracearr.Url),
     };
 
     foreach (var (name, url) in urls)
@@ -184,10 +283,16 @@ static void BindEnvironmentOverrides(IConfigurationManager config)
     Set("JELLYFIN_API_KEY", "MediaServices:Jellyfin:ApiKey", Environment.GetEnvironmentVariable("JELLYFIN_API_KEY"));
     Set("TAUTULLI_URL", "MediaServices:Tautulli:Url", Environment.GetEnvironmentVariable("TAUTULLI_URL"));
     Set("TAUTULLI_API_KEY", "MediaServices:Tautulli:ApiKey", Environment.GetEnvironmentVariable("TAUTULLI_API_KEY"));
+    Set("TRACEARR_URL", "MediaServices:Tracearr:Url", Environment.GetEnvironmentVariable("TRACEARR_URL"));
+    Set("TRACEARR_API_KEY", "MediaServices:Tracearr:ApiKey", Environment.GetEnvironmentVariable("TRACEARR_API_KEY"));
 
     if (int.TryParse(Environment.GetEnvironmentVariable("POLL_INTERVAL_SECONDS"), out var poll))
         config["MediaServices:PollIntervalSeconds"] = poll.ToString();
 
     if (int.TryParse(Environment.GetEnvironmentVariable("RECENT_LIMIT"), out var limit))
         config["MediaServices:RecentLimit"] = limit.ToString();
+
+    Set("ARRDASH_WATCH_STATS_SYNC_MINUTES", "WatchStats:SyncIntervalMinutes", Environment.GetEnvironmentVariable("ARRDASH_WATCH_STATS_SYNC_MINUTES"));
+    Set("ARRDASH_WATCH_STATS_BACKFILL_DAYS", "WatchStats:BackfillDays", Environment.GetEnvironmentVariable("ARRDASH_WATCH_STATS_BACKFILL_DAYS"));
+    Set("ARRDASH_WATCH_STATS_RETENTION_DAYS", "WatchStats:RetentionDays", Environment.GetEnvironmentVariable("ARRDASH_WATCH_STATS_RETENTION_DAYS"));
 }
