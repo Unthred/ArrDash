@@ -8,7 +8,7 @@ namespace ArrDash.Services.Clients;
 /// <summary>
 /// Plex-first history ingest via PMS <c>/status/sessions/history/all</c> (no Tautulli required).
 /// </summary>
-public sealed class PlexHistoryClient(HttpClient http, MediaServiceOptionsAccessor options)
+public sealed class PlexHistoryClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<PlexHistoryClient> logger)
 {
     private PlexOptions Plex => options.Options.Plex;
 
@@ -197,8 +197,8 @@ public sealed class PlexHistoryClient(HttpClient http, MediaServiceOptionsAccess
                 .Cast<WatchStatsLibraryInfo>()
                 .ToList();
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "FetchLibrariesAsync failed");
             return [];
         }
     }

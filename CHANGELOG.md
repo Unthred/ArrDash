@@ -6,7 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Settings → Diagnostics: configurable log level (Trace through Critical, or "Server default"), takes effect immediately with no restart ([#47](https://github.com/Unthred/ArrDash/issues/47))
+
 ### Fixed
+
+- Every catch block across the service/client layer now logs instead of failing silently — makes real problems (a stalled sync, a failed HTTP call, a parse error) visible via `docker logs` instead of requiring a database query to diagnose ([#47](https://github.com/Unthred/ArrDash/issues/47))
 
 - Home Activity card overhaul ([#45](https://github.com/Unthred/ArrDash/issues/45)):
   - Watched/Plays/Users/Live now render as bordered stat tiles in a responsive grid instead of naked flex-wrap text

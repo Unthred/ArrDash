@@ -30,7 +30,7 @@ public static class DatabaseSchemaUpgrader
         ("ItemTitle", "TEXT NULL")
     ];
 
-    public static async Task UpgradeAsync(ArrDashDbContext db, CancellationToken ct = default)
+    public static async Task UpgradeAsync(ArrDashDbContext db, ILogger logger, CancellationToken ct = default)
     {
         await db.Database.EnsureCreatedAsync(ct);
 
@@ -38,7 +38,7 @@ public static class DatabaseSchemaUpgrader
             return;
 
         foreach (var (column, sqlType) in PlayEventColumns)
-            await TryAddColumnAsync(db, "PlayEvents", column, sqlType, ct);
+            await TryAddColumnAsync(db, "PlayEvents", column, sqlType, logger, ct);
 
         await EnsureTraktTablesAsync(db, ct);
     }
@@ -111,6 +111,7 @@ public static class DatabaseSchemaUpgrader
         string table,
         string column,
         string sqlType,
+        ILogger logger,
         CancellationToken ct)
     {
         try
@@ -119,9 +120,16 @@ public static class DatabaseSchemaUpgrader
                 $"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {sqlType}",
                 ct);
         }
-        catch
+        catch (Exception ex)
         {
-            // Column already exists on upgraded databases.
+            // SQLite has no ADD COLUMN IF NOT EXISTS, so a duplicate-column failure is the
+            // expected, silent-on-purpose case for every already-upgraded database on every
+            // startup — only genuinely unexpected failures (permissions, corruption, disk
+            // full) are worth a Warning.
+            if (ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
+                logger.LogDebug("Column {Table}.{Column} already exists", table, column);
+            else
+                logger.LogWarning(ex, "Failed to add column {Table}.{Column}", table, column);
         }
     }
 }

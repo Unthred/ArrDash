@@ -16,6 +16,7 @@ public abstract class ArrClientBase
     protected readonly string ApiVersion;
     protected readonly MediaSource Source;
     protected readonly MediaType DefaultMediaType;
+    protected readonly ILogger Logger;
 
     protected ArrClientBase(
         HttpClient http,
@@ -23,7 +24,8 @@ public abstract class ArrClientBase
         Func<MediaServiceOptions, ServiceEndpoint> selector,
         string apiVersion,
         MediaSource source,
-        MediaType defaultMediaType)
+        MediaType defaultMediaType,
+        ILogger logger)
     {
         Http = http;
         _optionsAccessor = optionsAccessor;
@@ -31,6 +33,7 @@ public abstract class ArrClientBase
         ApiVersion = apiVersion;
         Source = source;
         DefaultMediaType = defaultMediaType;
+        Logger = logger;
     }
 
     public bool IsConfigured => Options.IsConfigured;
@@ -75,6 +78,7 @@ public abstract class ArrClientBase
         }
         catch (Exception ex)
         {
+            Logger.LogWarning(ex, "FetchRecentAsync failed");
             return ([], ApplySnapshot(
                 new ServiceHealth(Source.ToString().ToLowerInvariant(), Source.ToString(), true, false, ex.Message, null),
                 null,
@@ -182,8 +186,8 @@ public abstract class ArrClientBase
 
             return (workload, attention);
         }
-        catch
-        {
+        catch (Exception ex) {
+            Logger.LogWarning(ex, "FetchArrSnapshotAsync failed");
             return (null, ServiceAttentionLevel.Offline);
         }
     }
@@ -250,6 +254,7 @@ public abstract class ArrClientBase
         }
         catch (Exception ex)
         {
+            Logger.LogWarning(ex, "FetchServiceDetailAsync failed");
             return ArrServiceDetailParser.BuildArrDetail(
                 key,
                 name,
@@ -279,8 +284,8 @@ public abstract class ArrClientBase
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
             return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            Logger.LogWarning(ex, "GetVersionAsync failed");
             return null;
         }
     }
@@ -317,8 +322,8 @@ public interface ISonarrEpisodeSearchMonitor
     Task<bool> HasRecentGrabAsync(int episodeId, DateTimeOffset since, CancellationToken ct);
 }
 
-public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor options)
-    : ArrClientBase(http, options, o => o.Sonarr, "v3", MediaSource.Sonarr, MediaType.Tv),
+public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<SonarrClient> logger)
+    : ArrClientBase(http, options, o => o.Sonarr, "v3", MediaSource.Sonarr, MediaType.Tv, logger),
       ISonarrEpisodeSearchMonitor
 {
     private sealed record ParsedHistoryEntry(
@@ -456,6 +461,7 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
         }
         catch (Exception ex)
         {
+            Logger.LogWarning(ex, "FetchRecentAsync failed");
             return ([], ApplySnapshot(
                 new ServiceHealth("sonarr", "Sonarr", true, false, ex.Message, null),
                 null,
@@ -507,6 +513,7 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
         }
         catch (Exception ex)
         {
+            Logger.LogWarning(ex, "SearchEpisodeAsync failed");
             return (false, ex.Message, null, null);
         }
     }
@@ -884,15 +891,15 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
             return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            Logger.LogWarning(ex, "GetVersionAsync failed");
             return null;
         }
     }
 }
 
-public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor options)
-    : ArrClientBase(http, options, o => o.Radarr, "v3", MediaSource.Radarr, MediaType.Movie)
+public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<RadarrClient> logger)
+    : ArrClientBase(http, options, o => o.Radarr, "v3", MediaSource.Radarr, MediaType.Movie, logger)
 {
     public override async Task<(IReadOnlyList<DownloadItem> Items, ServiceHealth Health)> FetchRecentAsync(
         int limit,
@@ -978,6 +985,7 @@ public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor op
         }
         catch (Exception ex)
         {
+            Logger.LogWarning(ex, "FetchRecentAsync failed");
             return ([], ApplySnapshot(
                 new ServiceHealth("radarr", "Radarr", true, false, ex.Message, null),
                 null,
@@ -1077,15 +1085,15 @@ public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor op
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
             return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            Logger.LogWarning(ex, "GetVersionAsync failed");
             return null;
         }
     }
 }
 
-public sealed class LidarrClient(HttpClient http, MediaServiceOptionsAccessor options)
-    : ArrClientBase(http, options, o => o.Lidarr, "v1", MediaSource.Lidarr, MediaType.Music)
+public sealed class LidarrClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<LidarrClient> logger)
+    : ArrClientBase(http, options, o => o.Lidarr, "v1", MediaSource.Lidarr, MediaType.Music, logger)
 {
     public override async Task<(IReadOnlyList<DownloadItem> Items, ServiceHealth Health)> FetchRecentAsync(
         int limit,
@@ -1169,6 +1177,7 @@ public sealed class LidarrClient(HttpClient http, MediaServiceOptionsAccessor op
         }
         catch (Exception ex)
         {
+            Logger.LogWarning(ex, "FetchRecentAsync failed");
             return ([], ApplySnapshot(
                 new ServiceHealth("lidarr", "Lidarr", true, false, ex.Message, null),
                 null,
@@ -1219,8 +1228,8 @@ public sealed class LidarrClient(HttpClient http, MediaServiceOptionsAccessor op
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
             return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            Logger.LogWarning(ex, "GetVersionAsync failed");
             return null;
         }
     }
@@ -1264,8 +1273,8 @@ public sealed class LidarrClient(HttpClient http, MediaServiceOptionsAccessor op
     }
 }
 
-public sealed class ChaptarrClient(HttpClient http, MediaServiceOptionsAccessor options)
-    : ArrClientBase(http, options, o => o.Chaptarr, "v1", MediaSource.Chaptarr, MediaType.Audiobook)
+public sealed class ChaptarrClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<ChaptarrClient> logger)
+    : ArrClientBase(http, options, o => o.Chaptarr, "v1", MediaSource.Chaptarr, MediaType.Audiobook, logger)
 {
     public override async Task<(IReadOnlyList<DownloadItem> Items, ServiceHealth Health)> FetchRecentAsync(
         int limit,
@@ -1341,6 +1350,7 @@ public sealed class ChaptarrClient(HttpClient http, MediaServiceOptionsAccessor 
         }
         catch (Exception ex)
         {
+            Logger.LogWarning(ex, "FetchRecentAsync failed");
             return ([], ApplySnapshot(
                 new ServiceHealth("chaptarr", "Chaptarr", true, false, ex.Message, null),
                 null,
@@ -1398,8 +1408,8 @@ public sealed class ChaptarrClient(HttpClient http, MediaServiceOptionsAccessor 
                 Options.Url.TrimEnd('/'),
                 onDiskCount);
         }
-        catch
-        {
+        catch (Exception ex) {
+            Logger.LogWarning(ex, "FetchLibraryStatsAsync failed");
             return null;
         }
     }
@@ -1538,8 +1548,8 @@ public sealed class ChaptarrClient(HttpClient http, MediaServiceOptionsAccessor 
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
             return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            Logger.LogWarning(ex, "GetVersionAsync failed");
             return null;
         }
     }

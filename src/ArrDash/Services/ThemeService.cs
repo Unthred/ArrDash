@@ -52,8 +52,8 @@ public sealed class ThemeService(IJSRuntime js, LayoutPreferencesService prefs, 
         {
             return await js.InvokeAsync<bool>("arrdashTheme.isSystemDark");
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "GetSystemDarkAsync failed");
             return true;
         }
     }

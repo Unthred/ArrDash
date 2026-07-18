@@ -7,7 +7,8 @@ public sealed class ActivityAnalyticsService(
     WatchStatsRepository repository,
     ActivitySourceAvailability availability,
     ActivitySnapshotFileCache fileCache,
-    LayoutPreferencesService prefs)
+    LayoutPreferencesService prefs,
+    ILogger<ActivityAnalyticsService> logger)
 {
     private readonly object _cacheLock = new();
     private ActivityAnalyticsSnapshot? _cached;
@@ -199,8 +200,8 @@ public sealed class ActivityAnalyticsService(
 
                 await fileCache.SaveAsync(fileKey, snapshot, CancellationToken.None);
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "QueueBackgroundRefresh failed");
                 // Background refresh is best-effort.
             }
             finally

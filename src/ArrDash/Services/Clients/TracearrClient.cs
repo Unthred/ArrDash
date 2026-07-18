@@ -6,7 +6,7 @@ using ArrDash.Models;
 
 namespace ArrDash.Services.Clients;
 
-public sealed class TracearrClient(HttpClient http, MediaServiceOptionsAccessor options)
+public sealed class TracearrClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<TracearrClient> logger)
 {
     private ServiceEndpoint Tracearr => options.Options.Tracearr;
     private Dictionary<string, string>? _serverTypeById;
@@ -26,6 +26,7 @@ public sealed class TracearrClient(HttpClient http, MediaServiceOptionsAccessor 
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "TestConnectionAsync failed");
             return (false, ex.Message);
         }
     }
@@ -747,6 +748,7 @@ public sealed class TracearrClient(HttpClient http, MediaServiceOptionsAccessor 
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "BuildSnapshotAsync failed");
             return new WatchStatsSourceSnapshot(
                 sourceKey,
                 WatchStatsSources.Label(sourceKey),
@@ -785,8 +787,8 @@ public sealed class TracearrClient(HttpClient http, MediaServiceOptionsAccessor 
                 Label = "Tracearr"
             };
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "BuildCombinedTracearrSnapshotAsync failed");
             return null;
         }
     }

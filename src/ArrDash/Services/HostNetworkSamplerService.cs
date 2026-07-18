@@ -45,7 +45,7 @@ public sealed class HostNetworkSamplerService : BackgroundService
     {
         try
         {
-            var current = UnraidActivityService.ReadNetworkBytes(_procNetDevPath, _networkInterface);
+            var current = UnraidActivityService.ReadNetworkBytes(_procNetDevPath, _networkInterface, _logger);
             if (current is null)
                 return;
 

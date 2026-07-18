@@ -44,9 +44,12 @@ public sealed class UnraidActivityService : IDisposable
     private readonly object _diskIoLock = new();
     private readonly Dictionary<string, (ulong TimeDoingIoMs, DateTimeOffset At)> _prevDiskIo = new(StringComparer.Ordinal);
 
-    public UnraidActivityService(HostNetworkSamplerService hostNetworkSampler)
+    private readonly ILogger<UnraidActivityService> logger;
+
+    public UnraidActivityService(HostNetworkSamplerService hostNetworkSampler, ILogger<UnraidActivityService> logger)
     {
         _hostNetworkSampler = hostNetworkSampler;
+        this.logger = logger;
         _varIniPath = Environment.GetEnvironmentVariable("ARRDASH_UNRAID_VAR_INI") ?? "/var/local/emhttp/var.ini";
         _disksIniPath = Environment.GetEnvironmentVariable("ARRDASH_UNRAID_DISKS_INI") ?? "/var/local/emhttp/disks.ini";
 
@@ -120,8 +123,8 @@ public sealed class UnraidActivityService : IDisposable
             {
                 (restarting, recentlyUpdated) = await FetchContainerActivityAsync(ct);
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "ReadAsync failed");
                 // Docker socket unreachable or API error — keep degrading silently.
             }
 
@@ -129,16 +132,16 @@ public sealed class UnraidActivityService : IDisposable
             {
                 topContainers = await GetTopContainersAsync(ct);
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "ReadAsync failed");
                 // Same — no top-container data this cycle.
             }
         }
 
         var diskHealth = _isUnraidHost ? ReadDiskHealth() : null;
-        var uptime = ReadUptime();
-        var cpuTemp = ReadCpuTemperature();
-        var cpuCoreTemps = ReadCpuCoreTemps();
+        var uptime = ReadUptime(logger);
+        var cpuTemp = ReadCpuTemperature(logger);
+        var cpuCoreTemps = ReadCpuCoreTemps(logger);
         var network = _hostNetworkSampler.GetLatest();
 
         IReadOnlyList<StuckProcess> stuckProcesses = [];
@@ -146,8 +149,8 @@ public sealed class UnraidActivityService : IDisposable
         {
             stuckProcesses = await ReadStuckProcessesAsync(ct);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "ReadAsync failed");
             // No stuck-process data this cycle — not worth failing the whole read over.
         }
 
@@ -186,8 +189,8 @@ public sealed class UnraidActivityService : IDisposable
 
             return values;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "TryReadVarIni failed");
             return null;
         }
     }
@@ -342,13 +345,13 @@ public sealed class UnraidActivityService : IDisposable
 
             return new DiskHealthSummary(unhealthy.Count == 0, unhealthy, hottest, hottestName, allDisks);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "ReadDiskHealth failed");
             return null;
         }
     }
 
-    private static TimeSpan? ReadUptime()
+    private static TimeSpan? ReadUptime(ILogger logger)
     {
         const string path = "/proc/uptime";
         if (!File.Exists(path))
@@ -362,13 +365,13 @@ public sealed class UnraidActivityService : IDisposable
                 ? TimeSpan.FromSeconds(seconds)
                 : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "ReadUptime failed");
             return null;
         }
     }
 
-    private static double? ReadCpuTemperature()
+    private static double? ReadCpuTemperature(ILogger logger)
     {
         const string basePath = "/sys/class/thermal";
         if (!Directory.Exists(basePath))
@@ -406,14 +409,14 @@ public sealed class UnraidActivityService : IDisposable
                 ? milliDegrees / 1000.0
                 : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "ReadCpuTemperature failed");
             return null;
         }
     }
 
     /// <summary>Per-core temps from the "coretemp" hwmon device (labels like "Package id 0", "Core 0", "Core 4", ...).</summary>
-    private static IReadOnlyList<CpuCoreTemp> ReadCpuCoreTemps()
+    private static IReadOnlyList<CpuCoreTemp> ReadCpuCoreTemps(ILogger logger)
     {
         const string basePath = "/sys/class/hwmon";
         if (!Directory.Exists(basePath))
@@ -452,13 +455,13 @@ public sealed class UnraidActivityService : IDisposable
                 .OrderBy(t => t.Label, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "ReadCpuCoreTemps failed");
             return [];
         }
     }
 
-    internal static (long Rx, long Tx)? ReadNetworkBytes(string procNetDevPath, string interfaceName)
+    internal static (long Rx, long Tx)? ReadNetworkBytes(string procNetDevPath, string interfaceName, ILogger logger)
     {
         if (!File.Exists(procNetDevPath))
             return null;
@@ -487,8 +490,8 @@ public sealed class UnraidActivityService : IDisposable
 
             return null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "ReadNetworkBytes failed");
             return null;
         }
     }
@@ -584,8 +587,8 @@ public sealed class UnraidActivityService : IDisposable
             {
                 return await ReadContainerNetworkBytesAsync(entry.Id, entry.Name, ct);
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "ReadAllContainerNetworkSamplesAsync failed");
                 return null;
             }
             finally
@@ -660,8 +663,8 @@ public sealed class UnraidActivityService : IDisposable
         {
             result = await ComputeTopContainersAsync(ct);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "GetTopContainersAsync failed");
             result = [];
         }
 
@@ -691,8 +694,8 @@ public sealed class UnraidActivityService : IDisposable
         {
             pidDirs = Directory.GetDirectories(_hostProcRootPath);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "ReadStuckProcessesAsync failed");
             return [];
         }
 
@@ -709,8 +712,8 @@ public sealed class UnraidActivityService : IDisposable
             {
                 stat = await File.ReadAllTextAsync(Path.Combine(dir, "stat"), ct);
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "ReadStuckProcessesAsync failed");
                 continue;
             }
 
@@ -736,8 +739,8 @@ public sealed class UnraidActivityService : IDisposable
                     ? null
                     : rawCmdline.Replace('\0', ' ').Trim();
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "ReadStuckProcessesAsync failed");
                 // cmdline may be unreadable for kernel threads or restricted processes.
             }
 
@@ -753,8 +756,8 @@ public sealed class UnraidActivityService : IDisposable
                         .FirstOrDefault(c => c.Id.StartsWith(containerId, StringComparison.Ordinal)).Name;
                 }
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "ReadStuckProcessesAsync failed");
                 // No cgroup info available — fall back to the raw process name below.
             }
 
@@ -834,8 +837,8 @@ public sealed class UnraidActivityService : IDisposable
             {
                 return await FetchContainerStatsAsync(entry.Id, entry.Name, ct);
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "ComputeTopContainersAsync failed");
                 return null;
             }
             finally

@@ -334,6 +334,11 @@ public sealed class UserLayoutPreferences
     public List<string> WatchStatsExcludedLibraries { get; set; } = [];
     /// <summary>Poster source for Trakt history items: off | tmdb | library | both (library first, TMDB fallback).</summary>
     public string TraktPosterMode { get; set; } = "both";
+    /// <summary>Minimum level written to the container's stdout log (Trace/Debug/Information/Warning/Error/Critical/None).
+    /// Empty = leave whatever appsettings.json/env vars already set (standard ASP.NET Core
+    /// Logging__LogLevel__Default still works for compose users who never touch this).
+    /// Applied at runtime without a restart — see <see cref="Services.LogLevelService"/>.</summary>
+    public string LogLevel { get; set; } = "";
     public List<WatchStatsUserAlias> UserAliases { get; set; } = [];
     public List<ActivityLayoutItem> ActivityLayout { get; set; } = [];
     public bool ShowServerMetrics { get; set; } = true;

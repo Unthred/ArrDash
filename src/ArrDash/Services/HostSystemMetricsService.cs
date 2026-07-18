@@ -17,9 +17,12 @@ public sealed class HostSystemMetricsService
     private readonly string _sysCpuPath;
     private Dictionary<int, int>? _coreIdByLogicalIndex;
 
-    public HostSystemMetricsService(LayoutPreferencesService prefs)
+    private readonly ILogger<HostSystemMetricsService> logger;
+
+    public HostSystemMetricsService(LayoutPreferencesService prefs, ILogger<HostSystemMetricsService> logger)
     {
         _prefs = prefs;
+        this.logger = logger;
         var procRoot = Environment.GetEnvironmentVariable("ARRDASH_PROC_ROOT") ?? "/proc";
         _procStatPath = Path.Combine(procRoot, "stat");
         _procMeminfoPath = Path.Combine(procRoot, "meminfo");
@@ -31,7 +34,7 @@ public sealed class HostSystemMetricsService
         try
         {
             var memory = ReadMemory();
-            var disk = ReadDisk(ResolveDiskPaths(_prefs?.Current));
+            var disk = ReadDisk(ResolveDiskPaths(_prefs?.Current), logger);
             if (memory is null || disk is null)
                 return null;
 
@@ -47,8 +50,8 @@ public sealed class HostSystemMetricsService
                 disk.Value.UsedBytes,
                 disk.Value.TotalBytes);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "Read failed");
             return null;
         }
     }
@@ -218,8 +221,8 @@ public sealed class HostSystemMetricsService
                     map[logicalIndex] = coreId;
             }
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "LoadTopology failed");
             // fall through with whatever was resolved
         }
 
@@ -255,7 +258,7 @@ public sealed class HostSystemMetricsService
         return (totalBytes, usedBytes, Math.Clamp(usedPercent, 0, 100));
     }
 
-    private static (long TotalBytes, long UsedBytes, double UsedPercent)? ReadDisk(string[] diskPaths)
+    private static (long TotalBytes, long UsedBytes, double UsedPercent)? ReadDisk(string[] diskPaths, ILogger logger)
     {
         long totalBytes = 0;
         long freeBytes = 0;
@@ -274,8 +277,8 @@ public sealed class HostSystemMetricsService
                 totalBytes += drive.TotalSize;
                 freeBytes += drive.AvailableFreeSpace;
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "ReadDisk failed");
                 // Skip unreadable mounts.
             }
         }

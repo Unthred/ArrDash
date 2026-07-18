@@ -33,8 +33,9 @@ public static class DatabaseRegistration
     {
         await using var scope = app.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ArrDashDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSchemaUpgrader");
         await db.Database.EnsureCreatedAsync();
-        await DatabaseSchemaUpgrader.UpgradeAsync(db);
+        await DatabaseSchemaUpgrader.UpgradeAsync(db, logger);
     }
 
     private static DatabaseOptions ResolveDatabaseOptions(IConfiguration configuration)

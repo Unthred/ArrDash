@@ -11,6 +11,18 @@ using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Settings-driven log level (LogLevelService.DynamicLevel): a filter evaluated fresh on every
+// log call, so a Settings change takes effect on the very next line with no reload/restart.
+// Falls back to whatever appsettings.json/Logging__LogLevel__Default env var already resolved
+// to at startup — captured once here since DynamicLevel being unset must mean "unchanged from
+// that baseline", not "allow everything through" (a bare `true` here would silently blow the
+// Default tier open to Trace regardless of configuration, the moment the very first appsettings
+// rule was outranked by this filter's later registration).
+var startupDefaultLogLevel = Enum.TryParse<LogLevel>(builder.Configuration["Logging:LogLevel:Default"], ignoreCase: true, out var parsedDefault)
+    ? parsedDefault
+    : LogLevel.Information;
+builder.Logging.AddFilter((_, level) => level >= (LogLevelService.DynamicLevel ?? startupDefaultLogLevel));
+
 builder.Services.Configure<MediaServiceOptions>(builder.Configuration.GetSection(MediaServiceOptions.SectionName));
 BindEnvironmentOverrides(builder.Configuration);
 builder.Services.AddArrDashDatabase(builder.Configuration);
@@ -98,6 +110,7 @@ builder.Services.AddSingleton<ISonarrEpisodeSearchMonitor>(sp => sp.GetRequiredS
 builder.Services.AddSingleton<ServiceCredentialsPreviewService>();
 builder.Services.AddSingleton<ServiceConnectionTester>();
 builder.Services.AddSingleton<LayoutPreferencesService>();
+builder.Services.AddSingleton<LogLevelService>();
 builder.Services.AddSingleton<ThemeService>();
 builder.Services.AddScoped<ServiceDetailService>();
 builder.Services.AddScoped<ExternalLinkService>();
@@ -105,8 +118,14 @@ builder.Services.AddHostedService<MediaAggregatorService>();
 
 var app = builder.Build();
 
+var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+ThemeBuilder.Initialize(loggerFactory);
+ActivityDrilldownProfiler.Initialize(loggerFactory);
+PlayEventAnalyticsService.Initialize(loggerFactory);
+
 var prefs = app.Services.GetRequiredService<LayoutPreferencesService>();
 await prefs.LoadAsync();
+app.Services.GetRequiredService<LogLevelService>().Apply();
 
 var secrets = app.Services.GetRequiredService<ServiceSecretsStore>();
 await secrets.LoadAsync();

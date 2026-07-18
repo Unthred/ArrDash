@@ -159,6 +159,14 @@ Secrets are stored in `service-secrets.json` and override environment variables 
 
 ---
 
+## Diagnostics tab
+
+- **Log level** — minimum severity written to the container's log (`docker logs arrdash`): Trace, Debug, Information, Warning, Error, Critical, or **Server default** (leaves `appsettings.json`/`Logging__LogLevel__Default` untouched).
+- Saved immediately, takes effect on the very next log line — no restart needed.
+- Debug/Trace are verbose (full EF Core query logging included); useful while chasing a specific problem, not meant to be left on permanently.
+
+---
+
 ## Live preview behaviour
 
 - Layout/appearance/list changes call `ScheduleLivePreviewNow` or debounced preview

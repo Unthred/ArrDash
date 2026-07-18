@@ -29,7 +29,7 @@ public sealed class HostSystemMetricsCpuTests : IDisposable
     [Fact]
     public void ReadCpuPercent_keeps_iowait_separate_from_genuine_busy_time()
     {
-        var service = new HostSystemMetricsService(null!);
+        var service = new HostSystemMetricsService(null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<HostSystemMetricsService>.Instance);
 
         // Baseline sample — first call always returns nulls while it establishes prev state.
         WriteStat(user: 100, nice: 0, system: 0, idle: 900, iowait: 0);
@@ -52,7 +52,7 @@ public sealed class HostSystemMetricsCpuTests : IDisposable
     [Fact]
     public void ReadCpuPercent_reports_high_iowait_when_host_is_stuck_on_disk()
     {
-        var service = new HostSystemMetricsService(null!);
+        var service = new HostSystemMetricsService(null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<HostSystemMetricsService>.Instance);
 
         WriteStat(user: 100, nice: 0, system: 0, idle: 900, iowait: 0);
         service.ReadCpuPercent();

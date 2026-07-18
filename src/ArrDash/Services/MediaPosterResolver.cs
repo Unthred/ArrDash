@@ -176,8 +176,9 @@ public sealed class MediaPosterResolver(
                 ? id.GetString()
                 : null;
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogDebug(ex, "QueryFirstItemIdAsync failed");
             return null;
         }
     }
@@ -270,8 +271,9 @@ public sealed class MediaPosterResolver(
             await using var stream = await response.Content.ReadAsStreamAsync(ct);
             return await JsonDocument.ParseAsync(stream, cancellationToken: ct);
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogDebug(ex, "TmdbGetAsync failed");
             return null;
         }
     }

@@ -7,6 +7,12 @@ namespace ArrDash.Services;
 
 public static class ThemeBuilder
 {
+    // Pure static utility with no DI container of its own, called on every theme resolution
+    // (hot path) — bootstrapped once from Program.cs rather than threading ILogger through
+    // every method signature here and at every call site.
+    private static ILogger? _logger;
+    public static void Initialize(ILoggerFactory loggerFactory) => _logger ??= loggerFactory.CreateLogger(nameof(ThemeBuilder));
+
     public static MudTheme Build(UserLayoutPreferences prefs)
     {
         var primary = ResolveAccentColor(prefs);
@@ -135,8 +141,9 @@ public static class ThemeBuilder
             var b = (byte)Math.Clamp(accent.B + shift, 0, 255);
             return new MudColor(r, g, b, (byte)255).ToString(MudColorOutputFormats.Hex);
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogDebug(ex, "DeriveSecondaryColor failed for {AccentHex}", accentHex);
             return "#0ea5e9";
         }
     }
@@ -167,13 +174,13 @@ public static class ThemeBuilder
         if (!string.IsNullOrWhiteSpace(value))
         {
             try { return new MudColor(value.Trim()).ToString(MudColorOutputFormats.Hex); }
-            catch { /* fall through */ }
+            catch (Exception ex) { _logger?.LogDebug(ex, "NormalizeColor: invalid colour {Value}, trying fallback", value); }
         }
 
         if (!string.IsNullOrWhiteSpace(fallback2))
         {
             try { return new MudColor(fallback2.Trim()).ToString(MudColorOutputFormats.Hex); }
-            catch { /* fall through */ }
+            catch (Exception ex) { _logger?.LogDebug(ex, "NormalizeColor: invalid fallback colour {Fallback}", fallback2); }
         }
 
         return fallback;
@@ -187,8 +194,9 @@ public static class ThemeBuilder
             var brightness = (c.R * 299 + c.G * 587 + c.B * 114) / 1000.0;
             return brightness >= 128 ? "#0f172a" : "#ffffff";
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogDebug(ex, "ContrastText failed for {Hex}", hex);
             return "#ffffff";
         }
     }

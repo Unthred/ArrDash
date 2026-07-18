@@ -8,7 +8,8 @@ namespace ArrDash.Services.Clients;
 public sealed class AudiobookShelfClient(
     HttpClient http,
     MediaServiceOptionsAccessor options,
-    AudiobookShelfActivityTracker activityTracker)
+    AudiobookShelfActivityTracker activityTracker,
+    ILogger<AudiobookShelfClient> logger)
 {
     private ServiceEndpoint Abs => options.Options.AudiobookShelf;
 
@@ -53,6 +54,7 @@ public sealed class AudiobookShelfClient(
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "FetchServiceDetailAsync failed");
             return ArrServiceDetailParser.BuildSimpleDetail(
                 key, name, Abs.Url.TrimEnd('/'), true, false, null, ex.Message, null);
         }
@@ -88,6 +90,7 @@ public sealed class AudiobookShelfClient(
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "FetchRecentAsync failed");
             return ([], ServiceHealthSnapshot.WithAttention(
                 new ServiceHealth("audiobookshelf", "AudioBookShelf", true, false, ex.Message, null)));
         }
@@ -125,8 +128,8 @@ public sealed class AudiobookShelfClient(
                 Abs.Url.TrimEnd('/'),
                 bookCount);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "FetchLibraryStatsAsync failed");
             return null;
         }
     }
@@ -299,8 +302,8 @@ public sealed class AudiobookShelfClient(
                 ? version.GetString()
                 : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "GetVersionAsync failed");
             return null;
         }
     }

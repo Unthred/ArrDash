@@ -6,7 +6,7 @@ using ArrDash.Configuration;
 
 namespace ArrDash.Services;
 
-public sealed class WatchStatsSnapshotFileCache(IOptions<DatabaseOptions> dbOptions)
+public sealed class WatchStatsSnapshotFileCache(IOptions<DatabaseOptions> dbOptions, ILogger<WatchStatsSnapshotFileCache> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -35,8 +35,8 @@ public sealed class WatchStatsSnapshotFileCache(IOptions<DatabaseOptions> dbOpti
 
             return new WatchStatsCachedEnvelope(envelope.Snapshot, envelope.UpdatedAtUtc);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "TryGetAsync failed");
             return null;
         }
     }

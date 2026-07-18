@@ -355,7 +355,7 @@ public sealed class TraktSyncService(
         return rows.Count(r => !WatchStatsLibraryFilter.IsExcluded(excludedLibraries, r.Source, r.LibraryExternalId));
     }
 
-    private static HashSet<string> ParseMappedNames(TraktAccountEntity account)
+    private HashSet<string> ParseMappedNames(TraktAccountEntity account)
     {
         try
         {
@@ -363,8 +363,9 @@ public sealed class TraktSyncService(
             return users.Select(u => u.UserName).Where(n => !string.IsNullOrWhiteSpace(n))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
-        catch
+        catch (Exception ex)
         {
+            logger.LogWarning(ex, "ParseMappedNames: malformed MappedUsersJson for account {AccountId}", account.Id);
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
     }

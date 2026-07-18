@@ -6,7 +6,7 @@ using ArrDash.Configuration;
 
 namespace ArrDash.Services.Clients;
 
-public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor options)
+public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<TraktClient> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

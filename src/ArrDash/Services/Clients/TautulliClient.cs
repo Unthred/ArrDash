@@ -4,7 +4,7 @@ using ArrDash.Models;
 
 namespace ArrDash.Services.Clients;
 
-public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor options)
+public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<TautulliClient> logger)
 {
     private ServiceEndpoint Tautulli => options.Options.Tautulli;
 
@@ -26,6 +26,7 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "TestConnectionAsync failed");
             return (false, ex.Message);
         }
     }
@@ -54,8 +55,8 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
 
             return ReadUnixDate(rowsElement[0], "date", "started", "stopped");
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "GetLastLoggedPlayAsync failed");
             return null;
         }
     }
@@ -100,6 +101,7 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "CheckPlexAuthorizationAsync failed");
             return (false, ex.Message);
         }
     }
@@ -143,8 +145,8 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
                 ? null
                 : new ActivityMediaMix(categories, series);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "GetPlaysByDateAsync failed");
             return null;
         }
     }
@@ -171,8 +173,8 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
 
             return new TautulliActivityCharts(byDay, byHour, quality, qualityStats);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "GetActivityChartsAsync failed");
             return null;
         }
     }
@@ -242,8 +244,8 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
 
             return results;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "GetDailyPlaysAsync failed");
             return [];
         }
     }
@@ -307,8 +309,8 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
                 MapPlatformRows(stats.GetValueOrDefault("top_platforms"), limit),
                 MapRecentRows(stats.GetValueOrDefault("last_watched"), limit));
         }
-        catch (Exception)
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "BuildLiveSnapshotAsync failed");
             return null;
         }
     }
@@ -360,8 +362,8 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
             return data.EnumerateArray()
                 .Sum(v => v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "SumPlaysByDateAxisAsync failed");
             return 0;
         }
     }
@@ -504,8 +506,8 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
 
             return list;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "FetchLibrariesAsync failed");
             return [];
         }
     }
@@ -983,8 +985,8 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
             var libraryName = ReadString(doc.RootElement, "library_name", "section_name");
             return (string.IsNullOrWhiteSpace(sectionId) ? null : sectionId, libraryName);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "GetLibraryForRatingKeyAsync failed");
             return (null, null);
         }
     }

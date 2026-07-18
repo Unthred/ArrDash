@@ -6,7 +6,7 @@ using ArrDash.Configuration;
 
 namespace ArrDash.Services;
 
-public sealed class ActivitySnapshotFileCache(IOptions<DatabaseOptions> dbOptions)
+public sealed class ActivitySnapshotFileCache(IOptions<DatabaseOptions> dbOptions, ILogger<ActivitySnapshotFileCache> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -38,8 +38,8 @@ public sealed class ActivitySnapshotFileCache(IOptions<DatabaseOptions> dbOption
 
             return new CachedActivitySnapshot(envelope.Snapshot, envelope.UpdatedAtUtc);
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "TryGetAsync failed");
             return null;
         }
     }

@@ -9,6 +9,12 @@ namespace ArrDash.Services;
 /// </summary>
 public static class PlayEventAnalyticsService
 {
+    // Pure static utility with no DI container of its own, called per-event on the Activity
+    // hot path — bootstrapped once from Program.cs rather than threading ILogger through
+    // every method signature here and at every call site.
+    private static ILogger? _logger;
+    public static void Initialize(ILoggerFactory loggerFactory) => _logger ??= loggerFactory.CreateLogger(nameof(PlayEventAnalyticsService));
+
     public static ActivityAnalyticsBundle Build(
         IReadOnlyList<PlayEventEntity> events,
         WatchStatsRange range,
@@ -557,8 +563,9 @@ public static class PlayEventAnalyticsService
         {
             return JsonSerializer.Deserialize<List<string>>(entity.GenresJson) ?? [];
         }
-        catch
+        catch (Exception ex)
         {
+            _logger?.LogDebug(ex, "ReadGenres: malformed genres JSON {Json}", entity.GenresJson);
             return [];
         }
     }

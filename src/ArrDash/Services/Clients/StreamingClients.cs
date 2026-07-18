@@ -7,7 +7,7 @@ using ArrDash.Services;
 
 namespace ArrDash.Services.Clients;
 
-public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor options)
+public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<PlexClient> logger)
 {
     private PlexOptions Plex => options.Options.Plex;
 
@@ -41,6 +41,7 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "FetchSessionsAsync failed");
             return ([], ServiceHealthSnapshot.WithAttention(new ServiceHealth("plex", "Plex", true, false, ex.Message, null)));
         }
     }
@@ -128,7 +129,7 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
         int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : null;
 }
 
-public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor options)
+public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<EmbyClient> logger)
 {
     private ServiceEndpoint Emby => options.Options.Emby;
 
@@ -168,6 +169,7 @@ public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor opti
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "FetchSessionsAsync failed");
             return ([], ServiceHealthSnapshot.WithAttention(new ServiceHealth("emby", "Emby", true, false, ex.Message, null)));
         }
     }
@@ -272,7 +274,7 @@ public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor opti
     }
 }
 
-public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor options)
+public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<JellyfinClient> logger)
 {
     private ServiceEndpoint Jellyfin => options.Options.Jellyfin;
 
@@ -312,6 +314,7 @@ public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor 
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "FetchSessionsAsync failed");
             return ([], ServiceHealthSnapshot.WithAttention(new ServiceHealth("jellyfin", "Jellyfin", true, false, ex.Message, null)));
         }
     }

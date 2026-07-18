@@ -13,7 +13,8 @@ public sealed class ServiceDetailService(
     EmbyClient emby,
     JellyfinClient jellyfin,
     MediaServiceOptionsAccessor options,
-    LayoutPreferencesService prefs)
+    LayoutPreferencesService prefs,
+    ILogger<ServiceDetailService> logger)
 {
     public async Task<ServiceDetail?> FetchAsync(string serviceKey, CancellationToken ct)
     {
@@ -28,9 +29,9 @@ public sealed class ServiceDetailService(
             "lidarr" => await lidarr.FetchServiceDetailAsync(ct),
             "chaptarr" => await chaptarr.FetchServiceDetailAsync(ct),
             "audiobookshelf" => await audiobookShelf.FetchServiceDetailAsync(ct),
-            "plex" => await FetchStreamingDetailAsync("plex", plex.FetchSessionsAsync(ct), options.Options.Plex.Url),
-            "emby" => await FetchStreamingDetailAsync("emby", emby.FetchSessionsAsync(ct), options.Options.Emby.Url),
-            "jellyfin" => await FetchStreamingDetailAsync("jellyfin", jellyfin.FetchSessionsAsync(ct), options.Options.Jellyfin.Url),
+            "plex" => await FetchStreamingDetailAsync("plex", plex.FetchSessionsAsync(ct), options.Options.Plex.Url, logger),
+            "emby" => await FetchStreamingDetailAsync("emby", emby.FetchSessionsAsync(ct), options.Options.Emby.Url, logger),
+            "jellyfin" => await FetchStreamingDetailAsync("jellyfin", jellyfin.FetchSessionsAsync(ct), options.Options.Jellyfin.Url, logger),
             "slskd" => FetchSlskdDetail(),
             _ => UnrecognizedDetail(key)
         };
@@ -95,7 +96,8 @@ public sealed class ServiceDetailService(
     private static async Task<ServiceDetail> FetchStreamingDetailAsync(
         string key,
         Task<(IReadOnlyList<ActiveSession> Sessions, ServiceHealth Health)> fetchTask,
-        string? serviceUrl)
+        string? serviceUrl,
+        ILogger logger)
     {
         var name = char.ToUpper(key[0]) + key[1..];
         try
@@ -113,6 +115,7 @@ public sealed class ServiceDetailService(
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "FetchStreamingDetailAsync failed");
             return ArrServiceDetailParser.BuildStreamingDetail(
                 key, name, serviceUrl, true, false, ex.Message, [], null);
         }

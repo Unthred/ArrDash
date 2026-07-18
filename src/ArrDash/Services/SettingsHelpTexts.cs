@@ -112,4 +112,5 @@ public static class SettingsHelpTexts
     public const string WatchStatsLiveSources = "Live stats are fetched directly from these services. Configure URL and API key on the API keys tab.";
     public const string WatchStatsTautulliSource = "Plex leaderboards and recently watched — same data as the Tautulli home dashboard.";
     public const string WatchStatsTracearrSource = "Emby and Jellyfin stats — session history and platforms from Tracearr. Generate a Public API token in Tracearr Settings → General.";
+    public const string LogLevel = "Minimum severity written to the container's log (visible via `docker logs arrdash`). Takes effect immediately, no restart needed. Debug/Trace are verbose — useful while diagnosing a specific problem, noisy to leave on permanently. \"Server default\" leaves whatever appsettings.json or the Logging__LogLevel__Default environment variable already set.";
 }

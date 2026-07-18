@@ -4,7 +4,7 @@ using ArrDash.Models;
 
 namespace ArrDash.Services.Clients;
 
-public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, string sourceKey, string sourceLabel)
+public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, string sourceKey, string sourceLabel, ILogger logger)
 {
     public string SourceKey => sourceKey;
     public string SourceLabel => sourceLabel;
@@ -25,6 +25,7 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "TestConnectionAsync failed");
             return (false, ex.Message);
         }
     }
@@ -46,6 +47,7 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "TestPluginAsync failed");
             return (false, ex.Message);
         }
     }
@@ -80,8 +82,8 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
                 using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
                 all.AddRange(ParsePlaylist(doc.RootElement, user));
             }
-            catch
-            {
+            catch (Exception ex) {
+                logger.LogWarning(ex, "FetchHistoryAsync failed");
                 // Continue with other users.
             }
         }
@@ -124,8 +126,8 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
                 BuildTopPlatforms(events, limit),
                 BuildRecent(events, limit));
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "BuildLiveSnapshotAsync failed");
             return null;
         }
     }
@@ -352,8 +354,8 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
 
             return list;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "FetchLibrariesAsync failed");
             return [];
         }
     }
@@ -403,8 +405,8 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
 
             return roots;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "FetchLibraryRootsAsync failed");
             return [];
         }
     }
@@ -442,8 +444,8 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
 
             return map;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "FetchItemPathsAsync failed");
             return map;
         }
     }
@@ -543,8 +545,8 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
     private sealed record PlaybackUser(string Id, string Name);
 }
 
-public sealed class EmbyPlaybackReportingClient(HttpClient http, MediaServiceOptionsAccessor options)
-    : PlaybackReportingClient(http, options.Options.Emby, WatchStatsSources.Emby, "Emby");
+public sealed class EmbyPlaybackReportingClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<EmbyPlaybackReportingClient> logger)
+    : PlaybackReportingClient(http, options.Options.Emby, WatchStatsSources.Emby, "Emby", logger);
 
-public sealed class JellyfinPlaybackReportingClient(HttpClient http, MediaServiceOptionsAccessor options)
-    : PlaybackReportingClient(http, options.Options.Jellyfin, WatchStatsSources.Jellyfin, "Jellyfin");
+public sealed class JellyfinPlaybackReportingClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<JellyfinPlaybackReportingClient> logger)
+    : PlaybackReportingClient(http, options.Options.Jellyfin, WatchStatsSources.Jellyfin, "Jellyfin", logger);

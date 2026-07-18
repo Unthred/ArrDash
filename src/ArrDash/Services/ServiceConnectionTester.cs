@@ -13,7 +13,8 @@ public sealed class ServiceConnectionTester(
     MediaServiceOptionsAccessor optionsAccessor,
     TautulliClient tautulli,
     TracearrClient tracearr,
-    TraktClient trakt)
+    TraktClient trakt,
+    ILogger<ServiceConnectionTester> logger)
 {
     public Task<(bool Ok, string Message)> TestAsync(string serviceKey, CancellationToken ct) =>
         TestAsync(serviceKey, null, ct);
@@ -43,6 +44,7 @@ public sealed class ServiceConnectionTester(
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "TestAsync failed");
             return (false, ex.Message);
         }
     }
@@ -66,6 +68,7 @@ public sealed class ServiceConnectionTester(
         }
         catch (Exception ex)
         {
+            logger.LogWarning(ex, "TestTraktAsync failed");
             return (false, ex.Message);
         }
     }
@@ -120,7 +123,7 @@ public sealed class ServiceConnectionTester(
         if (!response.IsSuccessStatusCode)
             return (false, $"HTTP {(int)response.StatusCode}");
 
-        var version = await TryGetArrVersionAsync(client, endpoint, apiVersion, ct);
+        var version = await TryGetArrVersionAsync(client, endpoint, apiVersion, logger, ct);
         return version is not null ? (true, $"Connected (v{version})") : (true, "Connected");
     }
 
@@ -128,6 +131,7 @@ public sealed class ServiceConnectionTester(
         HttpClient client,
         ServiceEndpoint endpoint,
         string apiVersion,
+        ILogger logger,
         CancellationToken ct)
     {
         try
@@ -142,8 +146,8 @@ public sealed class ServiceConnectionTester(
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
             return doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() : null;
         }
-        catch
-        {
+        catch (Exception ex) {
+            logger.LogWarning(ex, "TryGetArrVersionAsync failed");
             return null;
         }
     }

@@ -732,6 +732,28 @@
                 </MudPaper>
             }
         </MudTabPanel>
+
+        <MudTabPanel Text="Diagnostics" Icon="@Icons.Material.Filled.BugReport">
+            <MudPaper Class="settings-section compact" Elevation="0">
+                <div class="settings-section-title">Logging</div>
+                <SettingField Text="@SettingsHelpTexts.LogLevel">
+                    <MudSelect T="string" Value="_logLevel" ValueChanged="OnLogLevelChanged"
+                               Label="Log level" Variant="Variant.Outlined" Dense="true">
+                        <MudSelectItem T="string" Value="@("")">Server default</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Trace")">Trace (very verbose)</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Debug")">Debug</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Information")">Information</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Warning")">Warning</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Error")">Error</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("Critical")">Critical</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("None")">None (off)</MudSelectItem>
+                    </MudSelect>
+                </SettingField>
+                <MudText Typo="Typo.caption" Class="muted mt-2 d-block">
+                    View logs with <code>docker logs arrdash</code> (or the Unraid container log viewer).
+                </MudText>
+            </MudPaper>
+        </MudTabPanel>
     </MudTabs>
     </CascadingValue>
 </MudContainer>
@@ -988,6 +1010,7 @@
                 _excludedLibraryKeys.Add(key.Trim());
         }
         _traktPosterMode = string.IsNullOrWhiteSpace(prefs.TraktPosterMode) ? "both" : prefs.TraktPosterMode;
+        _logLevel = prefs.LogLevel ?? "";
         _ = RefreshLibraryCatalogAsync();
         _ = RefreshTraktAccountsAsync();
         _showServerMetrics = prefs.ShowServerMetrics;
@@ -1407,6 +1430,24 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Could not save poster mode: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string _logLevel = "";
+
+    private async Task OnLogLevelChanged(string level)
+    {
+        _logLevel = level;
+        try
+        {
+            await Prefs.UpdateAsync(p => p.LogLevel = _logLevel);
+            Snackbar.Add(
+                string.IsNullOrWhiteSpace(_logLevel) ? "Log level reset to server default." : $"Log level set to {_logLevel}.",
+                Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not save log level: {ex.Message}", Severity.Error);
         }
     }
 
