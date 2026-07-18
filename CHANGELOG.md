@@ -13,6 +13,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   - Fixed a real image bug: Emby/Jellyfin posters 404'd for anyone using Tracearr without also configuring native Emby/Jellyfin API keys, because the thumb builder ignored the working Tracearr-proxied URL already stored on the row and always built a native-credentials URL instead
   - Recently Watched now groups by exact item **and** user — two people watching the same show show as two distinct rows, each with the episode name; same-user repeats of the same item collapse into one row with a play count, using the native item id (more reliable than episode-title text, which some importers only populate intermittently for the same item)
   - Recently Watched, Top Users, Top Movies, and Top TV are all click-to-drilldown now
+  - Season/episode numbers (`SxxEyy`) are now captured on import from Plex (Tautulli and native PMS) and Emby/Jellyfin (Tracearr), not just Trakt, so the Recently Watched subtitle shows them for native plays too — applies to new imports only, existing history isn't retroactively enriched
+  - Posters get a second-chance client-side fallback (title search via the media resolver, then initials) when the primary native thumbnail 404s or has gone stale — fixes movies/shows whose Plex art link expired after a server-side re-match
 
 - Network pie slices no longer grow a fat scaled focus ring on click; keyboard focus keeps a thin stroke cue ([#44](https://github.com/Unthred/ArrDash/issues/44))
 - Status-bar up/down chips show a spinning sync icon until the first throughput sample lands instead of a misleading `0 B/s` ([#44](https://github.com/Unthred/ArrDash/issues/44))

@@ -145,8 +145,13 @@ public sealed class PlexHistoryClient(HttpClient http, MediaServiceOptionsAccess
             LibraryName: libraryName,
             LibraryExternalId: librarySectionId,
             ProgressPercent: progress,
-            GrandparentExternalId: grandparentKey);
+            GrandparentExternalId: grandparentKey,
+            SeasonNumber: mediaType == "episode" ? ParseIntAttr(el.Attribute("parentIndex")?.Value) : null,
+            EpisodeNumber: mediaType == "episode" ? ParseIntAttr(el.Attribute("index")?.Value) : null);
     }
+
+    private static int? ParseIntAttr(string? value) =>
+        int.TryParse(value, out var n) ? n : null;
 
     private static string NormalizeMediaType(string? raw) => raw?.ToLowerInvariant() switch
     {

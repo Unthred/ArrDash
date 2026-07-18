@@ -822,7 +822,9 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
             TranscodeDecision: transcode,
             LibraryExternalId: sectionId,
             LibraryName: libraryName,
-            GrandparentExternalId: grandparentKey);
+            GrandparentExternalId: grandparentKey,
+            SeasonNumber: mediaType == "episode" ? ReadInt(row, "parent_media_index") : null,
+            EpisodeNumber: mediaType == "episode" ? ReadInt(row, "media_index") : null);
     }
 
     private async Task<IReadOnlyList<ActivityChartPoint>> GetCategorySeriesChartAsync(

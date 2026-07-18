@@ -356,7 +356,8 @@ public static class PlayEventAnalyticsService
                         null,
                         g.First().Source,
                         DrilldownKey: MediaDrilldownKey(g.First()),
-                        DrilldownKind: ActivityDrilldownKind.Media);
+                        DrilldownKind: ActivityDrilldownKind.Media,
+                        FallbackThumbUrl: MediaPosterFallback(g.First()));
                 })
                 .OrderByDescending(r => r.Plays)
                 .ThenByDescending(r => r.Hours)
@@ -375,7 +376,8 @@ public static class PlayEventAnalyticsService
                 null,
                 g.First().Source,
                 DrilldownKey: MediaDrilldownKey(g.First()),
-                DrilldownKind: ActivityDrilldownKind.Media))
+                DrilldownKind: ActivityDrilldownKind.Media,
+                FallbackThumbUrl: MediaPosterFallback(g.First())))
             .OrderByDescending(r => r.Hours)
             .ThenByDescending(r => r.Plays)
             .Take(limit)
@@ -430,8 +432,7 @@ public static class PlayEventAnalyticsService
             .Select(g =>
             {
                 var latest = g.First();
-                var thumb = g.Select(BuildThumb).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t))
-                    ?? MediaPosterFallback(latest);
+                var thumb = g.Select(BuildThumb).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t));
                 return new WatchStatRow(
                     MediaGroupKey(latest),
                     RecentSubtitle(latest, g.Count()),
@@ -442,7 +443,8 @@ public static class PlayEventAnalyticsService
                     latest.Source,
                     DrilldownKey: MediaDrilldownKey(latest),
                     DrilldownKind: ActivityDrilldownKind.Media,
-                    LastPlayedAtUtc: new DateTimeOffset(latest.PlayedAtUtc, TimeSpan.Zero));
+                    LastPlayedAtUtc: new DateTimeOffset(latest.PlayedAtUtc, TimeSpan.Zero),
+                    FallbackThumbUrl: MediaPosterFallback(latest));
             })
             .ToList();
 
@@ -471,15 +473,17 @@ public static class PlayEventAnalyticsService
         return episode is null ? show : $"{show}:{episode}";
     }
 
-    private static string? MediaPosterFallback(PlayEventEntity e) =>
-        e.TmdbId is not null || !string.IsNullOrWhiteSpace(e.ImdbId)
-            ? PosterUrls.Media(
-                e.MediaType,
-                e.TmdbId,
-                e.ImdbId,
-                e.MediaType == "episode" ? e.SeriesTitle ?? e.Title : e.Title,
-                e.Year)
-            : null;
+    // Title-only search is a legitimate second-chance lookup now that it's only ever
+    // tried after the primary native thumb has already failed client-side — an
+    // imperfect match beats no picture. Not gated on TmdbId/ImdbId: those sharpen the
+    // match when present, but native Plex/Emby/Jellyfin plays usually have neither (#45).
+    private static string? MediaPosterFallback(PlayEventEntity e)
+    {
+        var title = e.MediaType == "episode" ? e.SeriesTitle ?? e.Title : e.Title;
+        return string.IsNullOrWhiteSpace(title)
+            ? null
+            : PosterUrls.Media(e.MediaType, e.TmdbId, e.ImdbId, title, e.Year);
+    }
 
     private static string RecentSubtitle(PlayEventEntity e, int plays)
     {

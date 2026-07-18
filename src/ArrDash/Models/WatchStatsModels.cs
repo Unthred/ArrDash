@@ -158,7 +158,11 @@ public sealed record WatchStatRow(
     IReadOnlyList<string>? SourceBreakdown = null,
     string? DrilldownKey = null,
     ActivityDrilldownKind? DrilldownKind = null,
-    DateTimeOffset? LastPlayedAtUtc = null);
+    DateTimeOffset? LastPlayedAtUtc = null,
+    /// <summary>Second-chance poster (title/provider-id search) tried client-side if
+    /// ThumbUrl 404s or resolves to nothing — e.g. a native Plex/Emby thumb that's gone
+    /// stale after the server re-matched the item.</summary>
+    string? FallbackThumbUrl = null);
 
 public enum ActivityDrilldownKind
 {

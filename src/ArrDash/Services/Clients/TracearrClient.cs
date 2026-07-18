@@ -680,7 +680,9 @@ public sealed class TracearrClient(HttpClient http, MediaServiceOptionsAccessor 
             row.ItemId,
             row.PosterUrl,
             row.EpisodeTitle,
-            TranscodeDecision: row.TranscodeDecision);
+            TranscodeDecision: row.TranscodeDecision,
+            SeasonNumber: row.SeasonNumber,
+            EpisodeNumber: row.EpisodeNumber);
     }
 
     public async Task<WatchStatsSourceSnapshot?> BuildSnapshotAsync(
@@ -948,7 +950,9 @@ public sealed class TracearrClient(HttpClient http, MediaServiceOptionsAccessor 
             SessionId: sessionId,
             State: state,
             Client: ReadString(row, "player", "device", "product"),
-            TranscodeDecision: transcode);
+            TranscodeDecision: transcode,
+            SeasonNumber: mediaType == "episode" ? ReadInt(row, "seasonNumber") : null,
+            EpisodeNumber: mediaType == "episode" ? ReadInt(row, "episodeNumber") : null);
     }
 
     private static (string? Id, string Name, string? Thumb) ReadUser(JsonElement row)
@@ -1423,7 +1427,9 @@ internal sealed record TracearrHistoryRow(
     string? SessionId = null,
     string? State = null,
     string? Client = null,
-    string? TranscodeDecision = null);
+    string? TranscodeDecision = null,
+    int? SeasonNumber = null,
+    int? EpisodeNumber = null);
 
 internal sealed record TracearrPlayEvent(
     string Source,

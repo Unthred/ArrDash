@@ -28,11 +28,16 @@
                     @if (ShowThumb)
                     {
                         <div class="watch-stats-thumb-slot">
-                            @if (!string.IsNullOrWhiteSpace(row.ThumbUrl))
+                            @{
+                                var (primary, secondary) = ThumbSources(row);
+                            }
+                            @if (primary is not null)
                             {
-                                @* Dead item images (deleted from the server) 404 — swap to the icon fallback. *@
-                                <img class="watch-stats-thumb @(UseAvatar ? "is-avatar" : "")" src="@row.ThumbUrl" alt="" loading="lazy"
-                                     onerror="this.style.display='none'; this.nextElementSibling.classList.remove('watch-stats-thumb-fallback-hidden');" />
+                                @* Dead/expired posters (deleted or re-matched server-side) fail client-side;
+                                   arrdashThumb tries the fallback URL, then the icon tile. *@
+                                <img class="watch-stats-thumb @(UseAvatar ? "is-avatar" : "")" src="@primary" alt="" loading="lazy"
+                                     data-fallback="@secondary"
+                                     onerror="arrdashThumb.onError(this)" onload="arrdashThumb.onLoad(this)" />
                                 <span class="watch-stats-thumb-fallback watch-stats-thumb-fallback-hidden @(UseAvatar ? "is-avatar" : "")">
                                     <MudIcon Icon="@(UseAvatar ? Icons.Material.Filled.Person : Icons.Material.Filled.Movie)" Size="Size.Small" />
                                 </span>
@@ -68,6 +73,13 @@
     [Parameter] public bool ShowRelativeTime { get; set; }
     [Parameter] public int MaxItems { get; set; } = 3;
     [Parameter] public EventCallback<WatchStatRow> OnRowClick { get; set; }
+
+    private static (string? Primary, string? Secondary) ThumbSources(WatchStatRow row) =>
+        !string.IsNullOrWhiteSpace(row.ThumbUrl)
+            ? (row.ThumbUrl, string.IsNullOrWhiteSpace(row.FallbackThumbUrl) ? null : row.FallbackThumbUrl)
+            : !string.IsNullOrWhiteSpace(row.FallbackThumbUrl)
+                ? (row.FallbackThumbUrl, null)
+                : (null, null);
 
     private string Meta(WatchStatRow row) =>
         ShowRelativeTime && row.LastPlayedAtUtc is { } at
