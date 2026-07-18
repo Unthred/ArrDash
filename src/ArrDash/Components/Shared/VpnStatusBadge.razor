@@ -12,7 +12,9 @@
 
 @code {
     /// <summary>Explicit status endpoint; falls back to ArrDash:VpnStatusUrl config
-    /// (ARRDASH_VPN_STATUS_URL). Badge is hidden entirely when neither is set.</summary>
+    /// (ARRDASH_VPN_STATUS_URL). Badge is hidden entirely when neither is set.
+    /// Deliberately undocumented: the expected response shape is bespoke (#43),
+    /// so this stays an opt-in hook for custom setups rather than a supported feature.</summary>
     [Parameter] public string StatusUrl { get; set; } = "";
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(20);

@@ -38,8 +38,6 @@ services:
       JELLYFIN_API_KEY: ""
       # Posters for Trakt history (optional) — free key from themoviedb.org
       TMDB_API_KEY: ""
-      # VPN allowlist badge (optional) — hidden when unset
-      ARRDASH_VPN_STATUS_URL: ""
       POLL_INTERVAL_SECONDS: 30
       RECENT_LIMIT: 20
     volumes:
