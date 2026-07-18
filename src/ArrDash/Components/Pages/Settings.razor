@@ -9,6 +9,8 @@
 @inject WatchStatsLibraryCatalog LibraryCatalog
 @inject ActivityAnalyticsService ActivityAnalytics
 @inject WatchStatsService WatchStats
+@inject TraktAccountService TraktAccounts
+@inject TraktSyncService TraktSync
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @implements IDisposable
@@ -485,8 +487,7 @@
                         <div class="d-flex align-center gap-2 mb-2">
                             <MudText Typo="Typo.subtitle2">Libraries in Activity reports</MudText>
                             <MudSpacer />
-                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectAllLibraries" Disabled="@(_libraryCatalog.Count == 0)">Select all</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="ClearLibrarySelection">Clear (all)</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="SelectAllLibraries" Disabled="@(_libraryCatalog.Count == 0)">Include all</MudButton>
                             <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="RefreshLibraryCatalogAsync" Disabled="_librariesLoading">
                                 @(_librariesLoading ? "Loading…" : "Refresh")
                             </MudButton>
@@ -503,8 +504,8 @@
                         {
                             <MudText Typo="Typo.caption" Class="muted mb-2">
                                 @(_includedLibraryKeys.Count == 0
-                                    ? "Including all libraries (nothing selected)."
-                                    : $"{_includedLibraryKeys.Count} of {_libraryCatalog.Count} selected.")
+                                    ? "All libraries included. Uncheck any to exclude them from Activity (saved immediately)."
+                                    : $"{_includedLibraryKeys.Count} of {_libraryCatalog.Count} libraries included (saved immediately).")
                             </MudText>
                             @foreach (var group in _libraryCatalog.GroupBy(l => l.Source))
                             {
@@ -513,7 +514,7 @@
                                 {
                                     <MudCheckBox T="bool"
                                                  Value="@IsLibraryIncluded(lib.Key)"
-                                                 ValueChanged="@(v => ToggleLibrary(lib.Key, v))"
+                                                 ValueChanged="@(async v => await ToggleLibrary(lib.Key, v))"
                                                  Label="@LibraryCheckboxLabel(lib)"
                                                  Dense="true"
                                                  Color="Color.Primary" />
@@ -522,6 +523,95 @@
                         }
                     </SettingField>
                 </div>
+
+                <div class="settings-section-title mt-4">Trakt</div>
+                <MudText Typo="Typo.caption" Class="muted mb-2">
+                    Connect Trakt accounts to restore watched history into ArrDash (and optionally push new plays). Additive only — never deletes.
+                    Register an app at trakt.tv/oauth/applications and set Client ID/Secret on the API keys tab.
+                    Connect uses the same PIN flow as other apps: ArrDash shows a code → you enter it at trakt.tv/activate.
+                </MudText>
+                <div class="d-flex gap-2 mb-2">
+                    <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                               OnClick="ConnectTraktAsync" Disabled="_traktBusy">
+                        Connect Trakt account
+                    </MudButton>
+                    <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="RefreshTraktAccountsAsync" Disabled="_traktBusy">
+                        Refresh
+                    </MudButton>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_traktPendingUserCode))
+                {
+                    <MudAlert Severity="Severity.Info" Class="mb-2" Dense="false">
+                        <MudText Typo="Typo.subtitle2" Class="mb-1">Authorize with PIN</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            1. Open
+                            <MudLink Href="https://trakt.tv/activate" Target="_blank" Rel="noopener">trakt.tv/activate</MudLink>
+                            (sign in if asked)<br />
+                            2. Enter this code and allow access:<br />
+                            <span style="font-size:1.75rem;font-weight:700;letter-spacing:0.2em;font-family:ui-monospace,monospace;">@_traktPendingUserCode</span>
+                        </MudText>
+                        <MudText Typo="Typo.caption" Class="muted">
+                            ArrDash polls automatically — click Refresh after approving if the account does not appear.
+                        </MudText>
+                    </MudAlert>
+                }
+                else if (!string.IsNullOrWhiteSpace(_traktConnectHint))
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-2">@_traktConnectHint</MudAlert>
+                }
+                @if (_traktAccounts.Count == 0)
+                {
+                    <MudText Typo="Typo.caption" Class="muted">No Trakt accounts connected yet.</MudText>
+                }
+                else
+                {
+                    @foreach (var account in _traktAccounts)
+                    {
+                        <MudPaper Class="pa-3 mb-2" Elevation="0" Outlined="true">
+                            <div class="d-flex align-center gap-2 mb-2">
+                                <MudText Typo="Typo.subtitle2">@account.TraktUsername</MudText>
+                                <MudSpacer />
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => PreviewTraktAsync(account.Id))" Disabled="_traktBusy">Preview</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                           OnClick="@(() => SyncTraktAsync(account.Id))" Disabled="_traktBusy || account.LastPreviewAtUtc is null">
+                                    Sync now
+                                </MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                           OnClick="@(() => DisconnectTraktAsync(account.Id))" Disabled="_traktBusy">
+                                    Disconnect
+                                </MudButton>
+                            </div>
+                            <div class="settings-grid-2">
+                                <MudTextField Value="@account.CanonicalUserName"
+                                              ValueChanged="@((string? v) => OnTraktCanonicalUserChanged(account, v))"
+                                              Label="Canonical ArrDash username" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                                <MudTextField Value="@FormatMappedUsers(account.MappedUsersJson)"
+                                              ValueChanged="@((string? v) => OnTraktMappedUsersChanged(account, v))"
+                                              Label="Mapped users (source|name per line)" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2"
+                                              HelperText="e.g. emby|Squiggley" />
+                                <MudSwitch T="bool" Value="@account.SyncMovies" ValueChanged="@(v => OnTraktFlagChanged(account, () => account.SyncMovies = v))" Color="Color.Primary" Label="Movies" />
+                                <MudSwitch T="bool" Value="@account.SyncEpisodes" ValueChanged="@(v => OnTraktFlagChanged(account, () => account.SyncEpisodes = v))" Color="Color.Primary" Label="Episodes" />
+                                <MudSwitch T="bool" Value="@account.ImportToWarehouse" ValueChanged="@(v => OnTraktFlagChanged(account, () => account.ImportToWarehouse = v))" Color="Color.Primary" Label="Import into ArrDash" />
+                                <MudSwitch T="bool" Value="@account.PushToTrakt" ValueChanged="@(v => OnTraktFlagChanged(account, () => account.PushToTrakt = v))" Color="Color.Primary" Label="Push new plays to Trakt" />
+                                <MudSwitch T="bool" Value="@account.MarkEmbyWatched" ValueChanged="@(v => OnTraktFlagChanged(account, () => account.MarkEmbyWatched = v))" Color="Color.Primary" Label="Mark Emby watched (preview-gated)" />
+                                <MudSwitch T="bool" Value="@account.MarkPlexWatched" ValueChanged="@(v => OnTraktFlagChanged(account, () => account.MarkPlexWatched = v))" Color="Color.Primary" Label="Mark Plex watched (preview-gated)" />
+                            </div>
+                            <MudText Typo="Typo.caption" Class="muted mt-1">
+                                @(account.LastPreviewAtUtc is null ? "Run Preview before Sync." : $"Last preview {account.LastPreviewAtUtc:u}")
+                                @if (account.LastSyncedAtUtc is not null)
+                                {
+                                    <text> · Last sync @account.LastSyncedAtUtc.Value.ToString("u")</text>
+                                }
+                            </MudText>
+                        </MudPaper>
+                    }
+                }
+                @if (!string.IsNullOrWhiteSpace(_traktStatus) || TraktSync.IsBusy)
+                {
+                    <MudText Typo="Typo.caption" Class="mt-1">
+                        @(TraktSync.IsBusy ? TraktSync.StatusMessage : _traktStatus)
+                    </MudText>
+                }
             </MudPaper>
         </MudTabPanel>
 
@@ -605,12 +695,13 @@
                                       @bind-Value:after="ScheduleLivePreviewDebounced"
                                       Label="URL"
                                       Variant="Variant.Outlined"
-                                      Placeholder="@(cred.CurrentUrl ?? "https://service.yeradonkey.com")" />
+                                      Disabled="@(cred.Key == "trakt")"
+                                      Placeholder="@(cred.Key == "trakt" ? "Not required for Trakt" : (cred.CurrentUrl ?? "https://service.yeradonkey.com"))" />
                     </SettingField>
                     <SettingField Text="@SettingsHelpTexts.ApiKey">
                         <MudTextField @bind-Value="_credentialInputs[cred.Key]"
                                       @bind-Value:after="ScheduleLivePreviewDebounced"
-                                      Label="API key / token"
+                                      Label="@(cred.Key == "trakt" ? "Client ID" : "API key / token")"
                                       Variant="Variant.Outlined"
                                       Placeholder="Leave blank to use saved key"
                                       Adornment="Adornment.End"
@@ -618,6 +709,17 @@
                                       OnAdornmentClick="@(() => ToggleReveal(cred.Key))"
                                       InputType="@RevealType(cred.Key)" />
                     </SettingField>
+                    @if (cred.Key == "trakt")
+                    {
+                        <SettingField Text="Trakt Client Secret from your OAuth application.">
+                            <MudTextField @bind-Value="_traktClientSecretInput"
+                                          @bind-Value:after="ScheduleLivePreviewDebounced"
+                                          Label="Client Secret"
+                                          Variant="Variant.Outlined"
+                                          Placeholder="Leave blank to keep saved secret"
+                                          InputType="InputType.Password" />
+                        </SettingField>
+                    }
                 </MudPaper>
             }
         </MudTabPanel>
@@ -670,6 +772,12 @@
     private readonly HashSet<string> _includedLibraryKeys = new(StringComparer.OrdinalIgnoreCase);
     private List<WatchStatsLibraryInfo> _libraryCatalog = [];
     private bool _librariesLoading;
+    private List<ArrDash.Data.Entities.TraktAccountEntity> _traktAccounts = [];
+    private bool _traktBusy;
+    private string? _traktConnectHint;
+    private string? _traktPendingUserCode;
+    private string? _traktStatus;
+    private string _traktClientSecretInput = "";
     private bool _showServerMetrics = true;
     private string _metricsHostLabel = "";
     private string _metricsDiskPath = "";
@@ -871,6 +979,7 @@
                 _includedLibraryKeys.Add(key.Trim());
         }
         _ = RefreshLibraryCatalogAsync();
+        _ = RefreshTraktAccountsAsync();
         _showServerMetrics = prefs.ShowServerMetrics;
         _metricsHostLabel = prefs.MetricsHostLabel ?? "";
         _metricsDiskPath = prefs.MetricsDiskPath ?? "";
@@ -1118,6 +1227,7 @@
                 _credentialInputs[key] = "";
             foreach (var key in _urlInputs.Keys.ToList())
                 _urlInputs[key] = "";
+            _traktClientSecretInput = "";
 
             RefreshCredentialStatuses();
             Snackbar.Add("Settings saved.", Severity.Success);
@@ -1234,6 +1344,8 @@
         JellyfinApiKey = _credentialInputs.GetValueOrDefault("jellyfin"),
         TautulliApiKey = _credentialInputs.GetValueOrDefault("tautulli"),
         TracearrApiKey = _credentialInputs.GetValueOrDefault("tracearr"),
+        TraktClientId = _credentialInputs.GetValueOrDefault("trakt"),
+        TraktClientSecret = _traktClientSecretInput,
         SonarrUrl = _urlInputs.GetValueOrDefault("sonarr"),
         RadarrUrl = _urlInputs.GetValueOrDefault("radarr"),
         LidarrUrl = _urlInputs.GetValueOrDefault("lidarr"),
@@ -1271,8 +1383,14 @@
     private bool IsLibraryIncluded(string key) =>
         _includedLibraryKeys.Count == 0 || _includedLibraryKeys.Contains(key);
 
-    private void ToggleLibrary(string key, bool included)
+    private async Task ToggleLibrary(string key, bool included)
     {
+        if (_libraryCatalog.Count == 0)
+        {
+            Snackbar.Add("Libraries still loading — wait a moment, then try again.", Severity.Warning);
+            return;
+        }
+
         // Empty set means "all". First explicit toggle materializes the full catalog as selected,
         // then applies the change so clearing one library works as expected.
         if (_includedLibraryKeys.Count == 0)
@@ -1290,23 +1408,247 @@
             && _libraryCatalog.All(l => _includedLibraryKeys.Contains(l.Key)))
             _includedLibraryKeys.Clear();
 
-        ScheduleLivePreviewNow();
+        await PersistLibrarySelectionAsync();
     }
 
-    private void SelectAllLibraries()
+    private async Task SelectAllLibraries()
     {
         _includedLibraryKeys.Clear();
-        ScheduleLivePreviewNow();
+        await PersistLibrarySelectionAsync();
     }
 
-    private void ClearLibrarySelection()
+    private async Task ClearLibrarySelection()
     {
         _includedLibraryKeys.Clear();
-        ScheduleLivePreviewNow();
+        await PersistLibrarySelectionAsync();
+    }
+
+    private async Task PersistLibrarySelectionAsync()
+    {
+        try
+        {
+            await Prefs.UpdateAsync(p =>
+            {
+                p.WatchStatsIncludedLibraries = _includedLibraryKeys.Count == 0
+                    ? []
+                    : _includedLibraryKeys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+            });
+            ActivityAnalytics.InvalidateCache();
+            WatchStats.InvalidateCache();
+            ScheduleLivePreviewNow();
+            Snackbar.Add(
+                _includedLibraryKeys.Count == 0
+                    ? "Activity includes all libraries."
+                    : $"Activity includes {_includedLibraryKeys.Count} libraries.",
+                Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not save library filter: {ex.Message}", Severity.Error);
+        }
     }
 
     private static string LibraryCheckboxLabel(WatchStatsLibraryInfo lib) =>
         string.IsNullOrWhiteSpace(lib.MediaType) ? lib.Name : $"{lib.Name} ({lib.MediaType})";
+
+    private CancellationTokenSource? _traktPendingRefreshCts;
+
+    private async Task RefreshTraktAccountsAsync()
+    {
+        try
+        {
+            _traktAccounts = (await TraktAccounts.ListAccountsAsync()).ToList();
+            if (_traktAccounts.Count > 0 && !string.IsNullOrWhiteSpace(_traktPendingUserCode))
+            {
+                StopTraktPendingRefresh();
+                _traktPendingUserCode = null;
+                _traktConnectHint = null;
+                Snackbar.Add("Trakt account connected", Severity.Success);
+            }
+        }
+        catch
+        {
+            _traktAccounts = [];
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ConnectTraktAsync()
+    {
+        _traktBusy = true;
+        try
+        {
+            var (ok, message, device) = await TraktAccounts.StartConnectAsync(CancellationToken.None);
+            if (ok && device is not null && !string.IsNullOrWhiteSpace(device.UserCode))
+            {
+                _traktPendingUserCode = device.UserCode;
+                _traktConnectHint = null;
+                Snackbar.Add($"Enter {device.UserCode} at trakt.tv/activate", Severity.Info);
+                StartTraktPendingRefresh();
+            }
+            else
+            {
+                StopTraktPendingRefresh();
+                _traktPendingUserCode = null;
+                _traktConnectHint = message;
+                Snackbar.Add(message, Severity.Warning);
+            }
+        }
+        finally
+        {
+            _traktBusy = false;
+        }
+    }
+
+    private void StartTraktPendingRefresh()
+    {
+        StopTraktPendingRefresh();
+        _traktPendingRefreshCts = new CancellationTokenSource();
+        var ct = _traktPendingRefreshCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                // Trakt device codes expire after ~10 minutes; poll UI while waiting.
+                for (var i = 0; i < 120 && !ct.IsCancellationRequested; i++)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    await InvokeAsync(RefreshTraktAccountsAsync);
+                    if (string.IsNullOrWhiteSpace(_traktPendingUserCode))
+                        break;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // ignored
+            }
+        }, ct);
+    }
+
+    private void StopTraktPendingRefresh()
+    {
+        try { _traktPendingRefreshCts?.Cancel(); } catch { /* ignore */ }
+        _traktPendingRefreshCts?.Dispose();
+        _traktPendingRefreshCts = null;
+    }
+
+    private async Task PreviewTraktAsync(string accountId)
+    {
+        _traktBusy = true;
+        try
+        {
+            var preview = await TraktSync.PreviewAsync(accountId, CancellationToken.None);
+            _traktStatus = $"Preview: import {preview.WouldImport}, link {preview.WouldLinkExisting}, push {preview.WouldPush}, unmatched {preview.Unmatched}";
+            Snackbar.Add(_traktStatus, Severity.Info);
+            await RefreshTraktAccountsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Trakt preview failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _traktBusy = false;
+        }
+    }
+
+    private async Task SyncTraktAsync(string accountId)
+    {
+        if (!TraktSync.TryStartSyncInBackground(accountId, out var message))
+        {
+            Snackbar.Add($"Sync already running: {message}", Severity.Info);
+            return;
+        }
+
+        _traktBusy = true;
+        _traktStatus = message;
+        Snackbar.Add("Trakt sync started — large histories can take a few minutes.", Severity.Info);
+        try
+        {
+            // Poll status until the background import finishes.
+            for (var i = 0; i < 600 && TraktSync.IsBusy; i++)
+            {
+                _traktStatus = TraktSync.StatusMessage;
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(1000);
+            }
+
+            _traktStatus = TraktSync.StatusMessage;
+            Snackbar.Add(_traktStatus, Severity.Success);
+            ActivityAnalytics.InvalidateCache();
+            WatchStats.InvalidateCache();
+            await RefreshTraktAccountsAsync();
+        }
+        finally
+        {
+            _traktBusy = false;
+        }
+    }
+
+    private async Task DisconnectTraktAsync(string accountId)
+    {
+        _traktBusy = true;
+        try
+        {
+            var (ok, message) = await TraktAccounts.DisconnectAsync(accountId, CancellationToken.None);
+            Snackbar.Add(message, ok ? Severity.Success : Severity.Warning);
+            await RefreshTraktAccountsAsync();
+        }
+        finally
+        {
+            _traktBusy = false;
+        }
+    }
+
+    private async Task OnTraktCanonicalUserChanged(ArrDash.Data.Entities.TraktAccountEntity account, string? value)
+    {
+        account.CanonicalUserName = value ?? "";
+        await SaveTraktAccountAsync(account);
+    }
+
+    private async Task OnTraktMappedUsersChanged(ArrDash.Data.Entities.TraktAccountEntity account, string? value)
+    {
+        account.MappedUsersJson = ParseMappedUsersJson(value);
+        await SaveTraktAccountAsync(account);
+    }
+
+    private async Task OnTraktFlagChanged(ArrDash.Data.Entities.TraktAccountEntity account, Action apply)
+    {
+        apply();
+        await SaveTraktAccountAsync(account);
+    }
+
+    private async Task SaveTraktAccountAsync(ArrDash.Data.Entities.TraktAccountEntity account)
+    {
+        var (ok, message) = await TraktAccounts.UpdateAccountAsync(account, CancellationToken.None);
+        if (!ok)
+            Snackbar.Add(message, Severity.Warning);
+    }
+
+    private static string FormatMappedUsers(string json)
+    {
+        try
+        {
+            var users = System.Text.Json.JsonSerializer.Deserialize<List<TraktMappedUser>>(json) ?? [];
+            return string.Join('\n', users.Select(u => $"{u.Source}|{u.UserName}"));
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static string ParseMappedUsersJson(string? text)
+    {
+        var users = (text ?? "")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line => line.Split('|', StringSplitOptions.TrimEntries))
+            .Where(p => p.Length >= 2)
+            .Select(p => new TraktMappedUser { Source = p[0], UserName = p[1], UserId = p.Length > 2 ? p[2] : null })
+            .ToList();
+        return System.Text.Json.JsonSerializer.Serialize(users);
+    }
 
     private static List<WatchStatsUserAlias> ParseAliases(string? text)
     {
@@ -1332,6 +1674,8 @@
         || !string.IsNullOrWhiteSpace(updates.JellyfinApiKey)
         || !string.IsNullOrWhiteSpace(updates.TautulliApiKey)
         || !string.IsNullOrWhiteSpace(updates.TracearrApiKey)
+        || !string.IsNullOrWhiteSpace(updates.TraktClientId)
+        || !string.IsNullOrWhiteSpace(updates.TraktClientSecret)
         || !string.IsNullOrWhiteSpace(updates.SonarrUrl)
         || !string.IsNullOrWhiteSpace(updates.RadarrUrl)
         || !string.IsNullOrWhiteSpace(updates.LidarrUrl)
@@ -1366,6 +1710,7 @@
 
     public void Dispose()
     {
+        StopTraktPendingRefresh();
         _debounceTimer?.Dispose();
         Prefs.Changed -= OnPrefsChanged;
         Secrets.Changed -= OnSecretsChanged;

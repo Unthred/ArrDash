@@ -52,6 +52,8 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
             ApplyIfSet(_secrets.JellyfinApiKey, v => options.Jellyfin.ApiKey = v);
             ApplyIfSet(_secrets.TautulliApiKey, v => options.Tautulli.ApiKey = v);
             ApplyIfSet(_secrets.TracearrApiKey, v => options.Tracearr.ApiKey = v);
+            ApplyIfSet(_secrets.TraktClientId, v => options.Trakt.ClientId = v);
+            ApplyIfSet(_secrets.TraktClientSecret, v => options.Trakt.ClientSecret = v);
             ApplyIfSet(_secrets.SonarrUrl, v => options.Sonarr.Url = v);
             ApplyIfSet(_secrets.RadarrUrl, v => options.Radarr.Url = v);
             ApplyIfSet(_secrets.LidarrUrl, v => options.Lidarr.Url = v);
@@ -80,6 +82,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
             ["jellyfin"] = FirstUrl(_secrets.JellyfinUrl, options.Jellyfin.Url),
             ["tautulli"] = FirstUrl(_secrets.TautulliUrl, options.Tautulli.Url),
             ["tracearr"] = FirstUrl(_secrets.TracearrUrl, options.Tracearr.Url),
+            ["trakt"] = null,
         };
 
     public IReadOnlyDictionary<string, bool> GetConfiguredFlags(MediaServiceOptions options) =>
@@ -96,6 +99,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
             ["jellyfin"] = HasSecret(nameof(ServiceSecretsFile.JellyfinApiKey)) || !string.IsNullOrWhiteSpace(options.Jellyfin.ApiKey),
             ["tautulli"] = HasSecret(nameof(ServiceSecretsFile.TautulliApiKey)) || !string.IsNullOrWhiteSpace(options.Tautulli.ApiKey),
             ["tracearr"] = HasSecret(nameof(ServiceSecretsFile.TracearrApiKey)) || !string.IsNullOrWhiteSpace(options.Tracearr.ApiKey),
+            ["trakt"] = HasSecret(nameof(ServiceSecretsFile.TraktClientId)) || !string.IsNullOrWhiteSpace(options.Trakt.ClientId),
         };
 
     public IReadOnlyDictionary<string, string?> GetMaskedHints()
@@ -115,6 +119,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
                 ["jellyfin"] = Mask(_secrets.JellyfinApiKey),
                 ["tautulli"] = Mask(_secrets.TautulliApiKey),
                 ["tracearr"] = Mask(_secrets.TracearrApiKey),
+                ["trakt"] = Mask(_secrets.TraktClientId),
             };
         }
     }
@@ -134,6 +139,8 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
             MergeSecret(updates.JellyfinApiKey, v => _secrets.JellyfinApiKey = v);
             MergeSecret(updates.TautulliApiKey, v => _secrets.TautulliApiKey = v);
             MergeSecret(updates.TracearrApiKey, v => _secrets.TracearrApiKey = v);
+            MergeSecret(updates.TraktClientId, v => _secrets.TraktClientId = v);
+            MergeSecret(updates.TraktClientSecret, v => _secrets.TraktClientSecret = v);
             MergeUrl(updates.SonarrUrl, v => _secrets.SonarrUrl = v);
             MergeUrl(updates.RadarrUrl, v => _secrets.RadarrUrl = v);
             MergeUrl(updates.LidarrUrl, v => _secrets.LidarrUrl = v);
@@ -187,6 +194,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
         nameof(ServiceSecretsFile.JellyfinApiKey) => !string.IsNullOrWhiteSpace(_secrets.JellyfinApiKey),
         nameof(ServiceSecretsFile.TautulliApiKey) => !string.IsNullOrWhiteSpace(_secrets.TautulliApiKey),
         nameof(ServiceSecretsFile.TracearrApiKey) => !string.IsNullOrWhiteSpace(_secrets.TracearrApiKey),
+        nameof(ServiceSecretsFile.TraktClientId) => !string.IsNullOrWhiteSpace(_secrets.TraktClientId),
         _ => false
     };
 
@@ -231,6 +239,8 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
         JellyfinApiKey = s.JellyfinApiKey,
         TautulliApiKey = s.TautulliApiKey,
         TracearrApiKey = s.TracearrApiKey,
+        TraktClientId = s.TraktClientId,
+        TraktClientSecret = s.TraktClientSecret,
         SonarrUrl = s.SonarrUrl,
         RadarrUrl = s.RadarrUrl,
         LidarrUrl = s.LidarrUrl,
@@ -258,6 +268,8 @@ public sealed class ServiceSecretsFile
     public string? JellyfinApiKey { get; set; }
     public string? TautulliApiKey { get; set; }
     public string? TracearrApiKey { get; set; }
+    public string? TraktClientId { get; set; }
+    public string? TraktClientSecret { get; set; }
     public string? SonarrUrl { get; set; }
     public string? RadarrUrl { get; set; }
     public string? LidarrUrl { get; set; }

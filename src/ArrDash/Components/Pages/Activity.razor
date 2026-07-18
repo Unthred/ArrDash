@@ -186,7 +186,8 @@
         WatchStatsSourceFilter.Plex => string.Equals(source.Key, WatchStatsSources.Plex, StringComparison.OrdinalIgnoreCase),
         WatchStatsSourceFilter.Emby => string.Equals(source.Key, WatchStatsSources.Emby, StringComparison.OrdinalIgnoreCase),
         WatchStatsSourceFilter.Jellyfin => string.Equals(source.Key, WatchStatsSources.Jellyfin, StringComparison.OrdinalIgnoreCase),
-        _ => true
+        WatchStatsSourceFilter.Trakt => string.Equals(source.Key, WatchStatsSources.Trakt, StringComparison.OrdinalIgnoreCase),
+        _ => false
     };
 
     private bool _hasMusic => _snapshot?.Leaderboards?.TopMusic.Count > 0;
@@ -668,6 +669,7 @@
         WatchStatsSourceFilter.Plex => "Plex",
         WatchStatsSourceFilter.Emby => "Emby",
         WatchStatsSourceFilter.Jellyfin => "Jellyfin",
+        WatchStatsSourceFilter.Trakt => "Trakt",
         _ => filter.ToString()
     };
 
@@ -817,6 +819,7 @@
             WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
             WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
             WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
+            WatchStatsSourceFilter.Trakt => WatchStatsSources.Trakt,
             _ => row.Source
         };
 

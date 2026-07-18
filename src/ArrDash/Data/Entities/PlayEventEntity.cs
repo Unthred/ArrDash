@@ -22,4 +22,17 @@ public sealed class PlayEventEntity
     public string? LibraryName { get; set; }
     public string? LibraryExternalId { get; set; }
     public double? ProgressPercent { get; set; }
+
+    /// <summary>Origin of the play event (plex, emby, jellyfin, trakt).</summary>
+    public string? Origin { get; set; }
+    public int? Year { get; set; }
+    public int? SeasonNumber { get; set; }
+    public int? EpisodeNumber { get; set; }
+    public string? ImdbId { get; set; }
+    public int? TmdbId { get; set; }
+    public int? TvdbId { get; set; }
+    public int? TraktId { get; set; }
+    public bool WasCompleted { get; set; } = true;
+    public bool DurationIsEstimated { get; set; }
+    public string? CanonicalMediaKey { get; set; }
 }

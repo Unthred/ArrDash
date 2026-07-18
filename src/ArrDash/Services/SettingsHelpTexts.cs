@@ -107,7 +107,7 @@ public static class SettingsHelpTexts
     public const string ShowEmbyWatchStats = "Include Emby stats in the Watch Stats panel.";
     public const string ShowJellyfinWatchStats = "Include Jellyfin stats in the Watch Stats panel.";
     public const string WatchStatsUserAliases = "Map usernames across servers for combined rankings. One per line: canonical|source|username (e.g. Mom|plex|Margaret).";
-    public const string WatchStatsIncludedLibraries = "Choose which media libraries count toward Activity stats. Leave all unchecked (or clear) to include every library. Uses each server's real library names — not hardcoded TV Shows / Movies.";
+    public const string WatchStatsIncludedLibraries = "Choose which media libraries count toward Activity stats. Checked = included. Uncheck libraries to exclude them (saved immediately). Reset to include every library.";
     public const string WatchStatsLiveSources = "Live stats are fetched directly from these services. Configure URL and API key on the API keys tab.";
     public const string WatchStatsTautulliSource = "Plex leaderboards and recently watched — same data as the Tautulli home dashboard.";
     public const string WatchStatsTracearrSource = "Emby and Jellyfin stats — session history and platforms from Tracearr. Generate a Public API token in Tracearr Settings → General.";

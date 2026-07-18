@@ -6,6 +6,7 @@ using ArrDash.Services;
 using ArrDash.Services.Clients;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Components.Server;
+using Microsoft.AspNetCore.DataProtection;
 using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -38,11 +39,24 @@ builder.Services.AddHttpClient<TautulliClient>(c => c.Timeout = TimeSpan.FromSec
 builder.Services.AddHttpClient<TracearrClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<EmbyPlaybackReportingClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<JellyfinPlaybackReportingClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<TraktClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddHttpClient(nameof(PosterProxyService), c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient(nameof(ServiceConnectionTester), c => c.Timeout = TimeSpan.FromSeconds(15));
 
+var configPath = Environment.GetEnvironmentVariable("ARRDASH_CONFIG_PATH")
+    ?? Path.Combine(builder.Environment.ContentRootPath, "config");
+Directory.CreateDirectory(configPath);
+var dpKeys = Path.Combine(configPath, "dataprotection-keys");
+Directory.CreateDirectory(dpKeys);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dpKeys));
+
 builder.Services.AddSingleton<ServiceSecretsStore>();
 builder.Services.AddSingleton<MediaServiceOptionsAccessor>();
+builder.Services.AddSingleton<TraktTokenProtector>();
+builder.Services.AddSingleton<TraktAccountService>();
+builder.Services.AddSingleton<TraktSyncService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TraktSyncService>());
 builder.Services.AddSingleton<PosterProxyService>();
 builder.Services.AddSingleton<HostSystemMetricsService>();
 builder.Services.AddSingleton<CpuHistoryService>();
@@ -188,6 +202,22 @@ app.MapGet("/api/activity/drilldown", async (
     return Results.Json(snapshot);
 });
 app.MapGet("/api/watch-stats/sync", (WatchHistorySyncService sync) => Results.Json(sync.CurrentStatus));
+app.MapGet("/api/trakt/accounts", async (TraktAccountService trakt, CancellationToken ct) =>
+    Results.Json(await trakt.ListAccountsAsync(ct)));
+app.MapPost("/api/trakt/connect", async (TraktAccountService trakt, CancellationToken ct) =>
+{
+    var (ok, message, device) = await trakt.StartConnectAsync(ct);
+    return Results.Json(new { ok, message, device });
+});
+app.MapPost("/api/trakt/accounts/{id}/preview", async (string id, TraktSyncService sync, CancellationToken ct) =>
+    Results.Json(await sync.PreviewAsync(id, ct)));
+app.MapPost("/api/trakt/accounts/{id}/sync", async (string id, TraktSyncService sync, CancellationToken ct) =>
+    Results.Json(await sync.SyncNowAsync(id, ct)));
+app.MapDelete("/api/trakt/accounts/{id}", async (string id, TraktAccountService trakt, CancellationToken ct) =>
+{
+    var (ok, message) = await trakt.DisconnectAsync(id, ct);
+    return Results.Json(new { ok, message });
+});
 app.MapGet("/api/services/{serviceKey}/detail", async (string serviceKey, ServiceDetailService details, CancellationToken ct) =>
 {
     var detail = await details.FetchAsync(serviceKey, ct);

@@ -53,6 +53,7 @@ public sealed class WatchStatsRepository(
             WatchStatsSourceFilter.Plex => query.Where(e => e.Source == WatchStatsSources.Plex),
             WatchStatsSourceFilter.Emby => query.Where(e => e.Source == WatchStatsSources.Emby),
             WatchStatsSourceFilter.Jellyfin => query.Where(e => e.Source == WatchStatsSources.Jellyfin),
+            WatchStatsSourceFilter.Trakt => query.Where(e => e.Source == WatchStatsSources.Trakt),
             _ => query.Where(e => sources.Contains(e.Source))
         };
 
@@ -172,6 +173,17 @@ public sealed class WatchStatsRepository(
         TranscodeDecision = source.TranscodeDecision,
         LibraryName = source.LibraryName,
         LibraryExternalId = source.LibraryExternalId,
-        ProgressPercent = source.ProgressPercent
+        ProgressPercent = source.ProgressPercent,
+        Origin = source.Origin,
+        Year = source.Year,
+        SeasonNumber = source.SeasonNumber,
+        EpisodeNumber = source.EpisodeNumber,
+        ImdbId = source.ImdbId,
+        TmdbId = source.TmdbId,
+        TvdbId = source.TvdbId,
+        TraktId = source.TraktId,
+        WasCompleted = source.WasCompleted,
+        DurationIsEstimated = source.DurationIsEstimated,
+        CanonicalMediaKey = source.CanonicalMediaKey
     };
 }

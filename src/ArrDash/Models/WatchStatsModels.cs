@@ -15,7 +15,8 @@ public enum WatchStatsSourceFilter
     Combined,
     Plex,
     Emby,
-    Jellyfin
+    Jellyfin,
+    Trakt
 }
 
 public sealed record WatchStatsRange(
@@ -285,12 +286,14 @@ public static class WatchStatsSources
     public const string Plex = "plex";
     public const string Emby = "emby";
     public const string Jellyfin = "jellyfin";
+    public const string Trakt = "trakt";
 
     public static string Label(string source) => source switch
     {
         Plex => "Plex",
         Emby => "Emby",
         Jellyfin => "Jellyfin",
+        Trakt => "Trakt",
         _ => source
     };
 }

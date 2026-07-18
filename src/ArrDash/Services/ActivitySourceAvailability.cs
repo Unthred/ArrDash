@@ -7,7 +7,9 @@ public sealed class ActivitySourceAvailability(
     TautulliClient tautulli,
     TracearrClient tracearr,
     EmbyPlaybackReportingClient embyReporting,
-    JellyfinPlaybackReportingClient jellyfinReporting)
+    JellyfinPlaybackReportingClient jellyfinReporting,
+    TraktAccountService traktAccounts,
+    PlexHistoryClient plexHistory)
 {
     private IReadOnlyList<TracearrServerInfo>? _servers;
     private DateTimeOffset _serversCachedAt;
@@ -25,6 +27,8 @@ public sealed class ActivitySourceAvailability(
             filters.Add(WatchStatsSourceFilter.Emby);
         if (configured.Contains(WatchStatsSources.Jellyfin))
             filters.Add(WatchStatsSourceFilter.Jellyfin);
+        if (configured.Contains(WatchStatsSources.Trakt))
+            filters.Add(WatchStatsSourceFilter.Trakt);
 
         return filters;
     }
@@ -32,7 +36,7 @@ public sealed class ActivitySourceAvailability(
     public async Task<IReadOnlyList<string>> GetConfiguredSourcesAsync(CancellationToken ct = default)
     {
         var list = new List<string>();
-        if (tautulli.IsConfigured)
+        if (tautulli.IsConfigured || plexHistory.IsConfigured)
             list.Add(WatchStatsSources.Plex);
 
         if (tracearr.IsConfigured)
@@ -55,6 +59,10 @@ public sealed class ActivitySourceAvailability(
             list.Add(WatchStatsSources.Emby);
         if (!list.Contains(WatchStatsSources.Jellyfin) && jellyfinReporting.IsConfigured)
             list.Add(WatchStatsSources.Jellyfin);
+
+        var trakt = await traktAccounts.ListAccountsAsync(ct);
+        if (trakt.Count > 0)
+            list.Add(WatchStatsSources.Trakt);
 
         return list;
     }

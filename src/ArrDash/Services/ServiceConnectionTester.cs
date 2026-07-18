@@ -12,7 +12,8 @@ public sealed class ServiceConnectionTester(
     IHttpClientFactory httpClientFactory,
     MediaServiceOptionsAccessor optionsAccessor,
     TautulliClient tautulli,
-    TracearrClient tracearr)
+    TracearrClient tracearr,
+    TraktClient trakt)
 {
     public Task<(bool Ok, string Message)> TestAsync(string serviceKey, CancellationToken ct) =>
         TestAsync(serviceKey, null, ct);
@@ -34,9 +35,33 @@ public sealed class ServiceConnectionTester(
                 "jellyfin" => await TestEmbyLike(options.Jellyfin, input, "Jellyfin", ct),
                 "tautulli" => await TestTautulli(input, ct),
                 "tracearr" => await TestTracearr(input, ct),
+                "trakt" => await TestTraktAsync(options.Trakt, input, ct),
                 "slskd" => TestSlskd(ResolveEndpoint(options.Slskd, input), "slskd"),
                 _ => (false, "Unknown service")
             };
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    private async Task<(bool Ok, string Message)> TestTraktAsync(TraktOptions current, ServiceTestInput? input, CancellationToken ct)
+    {
+        var clientId = FirstNonEmpty(input?.ApiKeyOrToken, current.ClientId);
+        if (string.IsNullOrWhiteSpace(clientId))
+            return (false, "Trakt Client ID required");
+        if (string.IsNullOrWhiteSpace(current.ClientSecret) && string.IsNullOrWhiteSpace(input?.ApiKeyOrToken))
+            return (false, "Save Client ID and Client Secret, then connect an account on the Watch stats tab");
+        if (string.IsNullOrWhiteSpace(current.ClientSecret))
+            return (true, "Client ID present — save Client Secret to finish app setup");
+
+        // Live probe: validates Client ID + headers without starting a device-code session
+        // (device codes would invalidate an in-progress Connect).
+        try
+        {
+            await trakt.ProbeApiAsync(ct);
+            return (true, "Trakt API reachable — use Connect on Watch stats to authorize with PIN");
         }
         catch (Exception ex)
         {

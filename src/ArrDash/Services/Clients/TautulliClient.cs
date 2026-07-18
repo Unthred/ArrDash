@@ -1238,4 +1238,14 @@ public sealed record ImportedPlayEvent(
     string? LibraryName = null,
     string? LibraryExternalId = null,
     double? ProgressPercent = null,
-    string? GrandparentExternalId = null);
+    string? GrandparentExternalId = null,
+    string? Origin = null,
+    int? Year = null,
+    int? SeasonNumber = null,
+    int? EpisodeNumber = null,
+    string? ImdbId = null,
+    int? TmdbId = null,
+    int? TvdbId = null,
+    int? TraktId = null,
+    bool WasCompleted = true,
+    bool DurationIsEstimated = false);

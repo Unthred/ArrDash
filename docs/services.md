@@ -42,6 +42,15 @@ Enable **Watch stats sync** in Settings and wait for the first backfill. Tautull
 
 **Emby:** Prefer Tracearr for history bootstrap when configured. Emby Playback Reporting plugin is a fallback; if its playlist API is empty, Tracearr remains the source of truth.
 
+### Trakt (optional history restore)
+
+1. Create an app at [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications) and paste **Client ID** + **Client Secret** under Settings → API keys → Trakt.
+2. Settings → Watch stats → **Connect Trakt account**. ArrDash shows an 8-digit PIN — open [trakt.tv/activate](https://trakt.tv/activate), enter the code, and allow access (same flow as other media apps).
+3. Map the Trakt account to your ArrDash/Emby/Plex usernames, choose Movies/Episodes and directions (import / push).
+4. **Preview** then **Sync now**. Sync is additive only — ArrDash never removes Trakt history or unmarks items.
+
+Imported Trakt plays appear as source `trakt` (and in Combined). Durations from Trakt runtimes are marked estimated.
+
 ## Per-service setup
 
 ### Sonarr / Radarr / Lidarr / Chaptarr

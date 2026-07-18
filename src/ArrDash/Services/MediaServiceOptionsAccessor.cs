@@ -41,6 +41,11 @@ public sealed class MediaServiceOptionsAccessor
             Jellyfin = CloneEndpoint(_options.Value.Jellyfin),
             Tautulli = CloneEndpoint(_options.Value.Tautulli),
             Tracearr = CloneEndpoint(_options.Value.Tracearr),
+            Trakt = new TraktOptions
+            {
+                ClientId = _options.Value.Trakt.ClientId,
+                ClientSecret = _options.Value.Trakt.ClientSecret
+            },
             Plex = new PlexOptions
             {
                 Url = _options.Value.Plex.Url,

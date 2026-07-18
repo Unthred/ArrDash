@@ -266,6 +266,7 @@ public sealed class ActivityAnalyticsService(
         WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
         WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
         WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
+        WatchStatsSourceFilter.Trakt => WatchStatsSources.Trakt,
         _ => "combined"
     };
 }

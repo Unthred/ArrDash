@@ -61,15 +61,17 @@ public static class ActivityLayoutCatalog
                 WatchStatsSourceFilter.Plex => configuredSources.Contains(WatchStatsSources.Plex),
                 WatchStatsSourceFilter.Emby => configuredSources.Contains(WatchStatsSources.Emby),
                 WatchStatsSourceFilter.Jellyfin => configuredSources.Contains(WatchStatsSources.Jellyfin),
+                WatchStatsSourceFilter.Trakt => configuredSources.Contains(WatchStatsSources.Trakt),
                 _ => false
             },
             "stream-quality" or "by-day" or "by-hour" => filter switch
             {
                 WatchStatsSourceFilter.Combined => configuredSources.Any(s =>
-                    s is WatchStatsSources.Plex or WatchStatsSources.Emby or WatchStatsSources.Jellyfin),
+                    s is WatchStatsSources.Plex or WatchStatsSources.Emby or WatchStatsSources.Jellyfin or WatchStatsSources.Trakt),
                 WatchStatsSourceFilter.Plex => configuredSources.Contains(WatchStatsSources.Plex),
                 WatchStatsSourceFilter.Emby => configuredSources.Contains(WatchStatsSources.Emby),
                 WatchStatsSourceFilter.Jellyfin => configuredSources.Contains(WatchStatsSources.Jellyfin),
+                WatchStatsSourceFilter.Trakt => configuredSources.Contains(WatchStatsSources.Trakt),
                 _ => false
             },
             "peak-concurrent" => filter switch

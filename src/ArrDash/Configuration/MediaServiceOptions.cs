@@ -15,6 +15,7 @@ public sealed class MediaServiceOptions
     public ServiceEndpoint Jellyfin { get; set; } = new();
     public ServiceEndpoint Tautulli { get; set; } = new();
     public ServiceEndpoint Tracearr { get; set; } = new();
+    public TraktOptions Trakt { get; set; } = new();
     public int PollIntervalSeconds { get; set; } = 30;
     public int RecentLimit { get; set; } = 20;
 }
@@ -33,4 +34,13 @@ public sealed class PlexOptions
     public string Token { get; set; } = "";
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(Token);
+}
+
+public sealed class TraktOptions
+{
+    public string ClientId { get; set; } = "";
+    public string ClientSecret { get; set; } = "";
+
+    public bool IsConfigured =>
+        !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret);
 }
