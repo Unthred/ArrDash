@@ -26,7 +26,8 @@ public static class DatabaseSchemaUpgrader
         ("TraktId", "INTEGER NULL"),
         ("WasCompleted", "INTEGER NOT NULL DEFAULT 1"),
         ("DurationIsEstimated", "INTEGER NOT NULL DEFAULT 0"),
-        ("CanonicalMediaKey", "TEXT NULL")
+        ("CanonicalMediaKey", "TEXT NULL"),
+        ("ItemTitle", "TEXT NULL")
     ];
 
     public static async Task UpgradeAsync(ArrDashDbContext db, CancellationToken ct = default)

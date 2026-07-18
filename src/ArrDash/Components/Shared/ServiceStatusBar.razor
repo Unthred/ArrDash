@@ -16,7 +16,14 @@
                      @onclick:stopPropagation="true"
                      aria-label="Download throughput breakdown">
                     <MudIcon Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" />
-                    <span class="status-name network-speed-value">@FormatThroughput(_latest?.RxBytesPerSecond ?? 0)</span>
+                    @if (_latest is null)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Small" Class="activity-icon-spin" title="Waiting for first sample" />
+                    }
+                    else
+                    {
+                        <span class="status-name network-speed-value">@FormatThroughput(_latest.RxBytesPerSecond)</span>
+                    }
                 </div>
                 <div class="status-chip network-speed-chip is-online @(NetworkDetailOpen ? "is-selected" : "")"
                      role="button" tabindex="0"
@@ -24,7 +31,14 @@
                      @onclick:stopPropagation="true"
                      aria-label="Upload throughput breakdown">
                     <MudIcon Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" />
-                    <span class="status-name network-speed-value">@FormatThroughput(_latest?.TxBytesPerSecond ?? 0)</span>
+                    @if (_latest is null)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Sync" Size="Size.Small" Class="activity-icon-spin" title="Waiting for first sample" />
+                    }
+                    else
+                    {
+                        <span class="status-name network-speed-value">@FormatThroughput(_latest.TxBytesPerSecond)</span>
+                    }
                 </div>
             }
 

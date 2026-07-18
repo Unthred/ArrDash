@@ -416,23 +416,61 @@ public static class PlayEventAnalyticsService
             .Take(limit)
             .ToList();
 
+    // One tile per series/movie (not per play): repeat episodes of the same show collapse
+    // into the latest play with a play count, so the strip reads as distinct titles (#45).
     private static IReadOnlyList<WatchStatRow> BuildRecent(IReadOnlyList<PlayEventEntity> events, int limit) =>
         events
             .OrderByDescending(e => e.PlayedAtUtc)
-            .GroupBy(RecentGroupKey)
-            .Select(g => g.First())
+            .GroupBy(e => $"{e.MediaType}:{MediaGroupKey(e)}", StringComparer.OrdinalIgnoreCase)
             .Take(limit)
-            .Select(e => new WatchStatRow(
-                e.Title,
-                $"{e.UserDisplayName} · {WatchStatsSources.Label(e.Source)}",
-                Math.Round(e.DurationSeconds / 3600.0, 1),
-                1,
-                BuildThumb(e),
-                null,
-                e.Source,
-                DrilldownKey: MediaDrilldownKey(e),
-                DrilldownKind: ActivityDrilldownKind.Media))
+            .Select(g =>
+            {
+                var latest = g.First();
+                var thumb = g.Select(BuildThumb).FirstOrDefault(t => !string.IsNullOrWhiteSpace(t))
+                    ?? MediaPosterFallback(latest);
+                return new WatchStatRow(
+                    MediaGroupKey(latest),
+                    RecentSubtitle(latest, g.Count()),
+                    Math.Round(g.Sum(e => e.DurationSeconds) / 3600.0, 1),
+                    g.Count(),
+                    thumb,
+                    null,
+                    latest.Source,
+                    DrilldownKey: MediaDrilldownKey(latest),
+                    DrilldownKind: ActivityDrilldownKind.Media);
+            })
             .ToList();
+
+    private static string? MediaPosterFallback(PlayEventEntity e) =>
+        e.TmdbId is not null || !string.IsNullOrWhiteSpace(e.ImdbId)
+            ? PosterUrls.Media(
+                e.MediaType,
+                e.TmdbId,
+                e.ImdbId,
+                e.MediaType == "episode" ? e.SeriesTitle ?? e.Title : e.Title,
+                e.Year)
+            : null;
+
+    private static string RecentSubtitle(PlayEventEntity e, int plays)
+    {
+        var parts = new List<string>();
+        if (string.Equals(e.MediaType, "episode", StringComparison.OrdinalIgnoreCase))
+        {
+            var marker = e.SeasonNumber is not null && e.EpisodeNumber is not null
+                ? $"S{e.SeasonNumber:00}E{e.EpisodeNumber:00}"
+                : null;
+            var episode = string.Join(' ',
+                new[] { marker, e.ItemTitle }.Where(s => !string.IsNullOrWhiteSpace(s)));
+            if (!string.IsNullOrWhiteSpace(episode))
+                parts.Add(episode);
+        }
+
+        if (plays > 1)
+            parts.Add($"{plays} plays");
+
+        parts.Add($"{e.UserDisplayName} · {WatchStatsSources.Label(e.Source)}");
+        return string.Join(" · ", parts);
+    }
 
     private static string MediaGroupKey(PlayEventEntity e) =>
         string.Equals(e.MediaType, "episode", StringComparison.OrdinalIgnoreCase)

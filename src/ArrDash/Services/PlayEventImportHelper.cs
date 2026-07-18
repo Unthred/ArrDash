@@ -35,6 +35,7 @@ public static class PlayEventImportHelper
             PlayedAtUtc = ev.PlayedAtUtc.UtcDateTime,
             DurationSeconds = ev.DurationSeconds,
             ExternalItemId = ev.ExternalItemId,
+            ItemTitle = ev.ItemTitle,
             GrandparentExternalId = ev.GrandparentExternalId,
             ThumbPath = ev.ThumbPath,
             TranscodeDecision = ev.TranscodeDecision,

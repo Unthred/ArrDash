@@ -310,7 +310,8 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
                 playedAt,
                 Math.Max(duration, 0),
                 ReadString(row, "ItemId", "item_id", "Id", "id"),
-                ReadString(row, "PrimaryImageTag", "primary_image_tag"));
+                ReadString(row, "PrimaryImageTag", "primary_image_tag"),
+                ItemTitle: mediaType == "episode" ? title : null);
         }
     }
 

@@ -4,6 +4,14 @@ All notable changes to ArrDash are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+
+- Network pie slices no longer grow a fat scaled focus ring on click; keyboard focus keeps a thin stroke cue ([#44](https://github.com/Unthred/ArrDash/issues/44))
+- Status-bar up/down chips show a spinning sync icon until the first throughput sample lands instead of a misleading `0 B/s` ([#44](https://github.com/Unthred/ArrDash/issues/44))
+- Recently watched strip groups plays by series/movie (latest play + ×N badge) instead of one identical-looking tile per episode; tooltips carry `SxxEyy · episode name · user · source` (episode names now persisted on import); dead poster links fall back to initials tiles ([#45](https://github.com/Unthred/ArrDash/issues/45))
+
 ## [0.1.0] - 2026-07-18
 
 First public release.

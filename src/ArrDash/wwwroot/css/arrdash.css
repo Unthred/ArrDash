@@ -773,6 +773,7 @@ html {
 }
 
 .mini-poster {
+    position: relative;
     width: 26px;
     height: 38px;
     border-radius: 4px;
@@ -802,6 +803,24 @@ html {
     font-size: 0.55rem;
     font-weight: 700;
     color: var(--mud-palette-text-secondary);
+}
+
+.mini-poster-fallback-hidden {
+    display: none;
+}
+
+.mini-poster-count {
+    position: absolute;
+    right: 1px;
+    bottom: 1px;
+    padding: 0 3px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 0.5rem;
+    font-weight: 700;
+    line-height: 1.4;
+    pointer-events: none;
 }
 
 .cpu-sparkline {
@@ -2482,6 +2501,17 @@ html {
 
 .pie-segment:hover {
     filter: brightness(1.1);
+}
+
+/* The browser focus outline scales with the 32-unit viewBox into a fat ring on click;
+   selection already reads via explode + brightness. Keep a thin cue for keyboard focus. */
+.pie-segment:focus {
+    outline: none;
+}
+
+.pie-segment:focus-visible {
+    stroke: var(--mud-palette-primary);
+    stroke-width: 0.5;
 }
 
 .pie-segment.is-selected {

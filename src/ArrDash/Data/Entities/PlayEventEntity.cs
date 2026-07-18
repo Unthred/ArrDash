@@ -16,6 +16,8 @@ public sealed class PlayEventEntity
     public DateTime PlayedAtUtc { get; set; }
     public int DurationSeconds { get; set; }
     public string? ExternalItemId { get; set; }
+    /// <summary>The played item's own title (episode name); Title holds the series for episodes.</summary>
+    public string? ItemTitle { get; set; }
     public string? GrandparentExternalId { get; set; }
     public string? ThumbPath { get; set; }
     public string? TranscodeDecision { get; set; }

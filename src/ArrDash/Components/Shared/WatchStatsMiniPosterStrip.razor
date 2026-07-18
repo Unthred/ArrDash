@@ -1,16 +1,23 @@
 @using ArrDash.Models
 
-<div class="watch-stats-mini-poster-strip" aria-hidden="true">
+<div class="watch-stats-mini-poster-strip">
     @foreach (var row in Rows.Take(MaxItems))
     {
-        <div class="mini-poster" title="@row.Title">
+        <div class="mini-poster" title="@Tooltip(row)">
             @if (!string.IsNullOrWhiteSpace(row.ThumbUrl))
             {
-                <img src="@row.ThumbUrl" alt="" loading="lazy" />
+                @* Dead item images (deleted from the server) 404 — swap to the initials tile. *@
+                <img src="@row.ThumbUrl" alt="" loading="lazy"
+                     onerror="this.style.display='none'; this.nextElementSibling.classList.remove('mini-poster-fallback-hidden');" />
+                <span class="mini-poster-fallback mini-poster-fallback-hidden">@Initials(row.Title)</span>
             }
             else
             {
                 <span class="mini-poster-fallback">@Initials(row.Title)</span>
+            }
+            @if (row.Plays > 1)
+            {
+                <span class="mini-poster-count">×@row.Plays</span>
             }
         </div>
     }
@@ -19,6 +26,9 @@
 @code {
     [Parameter] public IReadOnlyList<WatchStatRow> Rows { get; set; } = [];
     [Parameter] public int MaxItems { get; set; } = 8;
+
+    private static string Tooltip(WatchStatRow row) =>
+        string.IsNullOrWhiteSpace(row.Subtitle) ? row.Title : $"{row.Title} — {row.Subtitle}";
 
     private static string Initials(string title)
     {
