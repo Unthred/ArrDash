@@ -30,6 +30,7 @@ public static class ServiceCredentialCatalog
         ("jellyfin", "Jellyfin", "In Jellyfin: Dashboard → Advanced → API Keys → create or copy an existing key.", "https://jellyfin.org/docs/general/server/api/"),
         ("tautulli", "Tautulli", "In Tautulli: Settings → Web Interface → copy the API key. Powers live Plex watch stats in ArrDash.", "https://docs.tautulli.com/extending-tautulli/api-reference"),
         ("tracearr", "Tracearr", "In Tracearr: Settings → General → Public API → generate a token (format trr_pub_…). Powers Emby/Jellyfin stats and complements Plex.", "https://tracearr.yeradonkey.com/api/v1/public/docs"),
-        ("trakt", "Trakt", "Create an app at trakt.tv/oauth/applications. Paste Client ID here; paste Client Secret in the dedicated field below (or leave blank if already saved).", "https://trakt.tv/oauth/applications")
+        ("trakt", "Trakt", "Create an app at trakt.tv/oauth/applications. Paste Client ID here; paste Client Secret in the dedicated field below (or leave blank if already saved).", "https://trakt.tv/oauth/applications"),
+        ("tmdb", "TMDB", "Free API key from themoviedb.org → Settings → API. Used to fetch posters for Trakt history items (Trakt itself has no artwork).", "https://www.themoviedb.org/settings/api")
     ];
 }

@@ -54,6 +54,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
             ApplyIfSet(_secrets.TracearrApiKey, v => options.Tracearr.ApiKey = v);
             ApplyIfSet(_secrets.TraktClientId, v => options.Trakt.ClientId = v);
             ApplyIfSet(_secrets.TraktClientSecret, v => options.Trakt.ClientSecret = v);
+            ApplyIfSet(_secrets.TmdbApiKey, v => options.Tmdb.ApiKey = v);
             ApplyIfSet(_secrets.SonarrUrl, v => options.Sonarr.Url = v);
             ApplyIfSet(_secrets.RadarrUrl, v => options.Radarr.Url = v);
             ApplyIfSet(_secrets.LidarrUrl, v => options.Lidarr.Url = v);
@@ -83,6 +84,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
             ["tautulli"] = FirstUrl(_secrets.TautulliUrl, options.Tautulli.Url),
             ["tracearr"] = FirstUrl(_secrets.TracearrUrl, options.Tracearr.Url),
             ["trakt"] = null,
+            ["tmdb"] = null,
         };
 
     public IReadOnlyDictionary<string, bool> GetConfiguredFlags(MediaServiceOptions options) =>
@@ -100,6 +102,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
             ["tautulli"] = HasSecret(nameof(ServiceSecretsFile.TautulliApiKey)) || !string.IsNullOrWhiteSpace(options.Tautulli.ApiKey),
             ["tracearr"] = HasSecret(nameof(ServiceSecretsFile.TracearrApiKey)) || !string.IsNullOrWhiteSpace(options.Tracearr.ApiKey),
             ["trakt"] = HasSecret(nameof(ServiceSecretsFile.TraktClientId)) || !string.IsNullOrWhiteSpace(options.Trakt.ClientId),
+            ["tmdb"] = HasSecret(nameof(ServiceSecretsFile.TmdbApiKey)) || !string.IsNullOrWhiteSpace(options.Tmdb.ApiKey),
         };
 
     public IReadOnlyDictionary<string, string?> GetMaskedHints()
@@ -120,6 +123,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
                 ["tautulli"] = Mask(_secrets.TautulliApiKey),
                 ["tracearr"] = Mask(_secrets.TracearrApiKey),
                 ["trakt"] = Mask(_secrets.TraktClientId),
+                ["tmdb"] = Mask(_secrets.TmdbApiKey),
             };
         }
     }
@@ -141,6 +145,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
             MergeSecret(updates.TracearrApiKey, v => _secrets.TracearrApiKey = v);
             MergeSecret(updates.TraktClientId, v => _secrets.TraktClientId = v);
             MergeSecret(updates.TraktClientSecret, v => _secrets.TraktClientSecret = v);
+            MergeSecret(updates.TmdbApiKey, v => _secrets.TmdbApiKey = v);
             MergeUrl(updates.SonarrUrl, v => _secrets.SonarrUrl = v);
             MergeUrl(updates.RadarrUrl, v => _secrets.RadarrUrl = v);
             MergeUrl(updates.LidarrUrl, v => _secrets.LidarrUrl = v);
@@ -195,6 +200,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
         nameof(ServiceSecretsFile.TautulliApiKey) => !string.IsNullOrWhiteSpace(_secrets.TautulliApiKey),
         nameof(ServiceSecretsFile.TracearrApiKey) => !string.IsNullOrWhiteSpace(_secrets.TracearrApiKey),
         nameof(ServiceSecretsFile.TraktClientId) => !string.IsNullOrWhiteSpace(_secrets.TraktClientId),
+        nameof(ServiceSecretsFile.TmdbApiKey) => !string.IsNullOrWhiteSpace(_secrets.TmdbApiKey),
         _ => false
     };
 
@@ -241,6 +247,7 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
         TracearrApiKey = s.TracearrApiKey,
         TraktClientId = s.TraktClientId,
         TraktClientSecret = s.TraktClientSecret,
+        TmdbApiKey = s.TmdbApiKey,
         SonarrUrl = s.SonarrUrl,
         RadarrUrl = s.RadarrUrl,
         LidarrUrl = s.LidarrUrl,
@@ -270,6 +277,7 @@ public sealed class ServiceSecretsFile
     public string? TracearrApiKey { get; set; }
     public string? TraktClientId { get; set; }
     public string? TraktClientSecret { get; set; }
+    public string? TmdbApiKey { get; set; }
     public string? SonarrUrl { get; set; }
     public string? RadarrUrl { get; set; }
     public string? LidarrUrl { get; set; }

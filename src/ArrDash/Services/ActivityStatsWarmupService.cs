@@ -49,7 +49,7 @@ public sealed class ActivityStatsWarmupService(
         {
             foreach (var range in ranges)
             {
-                var libraryFp = WatchStatsLibraryFilter.PreferenceFingerprint(prefs.Current.WatchStatsIncludedLibraries);
+                var libraryFp = WatchStatsLibraryFilter.PreferenceFingerprint(prefs.Current.WatchStatsExcludedLibraries);
                 var key = ActivitySnapshotFileCache.BuildKey(range, filter, libraryFp);
                 var cached = await activity.TryGetCachedAsync(key, ct);
                 if (cached is not null && cached.Age < StaleAfter)

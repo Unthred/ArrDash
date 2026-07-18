@@ -64,7 +64,7 @@ public sealed class WatchStatsRepository(
     private IReadOnlyList<PlayEventEntity> ApplyLibraryFilter(IReadOnlyList<PlayEventEntity> events) =>
         WatchStatsLibraryFilter.Apply(
             events,
-            prefs.Current.WatchStatsIncludedLibraries,
+            prefs.Current.WatchStatsExcludedLibraries,
             e => e.Source,
             e => e.LibraryExternalId);
 

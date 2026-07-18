@@ -965,6 +965,28 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
     private static int Percent(int value, int total) =>
         total <= 0 ? 0 : (int)Math.Round(value * 100.0 / total);
 
+    /// <summary>Resolves the library a Plex item belongs to (works for episodes too) via get_metadata.</summary>
+    public async Task<(string? SectionId, string? LibraryName)> GetLibraryForRatingKeyAsync(string ratingKey, CancellationToken ct)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(ratingKey))
+            return (null, null);
+
+        try
+        {
+            var doc = await GetApiAsync("get_metadata", ct, ("rating_key", ratingKey));
+            if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object)
+                return (null, null);
+
+            var sectionId = ReadString(doc.RootElement, "section_id", "library_id");
+            var libraryName = ReadString(doc.RootElement, "library_name", "section_name");
+            return (string.IsNullOrWhiteSpace(sectionId) ? null : sectionId, libraryName);
+        }
+        catch
+        {
+            return (null, null);
+        }
+    }
+
     private async Task<JsonDocument?> GetApiAsync(string cmd, CancellationToken ct, params (string Key, string Value)[] extra)
     {
         var query = new List<string>

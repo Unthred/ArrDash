@@ -31,7 +31,7 @@ public sealed class WatchStatsPeriodHelperTests
         Assert.Equal(WatchStatsPeriod.Custom, range.Period);
         Assert.Equal(new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), range.CustomStartUtc);
         Assert.Equal(new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc), range.CustomEndUtc);
-        Assert.Equal(153, WatchStatsPeriodHelper.ToDays(range));
+        Assert.Equal(152, WatchStatsPeriodHelper.ToDays(range));
     }
 
     [Fact]

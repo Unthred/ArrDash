@@ -503,9 +503,9 @@
                         else
                         {
                             <MudText Typo="Typo.caption" Class="muted mb-2">
-                                @(_includedLibraryKeys.Count == 0
-                                    ? "All libraries included. Uncheck any to exclude them from Activity (saved immediately)."
-                                    : $"{_includedLibraryKeys.Count} of {_libraryCatalog.Count} libraries included (saved immediately).")
+                                @(_excludedLibraryKeys.Count == 0
+                                    ? "All libraries included. Uncheck any to hide it from Activity and keep it out of Trakt push (saved immediately)."
+                                    : $"{_excludedLibraryKeys.Count} of {_libraryCatalog.Count} libraries excluded from Activity and Trakt push (saved immediately).")
                             </MudText>
                             @foreach (var group in _libraryCatalog.GroupBy(l => l.Source))
                             {
@@ -539,6 +539,15 @@
                         Refresh
                     </MudButton>
                 </div>
+                <SettingField Text="@SettingsHelpTexts.TraktPosterMode">
+                    <MudSelect T="string" Value="_traktPosterMode" ValueChanged="OnTraktPosterModeChanged"
+                               Label="Trakt posters" Variant="Variant.Outlined" Dense="true">
+                        <MudSelectItem T="string" Value="@("both")">Library match, TMDB fallback</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("library")">Library match only</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("tmdb")">TMDB only</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("off")">Off</MudSelectItem>
+                    </MudSelect>
+                </SettingField>
                 @if (!string.IsNullOrWhiteSpace(_traktPendingUserCode))
                 {
                     <MudAlert Severity="Severity.Info" Class="mb-2" Dense="false">
@@ -769,7 +778,7 @@
     private int _watchStatsSyncIntervalMinutes;
     private int _watchStatsTopLimit = 10;
     private string _watchStatsAliasesText = "";
-    private readonly HashSet<string> _includedLibraryKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _excludedLibraryKeys = new(StringComparer.OrdinalIgnoreCase);
     private List<WatchStatsLibraryInfo> _libraryCatalog = [];
     private bool _librariesLoading;
     private List<ArrDash.Data.Entities.TraktAccountEntity> _traktAccounts = [];
@@ -972,12 +981,13 @@
         _watchStatsSyncIntervalMinutes = prefs.WatchStatsSyncIntervalMinutes;
         _watchStatsTopLimit = prefs.WatchStatsTopLimit;
         _watchStatsAliasesText = FormatAliases(prefs.UserAliases);
-        _includedLibraryKeys.Clear();
-        foreach (var key in prefs.WatchStatsIncludedLibraries)
+        _excludedLibraryKeys.Clear();
+        foreach (var key in prefs.WatchStatsExcludedLibraries)
         {
             if (!string.IsNullOrWhiteSpace(key))
-                _includedLibraryKeys.Add(key.Trim());
+                _excludedLibraryKeys.Add(key.Trim());
         }
+        _traktPosterMode = string.IsNullOrWhiteSpace(prefs.TraktPosterMode) ? "both" : prefs.TraktPosterMode;
         _ = RefreshLibraryCatalogAsync();
         _ = RefreshTraktAccountsAsync();
         _showServerMetrics = prefs.ShowServerMetrics;
@@ -1289,9 +1299,10 @@
         p.WatchStatsSyncIntervalMinutes = Math.Clamp(_watchStatsSyncIntervalMinutes, 0, 240);
         p.WatchStatsTopLimit = Math.Clamp(_watchStatsTopLimit, 3, 25);
         p.UserAliases = ParseAliases(_watchStatsAliasesText);
-        p.WatchStatsIncludedLibraries = _includedLibraryKeys.Count == 0
+        p.WatchStatsExcludedLibraries = _excludedLibraryKeys.Count == 0
             ? []
-            : _includedLibraryKeys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+            : _excludedLibraryKeys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+        p.TraktPosterMode = _traktPosterMode;
         p.ShowServerMetrics = _showServerMetrics;
         p.MetricsHostLabel = _metricsHostLabel.Trim();
         p.MetricsDiskPath = _metricsDiskPath.Trim();
@@ -1346,6 +1357,7 @@
         TracearrApiKey = _credentialInputs.GetValueOrDefault("tracearr"),
         TraktClientId = _credentialInputs.GetValueOrDefault("trakt"),
         TraktClientSecret = _traktClientSecretInput,
+        TmdbApiKey = _credentialInputs.GetValueOrDefault("tmdb"),
         SonarrUrl = _urlInputs.GetValueOrDefault("sonarr"),
         RadarrUrl = _urlInputs.GetValueOrDefault("radarr"),
         LidarrUrl = _urlInputs.GetValueOrDefault("lidarr"),
@@ -1380,46 +1392,39 @@
         }
     }
 
-    private bool IsLibraryIncluded(string key) =>
-        _includedLibraryKeys.Count == 0 || _includedLibraryKeys.Contains(key);
+    private string _traktPosterMode = "both";
+
+    private async Task OnTraktPosterModeChanged(string mode)
+    {
+        _traktPosterMode = string.IsNullOrWhiteSpace(mode) ? "both" : mode;
+        try
+        {
+            await Prefs.UpdateAsync(p => p.TraktPosterMode = _traktPosterMode);
+            ActivityAnalytics.InvalidateCache();
+            WatchStats.InvalidateCache();
+            Snackbar.Add("Trakt poster source saved.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Could not save poster mode: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private bool IsLibraryIncluded(string key) => !_excludedLibraryKeys.Contains(key);
 
     private async Task ToggleLibrary(string key, bool included)
     {
-        if (_libraryCatalog.Count == 0)
-        {
-            Snackbar.Add("Libraries still loading — wait a moment, then try again.", Severity.Warning);
-            return;
-        }
-
-        // Empty set means "all". First explicit toggle materializes the full catalog as selected,
-        // then applies the change so clearing one library works as expected.
-        if (_includedLibraryKeys.Count == 0)
-        {
-            foreach (var lib in _libraryCatalog)
-                _includedLibraryKeys.Add(lib.Key);
-        }
-
         if (included)
-            _includedLibraryKeys.Add(key);
+            _excludedLibraryKeys.Remove(key);
         else
-            _includedLibraryKeys.Remove(key);
-
-        if (_includedLibraryKeys.Count == _libraryCatalog.Count
-            && _libraryCatalog.All(l => _includedLibraryKeys.Contains(l.Key)))
-            _includedLibraryKeys.Clear();
+            _excludedLibraryKeys.Add(key);
 
         await PersistLibrarySelectionAsync();
     }
 
     private async Task SelectAllLibraries()
     {
-        _includedLibraryKeys.Clear();
-        await PersistLibrarySelectionAsync();
-    }
-
-    private async Task ClearLibrarySelection()
-    {
-        _includedLibraryKeys.Clear();
+        _excludedLibraryKeys.Clear();
         await PersistLibrarySelectionAsync();
     }
 
@@ -1429,17 +1434,17 @@
         {
             await Prefs.UpdateAsync(p =>
             {
-                p.WatchStatsIncludedLibraries = _includedLibraryKeys.Count == 0
+                p.WatchStatsExcludedLibraries = _excludedLibraryKeys.Count == 0
                     ? []
-                    : _includedLibraryKeys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
+                    : _excludedLibraryKeys.OrderBy(k => k, StringComparer.OrdinalIgnoreCase).ToList();
             });
             ActivityAnalytics.InvalidateCache();
             WatchStats.InvalidateCache();
             ScheduleLivePreviewNow();
             Snackbar.Add(
-                _includedLibraryKeys.Count == 0
+                _excludedLibraryKeys.Count == 0
                     ? "Activity includes all libraries."
-                    : $"Activity includes {_includedLibraryKeys.Count} libraries.",
+                    : $"{_excludedLibraryKeys.Count} librar{(_excludedLibraryKeys.Count == 1 ? "y" : "ies")} hidden from Activity and Trakt push.",
                 Severity.Success);
         }
         catch (Exception ex)
@@ -1676,6 +1681,7 @@
         || !string.IsNullOrWhiteSpace(updates.TracearrApiKey)
         || !string.IsNullOrWhiteSpace(updates.TraktClientId)
         || !string.IsNullOrWhiteSpace(updates.TraktClientSecret)
+        || !string.IsNullOrWhiteSpace(updates.TmdbApiKey)
         || !string.IsNullOrWhiteSpace(updates.SonarrUrl)
         || !string.IsNullOrWhiteSpace(updates.RadarrUrl)
         || !string.IsNullOrWhiteSpace(updates.LidarrUrl)

@@ -36,7 +36,7 @@ public sealed class ActivityAnalyticsService(
         if (!range.IsQueryable)
             range = WatchStatsRange.Year;
 
-        var libraryFp = WatchStatsLibraryFilter.PreferenceFingerprint(prefs.Current.WatchStatsIncludedLibraries);
+        var libraryFp = WatchStatsLibraryFilter.PreferenceFingerprint(prefs.Current.WatchStatsExcludedLibraries);
         var fileKey = ActivitySnapshotFileCache.BuildKey(range, filter, libraryFp);
 
         if (!force)

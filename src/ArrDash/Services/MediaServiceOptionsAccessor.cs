@@ -46,6 +46,10 @@ public sealed class MediaServiceOptionsAccessor
                 ClientId = _options.Value.Trakt.ClientId,
                 ClientSecret = _options.Value.Trakt.ClientSecret
             },
+            Tmdb = new TmdbOptions
+            {
+                ApiKey = _options.Value.Tmdb.ApiKey
+            },
             Plex = new PlexOptions
             {
                 Url = _options.Value.Plex.Url,

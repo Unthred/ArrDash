@@ -41,6 +41,7 @@ builder.Services.AddHttpClient<EmbyPlaybackReportingClient>(c => c.Timeout = Tim
 builder.Services.AddHttpClient<JellyfinPlaybackReportingClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient<TraktClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
 builder.Services.AddHttpClient(nameof(PosterProxyService), c => c.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddHttpClient(nameof(MediaPosterResolver), c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient(nameof(ServiceConnectionTester), c => c.Timeout = TimeSpan.FromSeconds(15));
 
 var configPath = Environment.GetEnvironmentVariable("ARRDASH_CONFIG_PATH")
@@ -58,6 +59,7 @@ builder.Services.AddSingleton<TraktAccountService>();
 builder.Services.AddSingleton<TraktSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TraktSyncService>());
 builder.Services.AddSingleton<PosterProxyService>();
+builder.Services.AddSingleton<MediaPosterResolver>();
 builder.Services.AddSingleton<HostSystemMetricsService>();
 builder.Services.AddSingleton<CpuHistoryService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<CpuHistoryService>());
@@ -79,6 +81,7 @@ builder.Services.AddSingleton<WatchStatsSnapshotFileCache>();
 builder.Services.AddSingleton<ActivityAnalyticsService>();
 builder.Services.AddSingleton<UserActivityService>();
 builder.Services.AddSingleton<WatchStatsService>();
+builder.Services.AddSingleton<PlayEventLibraryEnrichmentService>();
 builder.Services.AddSingleton<WatchHistorySyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<WatchHistorySyncService>());
 builder.Services.AddHostedService<ActivityStatsWarmupService>();
@@ -255,6 +258,9 @@ app.MapGet("/api/thumbnail/emby/{itemId}", (string itemId, PosterProxyService pr
     proxy.FetchStreamingThumbnailAsync("emby", itemId, ct));
 app.MapGet("/api/thumbnail/jellyfin/{itemId}", (string itemId, PosterProxyService proxy, CancellationToken ct) =>
     proxy.FetchStreamingThumbnailAsync("jellyfin", itemId, ct));
+app.MapGet("/api/poster/media", (string? type, int? tmdb, string? imdb, string? title, int? year,
+        MediaPosterResolver resolver, CancellationToken ct) =>
+    resolver.ServeAsync(type, tmdb, imdb, title, year, ct));
 
 WarnPrivateServiceUrls(app);
 
@@ -315,6 +321,7 @@ static void BindEnvironmentOverrides(IConfigurationManager config)
     Set("TAUTULLI_API_KEY", "MediaServices:Tautulli:ApiKey", Environment.GetEnvironmentVariable("TAUTULLI_API_KEY"));
     Set("TRACEARR_URL", "MediaServices:Tracearr:Url", Environment.GetEnvironmentVariable("TRACEARR_URL"));
     Set("TRACEARR_API_KEY", "MediaServices:Tracearr:ApiKey", Environment.GetEnvironmentVariable("TRACEARR_API_KEY"));
+    Set("TMDB_API_KEY", "MediaServices:Tmdb:ApiKey", Environment.GetEnvironmentVariable("TMDB_API_KEY"));
 
     if (int.TryParse(Environment.GetEnvironmentVariable("POLL_INTERVAL_SECONDS"), out var poll))
         config["MediaServices:PollIntervalSeconds"] = poll.ToString();

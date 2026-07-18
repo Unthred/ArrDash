@@ -9,9 +9,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 
 - Trakt history no longer silently vanishes: the retention prune skips `trakt`-sourced play events (bounded by the account's history-start instead), and Trakt sync now drops orphaned history links so pruned/deleted events re-import instead of being counted as "already linked" ([#36](https://github.com/Unthred/ArrDash/issues/36))
+- Library include/exclude picker actually works now: imports are backfilled with library ids (Emby/Jellyfin via item-path → library-folder mapping, Plex via Tautulli `get_metadata`), exclusions are stored as an excluded-list (new libraries default to visible), and events whose library is not yet known stay visible instead of blanking the Activity page ([#38](https://github.com/Unthred/ArrDash/issues/38))
+- Privacy: Trakt push skips plays from excluded libraries — and plays whose library is not yet identified — so hidden libraries are never published to Trakt ([#38](https://github.com/Unthred/ArrDash/issues/38))
 
 ### Added
 
+- Posters for Trakt history items — resolved from your Emby/Jellyfin library by provider id/title and/or TMDB (new API key on the API keys tab), selectable per mode in Settings → Watch stats → Trakt posters; resolved URLs cached on disk ([#37](https://github.com/Unthred/ArrDash/issues/37))
 - Canonical `PlayEvents` warehouse for Activity reporting — ingest from Tautulli/Plex PMS and Tracearr/Playback Reporting; charts and drilldowns read the local DB only ([#34](https://github.com/Unthred/ArrDash/issues/34))
 - Activity page: popular titles, top libraries, peak concurrent streams, library include/exclude picker in Settings ([#34](https://github.com/Unthred/ArrDash/issues/34))
 - Trakt watched-history sync — multi-account OAuth device connect, additive pull into warehouse, optional push of completed plays, preview before sync ([#35](https://github.com/Unthred/ArrDash/issues/35))

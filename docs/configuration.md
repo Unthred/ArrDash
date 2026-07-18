@@ -40,6 +40,7 @@ Each service uses a URL and credential env var:
 | Emby | `EMBY_URL` | `EMBY_API_KEY` |
 | Jellyfin | `JELLYFIN_URL` | `JELLYFIN_API_KEY` |
 | Tautulli | `TAUTULLI_URL` | `TAUTULLI_API_KEY` |
+| TMDB | — (fixed API host) | `TMDB_API_KEY` |
 
 ### Database (Watch Stats)
 
@@ -50,7 +51,7 @@ Each service uses a URL and credential env var:
 | `ARRDASH_DB_CONNECTION_STRING` | empty | Npgsql connection string when using Postgres |
 | `ARRDASH_WATCH_STATS_SYNC_MINUTES` | `20` | Background history sync interval |
 | `ARRDASH_WATCH_STATS_BACKFILL_DAYS` | `90` | Initial history backfill depth |
-| `ARRDASH_WATCH_STATS_RETENTION_DAYS` | `365` | Delete play events older than this |
+| `ARRDASH_WATCH_STATS_RETENTION_DAYS` | `365` | Delete play events older than this (Trakt-sourced events are exempt — their depth follows the account's history-start setting) |
 
 Optional tuning:
 

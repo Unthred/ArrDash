@@ -353,17 +353,18 @@ public static class ActivityDrilldownProfiler
         }
     }
 
-    private static string? BuildThumb(PlayEventEntity e)
-    {
-        if (string.IsNullOrWhiteSpace(e.ExternalItemId) && string.IsNullOrWhiteSpace(e.ThumbPath))
-            return null;
-
-        return e.Source switch
+    private static string? BuildThumb(PlayEventEntity e) =>
+        e.Source switch
         {
             WatchStatsSources.Plex when !string.IsNullOrWhiteSpace(e.ThumbPath) => PosterUrls.PlexThumb(e.ThumbPath),
             WatchStatsSources.Emby when !string.IsNullOrWhiteSpace(e.ExternalItemId) => PosterUrls.EmbyItem(e.ExternalItemId),
             WatchStatsSources.Jellyfin when !string.IsNullOrWhiteSpace(e.ExternalItemId) => PosterUrls.JellyfinItem(e.ExternalItemId),
+            WatchStatsSources.Trakt => PosterUrls.Media(
+                e.MediaType,
+                e.TmdbId,
+                e.ImdbId,
+                e.MediaType == "episode" ? e.SeriesTitle ?? e.Title : e.Title,
+                e.Year),
             _ => null
         };
-    }
 }

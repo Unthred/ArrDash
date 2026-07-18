@@ -357,6 +357,96 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
         }
     }
 
+    public sealed record LibraryRoot(string Id, string Name, IReadOnlyList<string> Locations);
+
+    /// <summary>Libraries with their filesystem locations, for mapping item paths to libraries.</summary>
+    public async Task<IReadOnlyList<LibraryRoot>> FetchLibraryRootsAsync(CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return [];
+
+        try
+        {
+            var url = BuildUrl("/Library/VirtualFolders");
+            using var response = await http.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+                return [];
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var roots = new List<LibraryRoot>();
+            foreach (var folder in doc.RootElement.EnumerateArray())
+            {
+                // Same id precedence as FetchLibrariesAsync so filter keys stay consistent.
+                var id = ReadString(folder, "ItemId", "Guid", "Name");
+                var name = ReadString(folder, "Name", "name");
+                if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name))
+                    continue;
+
+                var locations = new List<string>();
+                if (folder.TryGetProperty("Locations", out var locs) && locs.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var loc in locs.EnumerateArray())
+                    {
+                        var path = loc.ValueKind == JsonValueKind.String ? loc.GetString() : null;
+                        if (!string.IsNullOrWhiteSpace(path))
+                            locations.Add(path);
+                    }
+                }
+
+                roots.Add(new LibraryRoot(id, name, locations));
+            }
+
+            return roots;
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Filesystem paths for a batch of item ids; items the server no longer knows are omitted.</summary>
+    public async Task<IReadOnlyDictionary<string, string>> FetchItemPathsAsync(
+        IReadOnlyList<string> itemIds,
+        CancellationToken ct)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!IsConfigured || itemIds.Count == 0)
+            return map;
+
+        try
+        {
+            var url = BuildUrl("/Items",
+                ("Ids", string.Join(',', itemIds)),
+                ("Fields", "Path"));
+            using var response = await http.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+                return map;
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (!doc.RootElement.TryGetProperty("Items", out var items) || items.ValueKind != JsonValueKind.Array)
+                return map;
+
+            foreach (var item in items.EnumerateArray())
+            {
+                var id = ReadString(item, "Id");
+                var path = ReadString(item, "Path");
+                if (!string.IsNullOrWhiteSpace(id) && !string.IsNullOrWhiteSpace(path))
+                    map[id] = path;
+            }
+
+            return map;
+        }
+        catch
+        {
+            return map;
+        }
+    }
+
     private static string? ReadString(JsonElement el, params string[] names)
     {
         foreach (var name in names)

@@ -20,4 +20,19 @@ public static class PosterUrls
     public static string EmbyItem(string itemId) => $"/api/thumbnail/emby/{itemId}";
 
     public static string JellyfinItem(string itemId) => $"/api/thumbnail/jellyfin/{itemId}";
+
+    /// <summary>Poster resolved by provider ids/title for events with no native artwork (Trakt).</summary>
+    public static string Media(string mediaType, int? tmdbId, string? imdbId, string? title, int? year)
+    {
+        var parts = new List<string> { $"type={Uri.EscapeDataString(mediaType)}" };
+        if (tmdbId is not null)
+            parts.Add($"tmdb={tmdbId}");
+        if (!string.IsNullOrWhiteSpace(imdbId))
+            parts.Add($"imdb={Uri.EscapeDataString(imdbId)}");
+        if (!string.IsNullOrWhiteSpace(title))
+            parts.Add($"title={Uri.EscapeDataString(title)}");
+        if (year is not null)
+            parts.Add($"year={year}");
+        return $"/api/poster/media?{string.Join('&', parts)}";
+    }
 }

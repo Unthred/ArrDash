@@ -19,3 +19,4 @@ public sealed class WatchStatsBackfillTests
     [InlineData(9999, 365, 1825)]
     public void ResolveRetentionDays_uses_default_when_pref_is_zero(int pref, int defaultDays, int expected) =>
         Assert.Equal(expected, WatchStatsBackfillHelper.ResolveRetention(pref, defaultDays));
+}

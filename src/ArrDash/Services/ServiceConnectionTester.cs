@@ -36,6 +36,7 @@ public sealed class ServiceConnectionTester(
                 "tautulli" => await TestTautulli(input, ct),
                 "tracearr" => await TestTracearr(input, ct),
                 "trakt" => await TestTraktAsync(options.Trakt, input, ct),
+                "tmdb" => await TestTmdbAsync(options.Tmdb, input, ct),
                 "slskd" => TestSlskd(ResolveEndpoint(options.Slskd, input), "slskd"),
                 _ => (false, "Unknown service")
             };
@@ -67,6 +68,20 @@ public sealed class ServiceConnectionTester(
         {
             return (false, ex.Message);
         }
+    }
+
+    private async Task<(bool Ok, string Message)> TestTmdbAsync(TmdbOptions current, ServiceTestInput? input, CancellationToken ct)
+    {
+        var apiKey = FirstNonEmpty(input?.ApiKeyOrToken, current.ApiKey);
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return (false, "TMDB API key required");
+
+        var client = httpClientFactory.CreateClient(nameof(ServiceConnectionTester));
+        using var response = await client.GetAsync(
+            $"https://api.themoviedb.org/3/configuration?api_key={Uri.EscapeDataString(apiKey)}", ct);
+        return response.IsSuccessStatusCode
+            ? (true, "Connected")
+            : (false, $"HTTP {(int)response.StatusCode}");
     }
 
     private static ServiceEndpoint ResolveEndpoint(ServiceEndpoint current, ServiceTestInput? input) =>

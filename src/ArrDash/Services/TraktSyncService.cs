@@ -13,6 +13,7 @@ public sealed class TraktSyncService(
     TraktAccountService accounts,
     ActivityAnalyticsService activityAnalytics,
     WatchStatsService watchStats,
+    LayoutPreferencesService prefs,
     ILogger<TraktSyncService> logger) : BackgroundService
 {
     private readonly object _statusLock = new();
@@ -268,9 +269,13 @@ public sealed class TraktSyncService(
         CancellationToken ct)
     {
         var mappedNames = ParseMappedNames(account).ToList();
+        var excludedLibraries = prefs.Current.WatchStatsExcludedLibraries;
+        // Plays with an unknown library are never pushed — it may belong to an excluded
+        // library that enrichment hasn't identified yet (#38).
         var candidates = await db.PlayEvents.AsNoTracking()
             .Where(e => e.Source != WatchStatsSources.Trakt
                         && e.WasCompleted
+                        && e.LibraryExternalId != null && e.LibraryExternalId != ""
                         && (e.MediaType == "movie" || e.MediaType == "episode")
                         && (e.UserDisplayName == account.CanonicalUserName
                             || mappedNames.Contains(e.UserDisplayName)))
@@ -291,6 +296,9 @@ public sealed class TraktSyncService(
         foreach (var ev in candidates)
         {
             if (pushedSet.Contains(ev.Id))
+                continue;
+
+            if (WatchStatsLibraryFilter.IsExcluded(excludedLibraries, ev.Source, ev.LibraryExternalId))
                 continue;
 
             if (ev.MediaType == "movie" && account.SyncMovies && ev.TraktId is int movieId)
@@ -327,19 +335,24 @@ public sealed class TraktSyncService(
         return linked;
     }
 
-    private static async Task<int> CountPushCandidatesAsync(
+    private async Task<int> CountPushCandidatesAsync(
         ArrDashDbContext db,
         TraktAccountEntity account,
         CancellationToken ct)
     {
         var mappedNames = ParseMappedNames(account).ToList();
-        return await db.PlayEvents.CountAsync(
-            e => e.Source != WatchStatsSources.Trakt
-                 && e.WasCompleted
-                 && (e.MediaType == "movie" || e.MediaType == "episode")
-                 && (e.UserDisplayName == account.CanonicalUserName || mappedNames.Contains(e.UserDisplayName))
-                 && (e.TraktId != null || e.ImdbId != null),
-            ct);
+        var excludedLibraries = prefs.Current.WatchStatsExcludedLibraries;
+        var rows = await db.PlayEvents.AsNoTracking()
+            .Where(e => e.Source != WatchStatsSources.Trakt
+                        && e.WasCompleted
+                        && e.LibraryExternalId != null && e.LibraryExternalId != ""
+                        && (e.MediaType == "movie" || e.MediaType == "episode")
+                        && (e.UserDisplayName == account.CanonicalUserName || mappedNames.Contains(e.UserDisplayName))
+                        && (e.TraktId != null || e.ImdbId != null))
+            .Select(e => new { e.Source, e.LibraryExternalId })
+            .ToListAsync(ct);
+
+        return rows.Count(r => !WatchStatsLibraryFilter.IsExcluded(excludedLibraries, r.Source, r.LibraryExternalId));
     }
 
     private static HashSet<string> ParseMappedNames(TraktAccountEntity account)

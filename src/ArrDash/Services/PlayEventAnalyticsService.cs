@@ -456,19 +456,20 @@ public static class PlayEventAnalyticsService
             ? $"id:{e.Source}:{e.ExternalPlayId}"
             : $"t:{e.Source}:{MediaGroupKey(e)}:{e.UserDisplayName}";
 
-    private static string? BuildThumb(PlayEventEntity e)
-    {
-        if (string.IsNullOrWhiteSpace(e.ThumbPath) && string.IsNullOrWhiteSpace(e.ExternalItemId))
-            return null;
-
-        return e.Source switch
+    private static string? BuildThumb(PlayEventEntity e) =>
+        e.Source switch
         {
             WatchStatsSources.Plex when !string.IsNullOrWhiteSpace(e.ThumbPath) => PosterUrls.PlexThumb(e.ThumbPath),
             WatchStatsSources.Emby when !string.IsNullOrWhiteSpace(e.ExternalItemId) => PosterUrls.EmbyItem(e.ExternalItemId),
             WatchStatsSources.Jellyfin when !string.IsNullOrWhiteSpace(e.ExternalItemId) => PosterUrls.JellyfinItem(e.ExternalItemId),
+            WatchStatsSources.Trakt => PosterUrls.Media(
+                e.MediaType,
+                e.TmdbId,
+                e.ImdbId,
+                e.MediaType == "episode" ? e.SeriesTitle ?? e.Title : e.Title,
+                e.Year),
             _ => null
         };
-    }
 
     private static IReadOnlyList<string> ReadGenres(PlayEventEntity entity)
     {

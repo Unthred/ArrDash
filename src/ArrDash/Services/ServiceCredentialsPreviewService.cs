@@ -46,6 +46,7 @@ public sealed class ServiceCredentialsPreviewService
         ApplyIfSet(_overlay.PlexToken, v => options.Plex.Token = v);
         ApplyIfSet(_overlay.EmbyApiKey, v => options.Emby.ApiKey = v);
         ApplyIfSet(_overlay.JellyfinApiKey, v => options.Jellyfin.ApiKey = v);
+        ApplyIfSet(_overlay.TmdbApiKey, v => options.Tmdb.ApiKey = v);
         ApplyIfSet(_overlay.SonarrUrl, v => options.Sonarr.Url = v);
         ApplyIfSet(_overlay.RadarrUrl, v => options.Radarr.Url = v);
         ApplyIfSet(_overlay.LidarrUrl, v => options.Lidarr.Url = v);

@@ -16,6 +16,7 @@ public sealed class WatchHistorySyncService(
     EmbyPlaybackReportingClient emby,
     JellyfinPlaybackReportingClient jellyfin,
     LayoutPreferencesService prefs,
+    PlayEventLibraryEnrichmentService libraryEnrichment,
     IOptions<WatchStatsOptions> watchStatsOptions,
     ILogger<WatchHistorySyncService> logger) : BackgroundService
 {
@@ -142,6 +143,9 @@ public sealed class WatchHistorySyncService(
 
         PublishRunning(sourceStates, active.Count, completed, "Cleaning up old events…");
         await PruneOldEventsAsync(ct);
+
+        PublishRunning(sourceStates, active.Count, completed, "Resolving libraries…");
+        await libraryEnrichment.EnrichAsync(ct);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var total = await db.PlayEvents.LongCountAsync(ct);

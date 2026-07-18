@@ -184,7 +184,7 @@ public sealed class PosterProxyService(IHttpClientFactory httpClientFactory, Med
         return fallback;
     }
 
-    private async Task<IResult> FetchImageAsync(string url, CancellationToken ct)
+    public async Task<IResult> FetchImageAsync(string url, CancellationToken ct)
     {
         var client = httpClientFactory.CreateClient(nameof(PosterProxyService));
         using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);

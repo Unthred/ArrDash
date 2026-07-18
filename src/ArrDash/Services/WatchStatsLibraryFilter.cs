@@ -1,46 +1,31 @@
 namespace ArrDash.Services;
 
 /// <summary>
-/// Filters play events by Settings-selected libraries. Empty include list = all libraries.
-/// Keys are <c>source:libraryExternalId</c> (e.g. <c>plex:1</c>).
+/// Hides play events from Settings-excluded libraries. Keys are <c>source:libraryExternalId</c>
+/// (e.g. <c>plex:1</c>). Events without library info (Trakt, not-yet-enriched imports) always
+/// stay visible — exclusion only ever hides libraries that are positively identified (#38).
 /// </summary>
 public static class WatchStatsLibraryFilter
 {
     public static string Key(string source, string libraryExternalId) =>
         $"{source}:{libraryExternalId}";
 
-    public static string PreferenceFingerprint(IReadOnlyList<string>? includedKeys)
+    public static string PreferenceFingerprint(IReadOnlyList<string>? excludedKeys)
     {
-        if (includedKeys is null || includedKeys.Count == 0)
-            return "all";
-
-        var sorted = includedKeys
-            .Where(k => !string.IsNullOrWhiteSpace(k))
-            .Select(k => k.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (sorted.Length == 0)
-            return "all";
-
-        return string.Join(',', sorted);
+        var set = NormalizedSet(excludedKeys);
+        return set.Count == 0
+            ? "none"
+            : string.Join(',', set.OrderBy(k => k, StringComparer.OrdinalIgnoreCase));
     }
 
     public static IReadOnlyList<T> Apply<T>(
         IReadOnlyList<T> events,
-        IReadOnlyList<string>? includedKeys,
+        IReadOnlyList<string>? excludedKeys,
         Func<T, string> sourceSelector,
         Func<T, string?> libraryExternalIdSelector)
     {
-        if (includedKeys is null || includedKeys.Count == 0)
-            return events;
-
-        var set = new HashSet<string>(
-            includedKeys.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()),
-            StringComparer.OrdinalIgnoreCase);
-
-        if (set.Count == 0)
+        var excluded = NormalizedSet(excludedKeys);
+        if (excluded.Count == 0)
             return events;
 
         return events
@@ -48,9 +33,26 @@ public static class WatchStatsLibraryFilter
             {
                 var libId = libraryExternalIdSelector(e);
                 if (string.IsNullOrWhiteSpace(libId))
-                    return false;
-                return set.Contains(Key(sourceSelector(e), libId));
+                    return true;
+                return !excluded.Contains(Key(sourceSelector(e), libId));
             })
             .ToList();
     }
+
+    public static bool IsExcluded(
+        IReadOnlyList<string>? excludedKeys,
+        string source,
+        string? libraryExternalId)
+    {
+        if (string.IsNullOrWhiteSpace(libraryExternalId))
+            return false;
+        return NormalizedSet(excludedKeys).Contains(Key(source, libraryExternalId));
+    }
+
+    private static HashSet<string> NormalizedSet(IReadOnlyList<string>? keys) =>
+        keys is null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : keys.Where(k => !string.IsNullOrWhiteSpace(k))
+                .Select(k => k.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 }

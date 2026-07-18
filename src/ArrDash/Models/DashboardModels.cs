@@ -327,8 +327,13 @@ public sealed class UserLayoutPreferences
     public int WatchStatsBackfillDays { get; set; }
     public int WatchStatsSyncIntervalMinutes { get; set; }
     public int WatchStatsTopLimit { get; set; } = 10;
-    /// <summary>Composite keys <c>source:libraryExternalId</c>. Empty = include all libraries.</summary>
+    /// <summary>Legacy include-list; superseded by <see cref="WatchStatsExcludedLibraries"/> (#38).</summary>
     public List<string> WatchStatsIncludedLibraries { get; set; } = [];
+    /// <summary>Composite keys <c>source:libraryExternalId</c> hidden from Activity and never pushed to Trakt.
+    /// Events with an unknown library stay visible; unknown-library events are excluded from Trakt push.</summary>
+    public List<string> WatchStatsExcludedLibraries { get; set; } = [];
+    /// <summary>Poster source for Trakt history items: off | tmdb | library | both (library first, TMDB fallback).</summary>
+    public string TraktPosterMode { get; set; } = "both";
     public List<WatchStatsUserAlias> UserAliases { get; set; } = [];
     public List<ActivityLayoutItem> ActivityLayout { get; set; } = [];
     public bool ShowServerMetrics { get; set; } = true;
