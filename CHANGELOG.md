@@ -15,6 +15,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Every catch block across the service/client layer now logs instead of failing silently — makes real problems (a stalled sync, a failed HTTP call, a parse error) visible via `docker logs` instead of requiring a database query to diagnose ([#47](https://github.com/Unthred/ArrDash/issues/47))
 - Settings → Playback tab: fields were split into two lopsided columns (14 vs 1) instead of an even 2-column grid ([#48](https://github.com/Unthred/ArrDash/issues/48))
 - Settings → Diagnostics: the "Log level" dropdown's label overlapped the selected value until clicked (a MudBlazor floating-label quirk triggered by using an empty string as the "Server default" option's value) ([#48](https://github.com/Unthred/ArrDash/issues/48))
+- Settings → Playback tab: "Friendly quality labels" now sits above "Open links in" so each row pairs like-with-like controls (switch+switch, dropdown+dropdown) instead of mismatched types ([#49](https://github.com/Unthred/ArrDash/issues/49))
 
 - Home Activity card overhaul ([#45](https://github.com/Unthred/ArrDash/issues/45)):
   - Watched/Plays/Users/Live now render as bordered stat tiles in a responsive grid instead of naked flex-wrap text

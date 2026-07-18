@@ -385,11 +385,8 @@
                     <SettingField Text="@SettingsHelpTexts.DeepLinkClickThrough">
                         <MudSwitch @bind-Value="_deepLinkClickThrough" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Open specific item" Disabled="@(!_enableClickThrough)" />
                     </SettingField>
-                    <SettingField Text="@SettingsHelpTexts.ExternalLinkTarget">
-                        <MudSelect T="ExternalLinkTarget" @bind-Value="_externalLinkTarget" @bind-Value:after="ScheduleLivePreviewNow" Label="Open links in" Variant="Variant.Outlined" Disabled="@(!_enableClickThrough)">
-                            <MudSelectItem Value="ExternalLinkTarget.NewTab">New tab</MudSelectItem>
-                            <MudSelectItem Value="ExternalLinkTarget.SameTab">Same tab</MudSelectItem>
-                        </MudSelect>
+                    <SettingField Text="@SettingsHelpTexts.FriendlyQualityLabels">
+                        <MudSwitch @bind-Value="_friendlyQualityLabels" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Friendly quality labels" Disabled="@(!_showQuality)" />
                     </SettingField>
                     <SettingField Text="@SettingsHelpTexts.MissingEpisodeClickAction">
                         <MudSelect T="MissingEpisodeClickAction" @bind-Value="_missingEpisodeClickAction" @bind-Value:after="ScheduleLivePreviewNow" Label="Missing episode click" Variant="Variant.Outlined" Disabled="@(!_showMissingEpisodes)">
@@ -397,8 +394,11 @@
                             <MudSelectItem Value="MissingEpisodeClickAction.OpenSonarrAndSearch">Open Sonarr and search</MudSelectItem>
                         </MudSelect>
                     </SettingField>
-                    <SettingField Text="@SettingsHelpTexts.FriendlyQualityLabels">
-                        <MudSwitch @bind-Value="_friendlyQualityLabels" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Friendly quality labels" Disabled="@(!_showQuality)" />
+                    <SettingField Text="@SettingsHelpTexts.ExternalLinkTarget">
+                        <MudSelect T="ExternalLinkTarget" @bind-Value="_externalLinkTarget" @bind-Value:after="ScheduleLivePreviewNow" Label="Open links in" Variant="Variant.Outlined" Disabled="@(!_enableClickThrough)">
+                            <MudSelectItem Value="ExternalLinkTarget.NewTab">New tab</MudSelectItem>
+                            <MudSelectItem Value="ExternalLinkTarget.SameTab">Same tab</MudSelectItem>
+                        </MudSelect>
                     </SettingField>
                     <SettingField Text="@SettingsHelpTexts.StartupPage">
                         <MudSelect T="StartupPage" @bind-Value="_startupPage" @bind-Value:after="ScheduleLivePreviewNow" Label="Startup page" Variant="Variant.Outlined">
