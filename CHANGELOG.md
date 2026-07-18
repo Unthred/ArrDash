@@ -8,9 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Home Activity card overhaul ([#45](https://github.com/Unthred/ArrDash/issues/45)):
+  - Watched/Plays/Users/Live now render as bordered stat tiles in a responsive grid instead of naked flex-wrap text
+  - Fixed a real image bug: Emby/Jellyfin posters 404'd for anyone using Tracearr without also configuring native Emby/Jellyfin API keys, because the thumb builder ignored the working Tracearr-proxied URL already stored on the row and always built a native-credentials URL instead
+  - Recently Watched now groups by exact item **and** user — two people watching the same show show as two distinct rows, each with the episode name; same-user repeats of the same item collapse into one row with a play count, using the native item id (more reliable than episode-title text, which some importers only populate intermittently for the same item)
+  - Recently Watched, Top Users, Top Movies, and Top TV are all click-to-drilldown now
+
 - Network pie slices no longer grow a fat scaled focus ring on click; keyboard focus keeps a thin stroke cue ([#44](https://github.com/Unthred/ArrDash/issues/44))
 - Status-bar up/down chips show a spinning sync icon until the first throughput sample lands instead of a misleading `0 B/s` ([#44](https://github.com/Unthred/ArrDash/issues/44))
-- Recently watched strip groups plays by series/movie (latest play + ×N badge) instead of one identical-looking tile per episode; tooltips carry `SxxEyy · episode name · user · source` (episode names now persisted on import); dead poster links fall back to initials tiles ([#45](https://github.com/Unthred/ArrDash/issues/45))
+- Episode names are now persisted on import (were previously discarded) — powers the Recently Watched subtitle and drilldown play list ([#45](https://github.com/Unthred/ArrDash/issues/45))
 
 ## [0.1.0] - 2026-07-18
 

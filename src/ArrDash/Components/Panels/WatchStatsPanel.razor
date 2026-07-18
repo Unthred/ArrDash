@@ -55,59 +55,65 @@
             else
             {
                 <div class="ws-activity">
-                    <div class="ws-activity-hero">
-                        <div class="ws-metric-strip">
-                            <div class="ws-metric ws-metric-primary">
-                                <span class="ws-metric-value">@_activity.Summary.TotalHours.ToString("0.#")<span class="ws-metric-unit">h</span></span>
-                                <span class="ws-metric-label">Watched</span>
-                            </div>
-                            <div class="ws-metric">
-                                <span class="ws-metric-value">@_activity.Summary.TotalPlays.ToString("N0")</span>
-                                <span class="ws-metric-label">Plays</span>
-                            </div>
-                            <div class="ws-metric">
-                                <span class="ws-metric-value">@_activity.Summary.UniqueUsers</span>
-                                <span class="ws-metric-label">Users</span>
-                            </div>
-                            @if (_activity.ActiveStreams > 0)
-                            {
-                                <div class="ws-metric ws-metric-live">
-                                    <span class="ws-metric-value">@_activity.ActiveStreams</span>
-                                    <span class="ws-metric-label">Live now</span>
-                                </div>
-                            }
+                    <div class="ws-metric-grid">
+                        <div class="ws-metric-tile ws-metric-tile-primary">
+                            <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="ws-metric-icon" />
+                            <span class="ws-metric-value">@_activity.Summary.TotalHours.ToString("0.#")<span class="ws-metric-unit">h</span></span>
+                            <span class="ws-metric-label">Watched</span>
                         </div>
-
-                        @if (_playsSparkline.Count > 1)
-                        {
-                            <figure class="ws-hero-chart">
-                                <figcaption class="ws-hero-chart-cap">Most active months</figcaption>
-                                <ActivityTimelineBarChart Points="_playsSparkline" Width="560" Height="96" Accent="@Accent" ShowAllLabels="true" />
-                            </figure>
-                        }
+                        <div class="ws-metric-tile">
+                            <MudIcon Icon="@Icons.Material.Filled.PlayCircleOutline" Size="Size.Small" Class="ws-metric-icon" />
+                            <span class="ws-metric-value">@_activity.Summary.TotalPlays.ToString("N0")</span>
+                            <span class="ws-metric-label">Plays</span>
+                        </div>
+                        <div class="ws-metric-tile">
+                            <MudIcon Icon="@Icons.Material.Filled.Group" Size="Size.Small" Class="ws-metric-icon" />
+                            <span class="ws-metric-value">@_activity.Summary.UniqueUsers</span>
+                            <span class="ws-metric-label">Users</span>
+                        </div>
+                        <div class="ws-metric-tile @(_activity.ActiveStreams > 0 ? "ws-metric-tile-live" : "ws-metric-tile-muted")">
+                            <MudIcon Icon="@Icons.Material.Filled.Sensors" Size="Size.Small" Class="ws-metric-icon" />
+                            <span class="ws-metric-value">@_activity.ActiveStreams</span>
+                            <span class="ws-metric-label">Live now</span>
+                        </div>
                     </div>
+
+                    @if (_playsSparkline.Count > 1)
+                    {
+                        <figure class="ws-hero-chart">
+                            <figcaption class="ws-hero-chart-cap">Most active months</figcaption>
+                            <ActivityTimelineBarChart Points="_playsSparkline" Width="560" Height="96" Accent="@Accent" ShowAllLabels="true" />
+                        </figure>
+                    }
 
                     <div class="ws-rankings">
                         <WatchStatsMiniList Title="Top users"
                                             Rows="@(_activity.Leaderboards?.TopUsers ?? [])"
                                             ShowThumb="true"
                                             UseAvatar="true"
-                                            ShowRank="true" />
+                                            ShowRank="true"
+                                            OnRowClick="OpenDrilldown" />
                         <WatchStatsMiniList Title="Top movies"
                                             Rows="@(_activity.Leaderboards?.TopMovies ?? [])"
                                             ShowThumb="true"
-                                            ShowRank="true" />
+                                            ShowRank="true"
+                                            OnRowClick="OpenDrilldown" />
                         <WatchStatsMiniList Title="Top TV"
                                             Rows="@(_activity.Leaderboards?.TopTv ?? [])"
                                             ShowThumb="true"
-                                            ShowRank="true" />
+                                            ShowRank="true"
+                                            OnRowClick="OpenDrilldown" />
                     </div>
 
                     @if ((_activity.Leaderboards?.Recent?.Count ?? 0) > 0)
                     {
                         <div class="ws-recent">
-                            <div class="ws-recent-head">Recently watched</div>
-                            <WatchStatsMiniPosterStrip Rows="@(_activity.Leaderboards!.Recent)" MaxItems="10" />
+                            <WatchStatsMiniList Title="Recently watched"
+                                                Rows="@(_activity.Leaderboards!.Recent)"
+                                                ShowThumb="true"
+                                                ShowRelativeTime="true"
+                                                MaxItems="12"
+                                                OnRowClick="OpenDrilldown" />
                         </div>
                     }
                 </div>
@@ -115,6 +121,8 @@
         </div>
     }
 </MudPaper>
+
+<ActivityDetailDrawer @ref="_drawer" />
 
 @code {
     private const string PanelId = "watch-stats";
@@ -134,6 +142,9 @@
     private bool _refreshing;
     private bool _hasLoaded;
     private PanelRefreshSubscription? _refreshSubscription;
+    private ActivityDetailDrawer? _drawer;
+    private WatchStatsSourceFilter _sourceFilter = WatchStatsSourceFilter.Combined;
+    private static readonly WatchStatsRange _drilldownRange = WatchStatsRange.Year;
 
     private bool RolledUp => Prefs.IsPanelRolledUp(PanelId);
     private string ShellClass => RolledUp ? "panel-shell is-rolled-up" : "panel-shell";
@@ -190,12 +201,12 @@
 
         try
         {
-            var filter = ShowCombined
+            _sourceFilter = ShowCombined
                 ? WatchStatsSourceFilter.Combined
                 : ShowPlex ? WatchStatsSourceFilter.Plex
                 : ShowEmby ? WatchStatsSourceFilter.Emby
                 : WatchStatsSourceFilter.Jellyfin;
-            _activity = await ActivityAnalytics.GetAsync(WatchStatsRange.Year, filter, force: false);
+            _activity = await ActivityAnalytics.GetAsync(_drilldownRange, _sourceFilter, force: false);
             _hasLoaded = true;
         }
         finally
@@ -203,6 +214,22 @@
             _refreshing = false;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private async Task OpenDrilldown(WatchStatRow row)
+    {
+        if (_drawer is null)
+            return;
+
+        var sourceFilter = _sourceFilter switch
+        {
+            WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
+            WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
+            WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
+            _ => row.Source
+        };
+
+        await _drawer.OpenAsync(row, _drilldownRange, sourceFilter);
     }
 
     public void Dispose() => _refreshSubscription?.Dispose();

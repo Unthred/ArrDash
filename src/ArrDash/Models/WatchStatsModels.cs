@@ -157,7 +157,8 @@ public sealed record WatchStatRow(
     string? Source,
     IReadOnlyList<string>? SourceBreakdown = null,
     string? DrilldownKey = null,
-    ActivityDrilldownKind? DrilldownKind = null);
+    ActivityDrilldownKind? DrilldownKind = null,
+    DateTimeOffset? LastPlayedAtUtc = null);
 
 public enum ActivityDrilldownKind
 {

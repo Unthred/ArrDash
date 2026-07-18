@@ -1,4 +1,5 @@
 @using ArrDash.Models
+@using ArrDash.Services
 
 <section class="watch-stats-mini-section">
     <div class="watch-stats-section-title">@Title</div>
@@ -15,7 +16,11 @@
             @foreach (var row in Rows.Take(MaxItems))
             {
                 rank++;
-                <div class="watch-stats-row @(ShowRank ? "has-rank" : null)">
+                <div class="watch-stats-row @(ShowRank ? "has-rank" : "") @(OnRowClick.HasDelegate ? "is-clickable" : "")"
+                     role="@(OnRowClick.HasDelegate ? "button" : null)"
+                     tabindex="@(OnRowClick.HasDelegate ? "0" : null)"
+                     @onclick="@(() => RowClicked(row))"
+                     @onkeydown="@(e => OnRowKeyDown(e, row))">
                     @if (ShowRank)
                     {
                         <div class="watch-stats-rank">@rank</div>
@@ -25,7 +30,12 @@
                         <div class="watch-stats-thumb-slot">
                             @if (!string.IsNullOrWhiteSpace(row.ThumbUrl))
                             {
-                                <img class="watch-stats-thumb @(UseAvatar ? "is-avatar" : "")" src="@row.ThumbUrl" alt="" loading="lazy" />
+                                @* Dead item images (deleted from the server) 404 — swap to the icon fallback. *@
+                                <img class="watch-stats-thumb @(UseAvatar ? "is-avatar" : "")" src="@row.ThumbUrl" alt="" loading="lazy"
+                                     onerror="this.style.display='none'; this.nextElementSibling.classList.remove('watch-stats-thumb-fallback-hidden');" />
+                                <span class="watch-stats-thumb-fallback watch-stats-thumb-fallback-hidden @(UseAvatar ? "is-avatar" : "")">
+                                    <MudIcon Icon="@(UseAvatar ? Icons.Material.Filled.Person : Icons.Material.Filled.Movie)" Size="Size.Small" />
+                                </span>
                             }
                             else
                             {
@@ -39,10 +49,10 @@
                         <div class="watch-stats-row-title" title="@row.Title">@row.Title</div>
                         @if (!string.IsNullOrWhiteSpace(row.Subtitle))
                         {
-                            <div class="watch-stats-row-sub">@row.Subtitle</div>
+                            <div class="watch-stats-row-sub" title="@row.Subtitle">@row.Subtitle</div>
                         }
                     </div>
-                    <div class="watch-stats-row-meta">@row.Hours.ToString("0.#")h</div>
+                    <div class="watch-stats-row-meta">@Meta(row)</div>
                 </div>
             }
         </div>
@@ -55,5 +65,18 @@
     [Parameter] public bool ShowThumb { get; set; }
     [Parameter] public bool UseAvatar { get; set; }
     [Parameter] public bool ShowRank { get; set; }
+    [Parameter] public bool ShowRelativeTime { get; set; }
     [Parameter] public int MaxItems { get; set; } = 3;
+    [Parameter] public EventCallback<WatchStatRow> OnRowClick { get; set; }
+
+    private string Meta(WatchStatRow row) =>
+        ShowRelativeTime && row.LastPlayedAtUtc is { } at
+            ? TimeDisplayHelper.FormatRelative(at)
+            : $"{row.Hours:0.#}h";
+
+    private Task RowClicked(WatchStatRow row) =>
+        OnRowClick.HasDelegate ? OnRowClick.InvokeAsync(row) : Task.CompletedTask;
+
+    private Task OnRowKeyDown(KeyboardEventArgs e, WatchStatRow row) =>
+        e.Key is "Enter" or " " ? RowClicked(row) : Task.CompletedTask;
 }

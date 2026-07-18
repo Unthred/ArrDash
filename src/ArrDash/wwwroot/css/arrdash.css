@@ -3344,6 +3344,20 @@ html {
     grid-template-columns: 36px minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
+    border-radius: 8px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+}
+
+.watch-stats-row.is-clickable {
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.watch-stats-row.is-clickable:hover,
+.watch-stats-row.is-clickable:focus-visible {
+    background: color-mix(in srgb, var(--mud-palette-primary) 8%, transparent);
+    outline: none;
 }
 
 .watch-stats-thumb {
@@ -3364,6 +3378,12 @@ html {
 .watch-stats-row-meta {
     font-size: 0.76rem;
     opacity: 0.78;
+}
+
+.watch-stats-row-sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .watch-stats-empty {
@@ -3546,6 +3566,10 @@ html {
     border-radius: 999px;
 }
 
+.watch-stats-thumb-fallback-hidden {
+    display: none;
+}
+
 .watch-stats-row-body {
     min-width: 0;
 }
@@ -3576,57 +3600,81 @@ html {
     gap: 1rem;
 }
 
-.ws-activity-hero {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.85rem 1.5rem;
-    align-items: stretch;
+/* Stat tiles: one card per metric so counts get their own visual boundary
+   instead of competing inline text that squishes together at panel width. */
+.ws-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 0.6rem;
 }
 
-.ws-metric-strip {
-    display: flex;
-    flex: 0 0 auto;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.5rem 1.5rem;
-}
-
-.ws-metric {
+.ws-metric-tile {
     display: flex;
     flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.12);
     line-height: 1.05;
+    min-width: 0;
+}
+
+.ws-metric-icon {
+    align-self: flex-start;
+    color: var(--muted, #94a3b8);
+    margin-bottom: 0.15rem;
 }
 
 .ws-metric-value {
-    font-size: 1.45rem;
+    font-size: 1.4rem;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
-.ws-metric-primary .ws-metric-value {
-    font-size: 2rem;
+.ws-metric-tile-primary {
+    background: color-mix(in srgb, var(--accent, #a855f7) 14%, rgba(15, 23, 42, 0.45));
+    border-color: color-mix(in srgb, var(--accent, #a855f7) 30%, transparent);
+}
+
+.ws-metric-tile-primary .ws-metric-value {
+    font-size: 1.7rem;
+    color: var(--accent, #a855f7);
+}
+
+.ws-metric-tile-primary .ws-metric-icon {
     color: var(--accent, #a855f7);
 }
 
 .ws-metric-unit {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: var(--muted, #94a3b8);
     margin-left: 0.1rem;
 }
 
 .ws-metric-label {
-    margin-top: 0.2rem;
-    font-size: 0.68rem;
+    margin-top: 0.15rem;
+    font-size: 0.66rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--muted, #94a3b8);
 }
 
-.ws-metric-live .ws-metric-value,
-.ws-metric-live .ws-metric-label {
+.ws-metric-tile-live {
+    background: color-mix(in srgb, #22c55e 14%, rgba(15, 23, 42, 0.45));
+    border-color: color-mix(in srgb, #22c55e 30%, transparent);
+}
+
+.ws-metric-tile-live .ws-metric-value,
+.ws-metric-tile-live .ws-metric-icon {
     color: #22c55e;
+}
+
+.ws-metric-tile-muted {
+    opacity: 0.55;
 }
 
 .ws-hero-chart {
@@ -3677,25 +3725,9 @@ html {
     padding-top: 0.85rem;
 }
 
-.ws-recent-head {
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--muted, #94a3b8);
-    margin-bottom: 0.55rem;
-}
-
-.ws-recent .watch-stats-mini-poster-strip {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.ws-recent .mini-poster {
-    width: 40px;
-    height: 60px;
-    border-radius: 6px;
+.ws-recent .watch-stats-list {
+    max-height: 22rem;
+    overflow-y: auto;
 }
 
 .activity-page {

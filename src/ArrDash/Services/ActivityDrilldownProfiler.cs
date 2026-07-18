@@ -353,11 +353,15 @@ public static class ActivityDrilldownProfiler
         }
     }
 
+    // Same ThumbPath-first precedence as PlayEventAnalyticsService.BuildThumb (#45):
+    // Tracearr-sourced Emby/Jellyfin rows carry a working proxied URL there.
     private static string? BuildThumb(PlayEventEntity e) =>
         e.Source switch
         {
             WatchStatsSources.Plex when !string.IsNullOrWhiteSpace(e.ThumbPath) => PosterUrls.PlexThumb(e.ThumbPath),
+            WatchStatsSources.Emby when !string.IsNullOrWhiteSpace(e.ThumbPath) => e.ThumbPath,
             WatchStatsSources.Emby when !string.IsNullOrWhiteSpace(e.ExternalItemId) => PosterUrls.EmbyItem(e.ExternalItemId),
+            WatchStatsSources.Jellyfin when !string.IsNullOrWhiteSpace(e.ThumbPath) => e.ThumbPath,
             WatchStatsSources.Jellyfin when !string.IsNullOrWhiteSpace(e.ExternalItemId) => PosterUrls.JellyfinItem(e.ExternalItemId),
             WatchStatsSources.Trakt => PosterUrls.Media(
                 e.MediaType,

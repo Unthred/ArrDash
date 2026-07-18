@@ -416,12 +416,16 @@ public static class PlayEventAnalyticsService
             .Take(limit)
             .ToList();
 
-    // One tile per series/movie (not per play): repeat episodes of the same show collapse
-    // into the latest play with a play count, so the strip reads as distinct titles (#45).
+    // One row per (exact episode or movie, user): two different users watching the same
+    // show stay as separate rows (so "3 plays by you" and "9 by TamToucan" are both
+    // visible), and only true repeats — the same person replaying the same episode —
+    // collapse into a single row with a play count (#45). Falls back to a per-series
+    // grouping only when neither an episode title nor season/episode numbers are on
+    // record (older imports predating that data), same degraded behaviour as before.
     private static IReadOnlyList<WatchStatRow> BuildRecent(IReadOnlyList<PlayEventEntity> events, int limit) =>
         events
             .OrderByDescending(e => e.PlayedAtUtc)
-            .GroupBy(e => $"{e.MediaType}:{MediaGroupKey(e)}", StringComparer.OrdinalIgnoreCase)
+            .GroupBy(e => $"{e.MediaType}:{RecentExactItemKey(e)}:{e.UserDisplayName}", StringComparer.OrdinalIgnoreCase)
             .Take(limit)
             .Select(g =>
             {
@@ -437,9 +441,35 @@ public static class PlayEventAnalyticsService
                     null,
                     latest.Source,
                     DrilldownKey: MediaDrilldownKey(latest),
-                    DrilldownKind: ActivityDrilldownKind.Media);
+                    DrilldownKind: ActivityDrilldownKind.Media,
+                    LastPlayedAtUtc: new DateTimeOffset(latest.PlayedAtUtc, TimeSpan.Zero));
             })
             .ToList();
+
+    private static string RecentExactItemKey(PlayEventEntity e)
+    {
+        if (!string.Equals(e.MediaType, "episode", StringComparison.OrdinalIgnoreCase))
+            return !string.IsNullOrWhiteSpace(e.ExternalItemId) ? e.ExternalItemId : $"{e.Title}:{e.Year}";
+
+        // Native item id is the most reliable per-episode identity when the source has
+        // one (Plex/Emby/Jellyfin) — more reliable than the episode title text, which
+        // some importers (Tracearr) only populate intermittently for the same item.
+        // Trakt never sets ExternalItemId, so it falls through to the title composite,
+        // which Trakt always populates reliably.
+        if (!string.IsNullOrWhiteSpace(e.ExternalItemId))
+            return e.ExternalItemId;
+
+        var show = e.GrandparentExternalId ?? e.SeriesTitle ?? e.Title;
+        var episode = !string.IsNullOrWhiteSpace(e.ItemTitle)
+            ? e.ItemTitle
+            : e.SeasonNumber is not null && e.EpisodeNumber is not null
+                ? $"S{e.SeasonNumber:00}E{e.EpisodeNumber:00}"
+                : null;
+
+        // No episode-level signal at all (older import): fall back to per-series
+        // grouping so at least repeats of the same show still collapse sanely.
+        return episode is null ? show : $"{show}:{episode}";
+    }
 
     private static string? MediaPosterFallback(PlayEventEntity e) =>
         e.TmdbId is not null || !string.IsNullOrWhiteSpace(e.ImdbId)
@@ -498,7 +528,15 @@ public static class PlayEventAnalyticsService
         e.Source switch
         {
             WatchStatsSources.Plex when !string.IsNullOrWhiteSpace(e.ThumbPath) => PosterUrls.PlexThumb(e.ThumbPath),
+            // Tracearr-imported Emby/Jellyfin rows carry a ready-to-use proxied URL in
+            // ThumbPath (authenticated via Tracearr, works without native Emby/Jellyfin
+            // credentials). PlaybackReportingClient-imported rows never set ThumbPath,
+            // so falling back to the native item-image endpoint there is still correct
+            // — but skipping ThumbPath when present broke every Tracearr-sourced poster
+            // for anyone who hasn't also configured a native Emby/Jellyfin API key (#45).
+            WatchStatsSources.Emby when !string.IsNullOrWhiteSpace(e.ThumbPath) => e.ThumbPath,
             WatchStatsSources.Emby when !string.IsNullOrWhiteSpace(e.ExternalItemId) => PosterUrls.EmbyItem(e.ExternalItemId),
+            WatchStatsSources.Jellyfin when !string.IsNullOrWhiteSpace(e.ThumbPath) => e.ThumbPath,
             WatchStatsSources.Jellyfin when !string.IsNullOrWhiteSpace(e.ExternalItemId) => PosterUrls.JellyfinItem(e.ExternalItemId),
             WatchStatsSources.Trakt => PosterUrls.Media(
                 e.MediaType,
