@@ -6,10 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Trakt history no longer silently vanishes: the retention prune skips `trakt`-sourced play events (bounded by the account's history-start instead), and Trakt sync now drops orphaned history links so pruned/deleted events re-import instead of being counted as "already linked" ([#36](https://github.com/Unthred/ArrDash/issues/36))
+
 ### Added
 
 - Canonical `PlayEvents` warehouse for Activity reporting — ingest from Tautulli/Plex PMS and Tracearr/Playback Reporting; charts and drilldowns read the local DB only ([#34](https://github.com/Unthred/ArrDash/issues/34))
 - Activity page: popular titles, top libraries, peak concurrent streams, library include/exclude picker in Settings ([#34](https://github.com/Unthred/ArrDash/issues/34))
+- Trakt watched-history sync — multi-account OAuth device connect, additive pull into warehouse, optional push of completed plays, preview before sync ([#35](https://github.com/Unthred/ArrDash/issues/35))
 - Service activity icons on status bar chips — live workload from *arr commands/queue, ABS scans, and streaming transcodes ([#5](https://github.com/Unthred/ArrDash/issues/5))
 - Activity detection counts **active** work only (`started` commands; `importing`/`downloading` queue items — not `importBlocked`) ([#6](https://github.com/Unthred/ArrDash/issues/6))
 - Activity tooltips show data freshness (`Checked Xs ago`) ([#14](https://github.com/Unthred/ArrDash/issues/14))

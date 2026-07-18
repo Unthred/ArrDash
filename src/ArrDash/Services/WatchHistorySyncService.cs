@@ -367,7 +367,11 @@ public sealed class WatchHistorySyncService(
 
         var cutoff = DateTime.UtcNow.AddDays(-retentionDays);
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        await db.PlayEvents.Where(e => e.PlayedAtUtc < cutoff).ExecuteDeleteAsync(ct);
+        // Trakt history is bounded by the account's HistoryStartUtc, not server retention;
+        // pruning it would silently erase the imported backlog (#36).
+        await db.PlayEvents
+            .Where(e => e.PlayedAtUtc < cutoff && e.Source != WatchStatsSources.Trakt)
+            .ExecuteDeleteAsync(ct);
     }
 
     private static DateTimeOffset? Max(DateTimeOffset? a, DateTimeOffset? b)
