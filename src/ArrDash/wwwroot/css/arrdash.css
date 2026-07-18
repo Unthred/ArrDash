@@ -3633,18 +3633,11 @@ html {
     white-space: nowrap;
 }
 
-.ws-metric-tile-primary {
-    background: color-mix(in srgb, var(--accent, #a855f7) 14%, rgba(15, 23, 42, 0.45));
-    border-color: color-mix(in srgb, var(--accent, #a855f7) 30%, transparent);
-}
-
+/* Larger, not louder: the "Watched" tile reads as primary via size alone, same
+   background/border/text colour as its siblings so the row of tiles stays one
+   consistent unit rather than one tile visually breaking away from the rest. */
 .ws-metric-tile-primary .ws-metric-value {
     font-size: 1.7rem;
-    color: var(--accent, #a855f7);
-}
-
-.ws-metric-tile-primary .ws-metric-icon {
-    color: var(--accent, #a855f7);
 }
 
 .ws-metric-unit {
@@ -3728,6 +3721,8 @@ html {
 .ws-recent .watch-stats-list {
     max-height: 22rem;
     overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
 }
 
 .activity-page {
