@@ -1435,10 +1435,6 @@ html {
     margin-bottom: 0;
 }
 
-.settings-field-stack .setting-field + .setting-field {
-    margin-top: 0;
-}
-
 .settings-title {
     font-size: 1.5rem;
     font-weight: 800;
@@ -1525,11 +1521,6 @@ html {
     grid-column: 1 / -1;
 }
 
-.settings-field-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
 
 .settings-switch-cell {
     align-self: center;

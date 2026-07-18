@@ -352,64 +352,60 @@
         <MudTabPanel Text="Playback" Icon="@Icons.Material.Filled.PlayCircle">
             <MudPaper Class="settings-section compact" Elevation="0">
                 <div class="settings-grid-2">
-                    <div class="settings-field-stack">
-                        <SettingField Text="@SettingsHelpTexts.ShowPlexSessions">
-                            <MudSwitch @bind-Value="_showPlexSessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Plex sessions" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.ShowEmbySessions">
-                            <MudSwitch @bind-Value="_showEmbySessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Emby sessions" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.ShowJellyfinSessions">
-                            <MudSwitch @bind-Value="_showJellyfinSessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Jellyfin sessions" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.HideIdleSessions">
-                            <MudSwitch @bind-Value="_hideIdleSessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Hide idle (0%)" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.ShowServerMetrics">
-                            <MudSwitch @bind-Value="_showServerMetrics" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show server CPU, memory & disk" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.MetricsPollInterval">
-                            <MudNumericField @bind-Value="_metricsPollIntervalSeconds" @bind-Value:after="ScheduleLivePreviewNow" Label="Server metrics interval (sec)" Variant="Variant.Outlined" Min="0" Max="60" Disabled="@(!_showServerMetrics)" HelperText="0 = default (2 sec)" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.MetricsGraphWindow">
-                            <MudNumericField @bind-Value="_metricsGraphWindowMinutes" @bind-Value:after="ScheduleLivePreviewNow" Label="CPU graph window (min)" Variant="Variant.Outlined" Min="0" Max="240" Disabled="@(!_showServerMetrics)" HelperText="0 = default (15 min)" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.MetricsHostLabel">
-                            <MudTextField @bind-Value="_metricsHostLabel" @bind-Value:after="ScheduleLivePreviewDebounced" Label="Host label" Variant="Variant.Outlined" Disabled="@(!_showServerMetrics)" Placeholder="Host" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.MetricsDiskPath">
-                            <MudTextField @bind-Value="_metricsDiskPath" @bind-Value:after="ScheduleLivePreviewDebounced" Label="Disk path(s)" Variant="Variant.Outlined" Disabled="@(!_showServerMetrics)" Placeholder="/" HelperText="Comma-separated; mount paths inside the container" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.EnableClickThrough">
-                            <MudSwitch @bind-Value="_enableClickThrough" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Click-through links" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.DeepLinkClickThrough">
-                            <MudSwitch @bind-Value="_deepLinkClickThrough" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Open specific item" Disabled="@(!_enableClickThrough)" />
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.ExternalLinkTarget">
-                            <MudSelect T="ExternalLinkTarget" @bind-Value="_externalLinkTarget" @bind-Value:after="ScheduleLivePreviewNow" Label="Open links in" Variant="Variant.Outlined" Disabled="@(!_enableClickThrough)">
-                                <MudSelectItem Value="ExternalLinkTarget.NewTab">New tab</MudSelectItem>
-                                <MudSelectItem Value="ExternalLinkTarget.SameTab">Same tab</MudSelectItem>
-                            </MudSelect>
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.MissingEpisodeClickAction">
-                            <MudSelect T="MissingEpisodeClickAction" @bind-Value="_missingEpisodeClickAction" @bind-Value:after="ScheduleLivePreviewNow" Label="Missing episode click" Variant="Variant.Outlined" Disabled="@(!_showMissingEpisodes)">
-                                <MudSelectItem Value="MissingEpisodeClickAction.SearchOnly">Search only</MudSelectItem>
-                                <MudSelectItem Value="MissingEpisodeClickAction.OpenSonarrAndSearch">Open Sonarr and search</MudSelectItem>
-                            </MudSelect>
-                        </SettingField>
-                        <SettingField Text="@SettingsHelpTexts.FriendlyQualityLabels">
-                            <MudSwitch @bind-Value="_friendlyQualityLabels" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Friendly quality labels" Disabled="@(!_showQuality)" />
-                        </SettingField>
-                    </div>
-                    <div class="settings-field-stack">
-                        <SettingField Text="@SettingsHelpTexts.StartupPage">
-                            <MudSelect T="StartupPage" @bind-Value="_startupPage" @bind-Value:after="ScheduleLivePreviewNow" Label="Startup page" Variant="Variant.Outlined">
-                                <MudSelectItem Value="StartupPage.Dashboard">Dashboard</MudSelectItem>
-                                <MudSelectItem Value="StartupPage.Settings">Settings</MudSelectItem>
-                            </MudSelect>
-                        </SettingField>
-                    </div>
+                    <SettingField Text="@SettingsHelpTexts.ShowPlexSessions">
+                        <MudSwitch @bind-Value="_showPlexSessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Plex sessions" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowEmbySessions">
+                        <MudSwitch @bind-Value="_showEmbySessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Emby sessions" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowJellyfinSessions">
+                        <MudSwitch @bind-Value="_showJellyfinSessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Jellyfin sessions" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.HideIdleSessions">
+                        <MudSwitch @bind-Value="_hideIdleSessions" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Hide idle (0%)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ShowServerMetrics">
+                        <MudSwitch @bind-Value="_showServerMetrics" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Show server CPU, memory & disk" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.MetricsPollInterval">
+                        <MudNumericField @bind-Value="_metricsPollIntervalSeconds" @bind-Value:after="ScheduleLivePreviewNow" Label="Server metrics interval (sec)" Variant="Variant.Outlined" Min="0" Max="60" Disabled="@(!_showServerMetrics)" HelperText="0 = default (2 sec)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.MetricsGraphWindow">
+                        <MudNumericField @bind-Value="_metricsGraphWindowMinutes" @bind-Value:after="ScheduleLivePreviewNow" Label="CPU graph window (min)" Variant="Variant.Outlined" Min="0" Max="240" Disabled="@(!_showServerMetrics)" HelperText="0 = default (15 min)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.MetricsHostLabel">
+                        <MudTextField @bind-Value="_metricsHostLabel" @bind-Value:after="ScheduleLivePreviewDebounced" Label="Host label" Variant="Variant.Outlined" Disabled="@(!_showServerMetrics)" Placeholder="Host" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.MetricsDiskPath">
+                        <MudTextField @bind-Value="_metricsDiskPath" @bind-Value:after="ScheduleLivePreviewDebounced" Label="Disk path(s)" Variant="Variant.Outlined" Disabled="@(!_showServerMetrics)" Placeholder="/" HelperText="Comma-separated; mount paths inside the container" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.EnableClickThrough">
+                        <MudSwitch @bind-Value="_enableClickThrough" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Click-through links" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.DeepLinkClickThrough">
+                        <MudSwitch @bind-Value="_deepLinkClickThrough" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Open specific item" Disabled="@(!_enableClickThrough)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.ExternalLinkTarget">
+                        <MudSelect T="ExternalLinkTarget" @bind-Value="_externalLinkTarget" @bind-Value:after="ScheduleLivePreviewNow" Label="Open links in" Variant="Variant.Outlined" Disabled="@(!_enableClickThrough)">
+                            <MudSelectItem Value="ExternalLinkTarget.NewTab">New tab</MudSelectItem>
+                            <MudSelectItem Value="ExternalLinkTarget.SameTab">Same tab</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.MissingEpisodeClickAction">
+                        <MudSelect T="MissingEpisodeClickAction" @bind-Value="_missingEpisodeClickAction" @bind-Value:after="ScheduleLivePreviewNow" Label="Missing episode click" Variant="Variant.Outlined" Disabled="@(!_showMissingEpisodes)">
+                            <MudSelectItem Value="MissingEpisodeClickAction.SearchOnly">Search only</MudSelectItem>
+                            <MudSelectItem Value="MissingEpisodeClickAction.OpenSonarrAndSearch">Open Sonarr and search</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.FriendlyQualityLabels">
+                        <MudSwitch @bind-Value="_friendlyQualityLabels" @bind-Value:after="ScheduleLivePreviewNow" Color="Color.Primary" Label="Friendly quality labels" Disabled="@(!_showQuality)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.StartupPage">
+                        <MudSelect T="StartupPage" @bind-Value="_startupPage" @bind-Value:after="ScheduleLivePreviewNow" Label="Startup page" Variant="Variant.Outlined">
+                            <MudSelectItem Value="StartupPage.Dashboard">Dashboard</MudSelectItem>
+                            <MudSelectItem Value="StartupPage.Settings">Settings</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
                 </div>
             </MudPaper>
         </MudTabPanel>
@@ -739,7 +735,7 @@
                 <SettingField Text="@SettingsHelpTexts.LogLevel">
                     <MudSelect T="string" Value="_logLevel" ValueChanged="OnLogLevelChanged"
                                Label="Log level" Variant="Variant.Outlined" Dense="true">
-                        <MudSelectItem T="string" Value="@("")">Server default</MudSelectItem>
+                        <MudSelectItem T="string" Value="@("default")">Server default</MudSelectItem>
                         <MudSelectItem T="string" Value="@("Trace")">Trace (very verbose)</MudSelectItem>
                         <MudSelectItem T="string" Value="@("Debug")">Debug</MudSelectItem>
                         <MudSelectItem T="string" Value="@("Information")">Information</MudSelectItem>
@@ -1010,7 +1006,7 @@
                 _excludedLibraryKeys.Add(key.Trim());
         }
         _traktPosterMode = string.IsNullOrWhiteSpace(prefs.TraktPosterMode) ? "both" : prefs.TraktPosterMode;
-        _logLevel = prefs.LogLevel ?? "";
+        _logLevel = string.IsNullOrWhiteSpace(prefs.LogLevel) ? "default" : prefs.LogLevel;
         _ = RefreshLibraryCatalogAsync();
         _ = RefreshTraktAccountsAsync();
         _showServerMetrics = prefs.ShowServerMetrics;
@@ -1433,16 +1429,17 @@
         }
     }
 
-    private string _logLevel = "";
+    private string _logLevel = "default";
 
     private async Task OnLogLevelChanged(string level)
     {
         _logLevel = level;
+        var persisted = _logLevel == "default" ? "" : _logLevel;
         try
         {
-            await Prefs.UpdateAsync(p => p.LogLevel = _logLevel);
+            await Prefs.UpdateAsync(p => p.LogLevel = persisted);
             Snackbar.Add(
-                string.IsNullOrWhiteSpace(_logLevel) ? "Log level reset to server default." : $"Log level set to {_logLevel}.",
+                string.IsNullOrWhiteSpace(persisted) ? "Log level reset to server default." : $"Log level set to {persisted}.",
                 Severity.Success);
         }
         catch (Exception ex)
