@@ -1,18 +1,28 @@
 @implements IDisposable
 @inject IJSRuntime Js
+@inject IConfiguration Configuration
 
-<span class="vpn-status-badge @StatusClass" title="@Tooltip">
-    <MudIcon Icon="@Icons.Material.Filled.VpnLock" Size="Size.Small" />
-    @StatusLabel
-</span>
+@if (!string.IsNullOrWhiteSpace(ResolvedUrl))
+{
+    <span class="vpn-status-badge @StatusClass" title="@Tooltip">
+        <MudIcon Icon="@Icons.Material.Filled.VpnLock" Size="Size.Small" />
+        @StatusLabel
+    </span>
+}
 
 @code {
-    [Parameter] public string StatusUrl { get; set; } = "https://vpn.yeradonkey.com/api/status";
+    /// <summary>Explicit status endpoint; falls back to ArrDash:VpnStatusUrl config
+    /// (ARRDASH_VPN_STATUS_URL). Badge is hidden entirely when neither is set.</summary>
+    [Parameter] public string StatusUrl { get; set; } = "";
 
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(20);
 
     private bool? _connected;
     private System.Threading.Timer? _timer;
+
+    private string? ResolvedUrl => string.IsNullOrWhiteSpace(StatusUrl)
+        ? Configuration["ArrDash:VpnStatusUrl"]
+        : StatusUrl;
 
     private string StatusClass => _connected switch
     {
@@ -37,15 +47,22 @@
 
     protected override void OnInitialized()
     {
+        if (string.IsNullOrWhiteSpace(ResolvedUrl))
+            return;
+
         _timer = new System.Threading.Timer(async _ => await PollAsync(), null, TimeSpan.Zero, PollInterval);
     }
 
     private async Task PollAsync()
     {
+        var url = ResolvedUrl;
+        if (string.IsNullOrWhiteSpace(url))
+            return;
+
         bool? connected;
         try
         {
-            connected = await Js.InvokeAsync<bool?>("arrdashVpn.checkStatus", StatusUrl, 4000);
+            connected = await Js.InvokeAsync<bool?>("arrdashVpn.checkStatus", url, 4000);
         }
         catch
         {

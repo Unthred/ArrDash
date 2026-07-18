@@ -42,6 +42,8 @@ Each service uses a URL and credential env var:
 | Tautulli | `TAUTULLI_URL` | `TAUTULLI_API_KEY` |
 | TMDB | — (fixed API host) | `TMDB_API_KEY` |
 
+Optional: `ARRDASH_VPN_STATUS_URL` — endpoint returning VPN allowlist status for the hero badge; the badge is hidden when unset.
+
 ### Database (Watch Stats)
 
 | Variable | Default | Description |

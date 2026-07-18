@@ -322,6 +322,7 @@ static void BindEnvironmentOverrides(IConfigurationManager config)
     Set("TRACEARR_URL", "MediaServices:Tracearr:Url", Environment.GetEnvironmentVariable("TRACEARR_URL"));
     Set("TRACEARR_API_KEY", "MediaServices:Tracearr:ApiKey", Environment.GetEnvironmentVariable("TRACEARR_API_KEY"));
     Set("TMDB_API_KEY", "MediaServices:Tmdb:ApiKey", Environment.GetEnvironmentVariable("TMDB_API_KEY"));
+    Set("ARRDASH_VPN_STATUS_URL", "ArrDash:VpnStatusUrl", Environment.GetEnvironmentVariable("ARRDASH_VPN_STATUS_URL"));
 
     if (int.TryParse(Environment.GetEnvironmentVariable("POLL_INTERVAL_SECONDS"), out var poll))
         config["MediaServices:PollIntervalSeconds"] = poll.ToString();

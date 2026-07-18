@@ -61,8 +61,19 @@
     {
         <div class="empty-state dashboard-empty-state">
             <MudIcon Icon="@Icons.Material.Outlined.SettingsInputComponent" Size="Size.Large" />
-            <div>No services configured yet</div>
-            <MudButton Variant="Variant.Filled" Size="Size.Small" Href="/settings" Class="mt-2">Open Settings</MudButton>
+            <MudText Typo="Typo.h6" Class="mt-2">Welcome to ArrDash</MudText>
+            <MudText Typo="Typo.body2" Class="muted mt-1" Style="max-width: 34rem;">
+                Connect a service to bring the dashboard to life. Add URLs and API keys for your
+                *arr apps and media servers (Sonarr, Radarr, Plex, Emby, Jellyfin, …) on the
+                Settings → API keys tab — or supply them as environment variables in your compose
+                file or Unraid template. Panels appear automatically as each service comes online.
+            </MudText>
+            <div class="d-flex gap-2 mt-3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" Href="/settings">Open Settings</MudButton>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                           Href="https://github.com/Unthred/ArrDash/blob/main/docs/configuration.md"
+                           Target="_blank">Configuration guide</MudButton>
+            </div>
         </div>
     }
 

@@ -705,7 +705,7 @@
                                       Label="URL"
                                       Variant="Variant.Outlined"
                                       Disabled="@(cred.Key == "trakt")"
-                                      Placeholder="@(cred.Key == "trakt" ? "Not required for Trakt" : (cred.CurrentUrl ?? "https://service.yeradonkey.com"))" />
+                                      Placeholder="@(cred.Key == "trakt" ? "Not required for Trakt" : (cred.CurrentUrl ?? "https://service.example.com"))" />
                     </SettingField>
                     <SettingField Text="@SettingsHelpTexts.ApiKey">
                         <MudTextField @bind-Value="_credentialInputs[cred.Key]"

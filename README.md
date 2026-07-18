@@ -13,6 +13,8 @@
 |------|----------------|
 | **Recent media** | TV (Sonarr), movies (Radarr), audiobooks (Chaptarr + ABS), music (Lidarr) |
 | **Now playing** | Live Plex, Emby, and Jellyfin sessions with progress |
+| **Activity** | Watch history warehouse (Plex/Emby/Jellyfin/Trakt) — charts, leaderboards, drilldowns, per-library include/exclude |
+| **Trakt** | Multi-account watched-history import (full depth), optional push of new plays, posters via library match or TMDB |
 | **Layout** | Panel order, hide/show, Cards / List / Table per panel |
 | **Appearance** | Light / dark / system theme, colours, density, poster size |
 | **Kiosk** | Full-screen TV mode, panel rotation, screensaver |
@@ -23,14 +25,16 @@
 ## Quick start
 
 ```bash
-git clone https://github.com/Unthred/ArrDash.git
-cd ArrDash
-cp docker-compose.example.yml docker-compose.yml
-# Edit docker-compose.yml — set service URLs and API keys
-docker compose build && docker compose up -d
+curl -O https://raw.githubusercontent.com/Unthred/ArrDash/main/docker-compose.example.yml
+mv docker-compose.example.yml docker-compose.yml
+# Edit docker-compose.yml — set service URLs and API keys (all optional; the
+# Settings UI can configure everything at runtime too)
+docker compose up -d
 ```
 
-Open **http://localhost:7979**. Further setup (reverse proxy, Unraid, secrets) is in the [deployment guide](docs/deployment.md).
+Open **http://localhost:7979**. Images are published to `ghcr.io/unthred/arrdash` (amd64 + arm64); building from source is one `docker compose build` away. Further setup (reverse proxy, Unraid, secrets) is in the [deployment guide](docs/deployment.md).
+
+> **Authentication:** ArrDash has no built-in login. Run it on a trusted LAN or behind your reverse proxy's authentication (Authelia, basic auth, etc.) — the dashboard exposes media titles, watch history, and server metrics to anyone who can reach it.
 
 ## Documentation
 
@@ -75,7 +79,7 @@ Environment variables seed initial URLs and keys; the Settings UI can override a
 dotnet test tests/ArrDash.Tests/ArrDash.Tests.csproj
 ```
 
-135+ unit tests cover settings wiring, theme building, filters, and display helpers.
+240+ unit tests cover settings wiring, theme building, filters, and display helpers.
 
 ## License
 

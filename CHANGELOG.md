@@ -4,7 +4,9 @@ All notable changes to ArrDash are documented here.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.1.0] - 2026-07-18
+
+First public release.
 
 ### Fixed
 
@@ -14,6 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Release packaging: published image (`ghcr.io/unthred/arrdash`, amd64+arm64) via GitHub Actions, personal defaults scrubbed (VPN badge now behind optional `ARRDASH_VPN_STATUS_URL`, hidden when unset), first-run welcome card, README auth guidance ([#39](https://github.com/Unthred/ArrDash/issues/39), [#40](https://github.com/Unthred/ArrDash/issues/40), [#41](https://github.com/Unthred/ArrDash/issues/41), [#42](https://github.com/Unthred/ArrDash/issues/42))
 - Posters for Trakt history items — resolved from your Emby/Jellyfin library by provider id/title and/or TMDB (new API key on the API keys tab), selectable per mode in Settings → Watch stats → Trakt posters; resolved URLs cached on disk ([#37](https://github.com/Unthred/ArrDash/issues/37))
 - Canonical `PlayEvents` warehouse for Activity reporting — ingest from Tautulli/Plex PMS and Tracearr/Playback Reporting; charts and drilldowns read the local DB only ([#34](https://github.com/Unthred/ArrDash/issues/34))
 - Activity page: popular titles, top libraries, peak concurrent streams, library include/exclude picker in Settings ([#34](https://github.com/Unthred/ArrDash/issues/34))
