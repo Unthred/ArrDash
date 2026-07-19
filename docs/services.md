@@ -42,6 +42,8 @@ Enable **Watch stats sync** in Settings and wait for the first backfill. Tautull
 
 **Emby:** Prefer Tracearr for history bootstrap when configured. Emby Playback Reporting plugin is a fallback; if its playlist API is empty, Tracearr remains the source of truth.
 
+**Combined dedupe:** The Combined Activity / Watch Stats view collapses plays for the same user and title (`CanonicalMediaKey`) within **24 hours** into one watch — across Plex, Emby, Jellyfin, and Trakt (and stop/start repeats). Per-source filters still show raw warehouse rows. User aliases (`canonical|source|username`) are applied before matching.
+
 ### Trakt (optional history restore)
 
 1. Create an app at [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications) and paste **Client ID** + **Client Secret** under Settings → API keys → Trakt.

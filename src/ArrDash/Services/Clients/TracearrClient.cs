@@ -647,6 +647,43 @@ public sealed class TracearrClient(HttpClient http, MediaServiceOptionsAccessor 
             .ToList();
     }
 
+    /// <summary>
+    /// Like <see cref="FetchImportedHistoryAsync"/> but keeps zero-duration / incomplete rows
+    /// so episode indexes can still backfill existing warehouse plays.
+    /// </summary>
+    public async Task<IReadOnlyList<ImportedPlayEvent>> FetchHistoryForMetadataBackfillAsync(
+        string sourceKey,
+        DateTimeOffset sinceUtc,
+        int maxRows,
+        CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return [];
+
+        var servers = await GetServersAsync(ct);
+        var serverIds = servers
+            .Where(s => MapServerType(s.Type) == sourceKey)
+            .Select(s => s.Id)
+            .ToList();
+
+        if (serverIds.Count == 0)
+            return [];
+
+        var endDate = DateTime.UtcNow.Date.AddDays(1);
+        var startDate = sinceUtc.UtcDateTime.Date;
+        var history = new List<TracearrHistoryRow>();
+        foreach (var serverId in serverIds)
+            history.AddRange(await FetchHistoryAsync(serverId, startDate, endDate, maxRows, ct));
+
+        return history
+            .Where(h => h.PlayedAtUtc >= sinceUtc
+                        && !string.IsNullOrWhiteSpace(h.Title)
+                        && !string.Equals(h.Title, "Unknown", StringComparison.OrdinalIgnoreCase))
+            .Select(h => MapImportedEvent(h, sourceKey))
+            .DistinctBy(h => h.ExternalPlayId)
+            .ToList();
+    }
+
     private static bool IsImportableHistoryRow(TracearrHistoryRow row)
     {
         if (string.IsNullOrWhiteSpace(row.Title) || string.Equals(row.Title, "Unknown", StringComparison.OrdinalIgnoreCase))

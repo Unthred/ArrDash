@@ -275,12 +275,15 @@ public sealed class TraktSyncService(
         var candidates = await db.PlayEvents.AsNoTracking()
             .Where(e => e.Source != WatchStatsSources.Trakt
                         && e.WasCompleted
-                        && e.LibraryExternalId != null && e.LibraryExternalId != ""
                         && (e.MediaType == "movie" || e.MediaType == "episode")
                         && (e.UserDisplayName == account.CanonicalUserName
-                            || mappedNames.Contains(e.UserDisplayName)))
+                            || mappedNames.Contains(e.UserDisplayName))
+                        && (e.TraktId != null
+                            || (e.ImdbId != null && e.ImdbId != "")
+                            || e.TmdbId != null
+                            || e.TvdbId != null))
             .OrderByDescending(e => e.PlayedAtUtc)
-            .Take(500)
+            .Take(5_000)
             .ToListAsync(ct);
 
         var pushedPlayIds = await db.TraktHistoryLinks.AsNoTracking()
@@ -291,6 +294,7 @@ public sealed class TraktSyncService(
 
         var movies = new List<object>();
         var episodes = new List<object>();
+        var shows = new Dictionary<string, ShowPushBucket>(StringComparer.OrdinalIgnoreCase);
         var linked = 0;
 
         foreach (var ev in candidates)
@@ -298,41 +302,121 @@ public sealed class TraktSyncService(
             if (pushedSet.Contains(ev.Id))
                 continue;
 
-            if (WatchStatsLibraryFilter.IsExcluded(excludedLibraries, ev.Source, ev.LibraryExternalId))
+            // Prefer skipping unknown libraries only when we know an exclusion list applies.
+            if (!string.IsNullOrWhiteSpace(ev.LibraryExternalId)
+                && WatchStatsLibraryFilter.IsExcluded(excludedLibraries, ev.Source, ev.LibraryExternalId))
                 continue;
 
-            if (ev.MediaType == "movie" && account.SyncMovies && ev.TraktId is int movieId)
+            var queued = false;
+            if (ev.MediaType == "movie" && account.SyncMovies)
             {
-                movies.Add(new { watched_at = ev.PlayedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"), ids = new { trakt = movieId } });
+                var ids = BuildIds(ev);
+                if (ids is null)
+                    continue;
+                movies.Add(new { watched_at = FormatWatchedAt(ev.PlayedAtUtc), ids });
+                queued = true;
             }
-            else if (ev.MediaType == "episode" && account.SyncEpisodes && ev.TraktId is int epId)
+            else if (ev.MediaType == "episode" && account.SyncEpisodes)
             {
-                episodes.Add(new { watched_at = ev.PlayedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"), ids = new { trakt = epId } });
+                if (ev.TraktId is int epTrakt)
+                {
+                    episodes.Add(new { watched_at = FormatWatchedAt(ev.PlayedAtUtc), ids = new { trakt = epTrakt } });
+                    queued = true;
+                }
+                else if (ev.SeasonNumber is int sn && ev.EpisodeNumber is int en)
+                {
+                    // Tracearr usually stores the series id — treat provider ids as show-level.
+                    queued = AddShowEpisode(shows, ev, sn, en);
+                }
             }
-            else if (!string.IsNullOrWhiteSpace(ev.ImdbId) && ev.MediaType == "movie" && account.SyncMovies)
-            {
-                movies.Add(new { watched_at = ev.PlayedAtUtc.ToString("yyyy-MM-ddTHH:mm:ssZ"), ids = new { imdb = ev.ImdbId } });
-            }
-            else
+
+            if (!queued)
                 continue;
 
             db.TraktHistoryLinks.Add(new TraktHistoryLinkEntity
             {
                 AccountId = account.Id,
                 PlayEventId = ev.Id,
-                TraktHistoryId = 0,
+                // Pull links store the real Trakt history id; push links use a negative
+                // play-event id so (AccountId, TraktHistoryId) stays unique.
+                TraktHistoryId = -ev.Id,
                 Direction = "push",
                 CanonicalMediaKey = ev.CanonicalMediaKey ?? ""
             });
             linked++;
         }
 
-        if (movies.Count == 0 && episodes.Count == 0)
+        var showPayload = shows.Values
+            .Select(s => new
+            {
+                ids = s.Ids,
+                seasons = s.Seasons.Select(season => new
+                {
+                    number = season.Key,
+                    episodes = season.Value.Select(ep => new
+                    {
+                        number = ep.Episode,
+                        watched_at = FormatWatchedAt(ep.WatchedAt)
+                    }).ToList()
+                }).ToList()
+            })
+            .ToList();
+
+        if (movies.Count == 0 && episodes.Count == 0 && showPayload.Count == 0)
             return 0;
 
-        await trakt.AddToHistoryAsync(accessToken, new { movies, episodes }, ct);
+        await trakt.AddToHistoryAsync(accessToken, new { movies, episodes, shows = showPayload }, ct);
         await db.SaveChangesAsync(ct);
         return linked;
+    }
+
+    private static bool AddShowEpisode(
+        Dictionary<string, ShowPushBucket> shows,
+        PlayEventEntity ev,
+        int season,
+        int episode)
+    {
+        var ids = BuildIds(ev);
+        if (ids is null)
+            return false;
+
+        var key = $"{ev.ImdbId}|{ev.TmdbId}|{ev.TvdbId}|{ev.TraktId}";
+        if (!shows.TryGetValue(key, out var bucket))
+        {
+            bucket = new ShowPushBucket(ids);
+            shows[key] = bucket;
+        }
+
+        if (!bucket.Seasons.TryGetValue(season, out var eps))
+        {
+            eps = [];
+            bucket.Seasons[season] = eps;
+        }
+
+        eps.Add((episode, ev.PlayedAtUtc));
+        return true;
+    }
+
+    private static object? BuildIds(PlayEventEntity ev)
+    {
+        if (ev.TraktId is int trakt)
+            return new { trakt };
+        if (!string.IsNullOrWhiteSpace(ev.ImdbId))
+            return new { imdb = ev.ImdbId };
+        if (ev.TmdbId is int tmdb)
+            return new { tmdb };
+        if (ev.TvdbId is int tvdb)
+            return new { tvdb };
+        return null;
+    }
+
+    private static string FormatWatchedAt(DateTime utc) =>
+        utc.ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+    private sealed class ShowPushBucket(object ids)
+    {
+        public object Ids { get; } = ids;
+        public Dictionary<int, List<(int Episode, DateTime WatchedAt)>> Seasons { get; } = new();
     }
 
     private async Task<int> CountPushCandidatesAsync(
@@ -345,14 +429,21 @@ public sealed class TraktSyncService(
         var rows = await db.PlayEvents.AsNoTracking()
             .Where(e => e.Source != WatchStatsSources.Trakt
                         && e.WasCompleted
-                        && e.LibraryExternalId != null && e.LibraryExternalId != ""
                         && (e.MediaType == "movie" || e.MediaType == "episode")
                         && (e.UserDisplayName == account.CanonicalUserName || mappedNames.Contains(e.UserDisplayName))
-                        && (e.TraktId != null || e.ImdbId != null))
+                        && (e.TraktId != null
+                            || (e.ImdbId != null && e.ImdbId != "")
+                            || e.TmdbId != null
+                            || e.TvdbId != null)
+                        && (e.MediaType != "episode"
+                            || e.TraktId != null
+                            || (e.SeasonNumber != null && e.EpisodeNumber != null)))
             .Select(e => new { e.Source, e.LibraryExternalId })
             .ToListAsync(ct);
 
-        return rows.Count(r => !WatchStatsLibraryFilter.IsExcluded(excludedLibraries, r.Source, r.LibraryExternalId));
+        return rows.Count(r =>
+            string.IsNullOrWhiteSpace(r.LibraryExternalId)
+            || !WatchStatsLibraryFilter.IsExcluded(excludedLibraries, r.Source, r.LibraryExternalId));
     }
 
     private HashSet<string> ParseMappedNames(TraktAccountEntity account)

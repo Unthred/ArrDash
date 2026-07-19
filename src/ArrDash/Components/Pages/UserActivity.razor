@@ -31,17 +31,9 @@
 
         @if (_filters.Count > 0)
         {
-            <MudToggleGroup T="WatchStatsSourceFilter"
-                            Value="_source"
-                            ValueChanged="SetSource"
-                            Rounded="true"
-                            SelectedClass="segmented-toggle-selected"
-                            Class="arrdash-segmented-toggle watch-stats-chips activity-filter-toggle">
-                @foreach (var filter in _filters)
-                {
-                    <MudToggleItem T="WatchStatsSourceFilter" Value="filter" Text="@FilterLabel(filter)" />
-                }
-            </MudToggleGroup>
+            <ActivitySourceFilterBar Available="_filters"
+                                     Value="_source"
+                                     ValueChanged="SetSource" />
         }
     </div>
 
@@ -157,19 +149,13 @@
     protected override async Task OnInitializedAsync()
     {
         _filters = await SourceAvailability.GetAvailableFiltersAsync();
-        if (_filters.Count > 0 && !_filters.Contains(_source))
-            _source = _filters[0];
+        var configured = await SourceAvailability.GetConfiguredSourcesAsync();
+        var available = WatchStatsSourceFilters.FromConfigured(configured);
+        _source = available == WatchStatsSourceFilter.None
+            ? WatchStatsSourceFilter.Combined
+            : available;
         await RefreshAsync(force: false);
     }
-
-    private static string FilterLabel(WatchStatsSourceFilter filter) => filter switch
-    {
-        WatchStatsSourceFilter.Combined => "Combined",
-        WatchStatsSourceFilter.Plex => "Plex",
-        WatchStatsSourceFilter.Emby => "Emby",
-        WatchStatsSourceFilter.Jellyfin => "Jellyfin",
-        _ => filter.ToString()
-    };
 
     private async Task OnRangeChanged((WatchStatsPeriod Period, DateTime? StartUtc, DateTime? EndUtc) args)
     {
@@ -233,13 +219,7 @@
             user.DrilldownKey,
             ActivityDrilldownKind.User);
 
-        var sourceFilter = _source switch
-        {
-            WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
-            WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
-            WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
-            _ => null
-        };
+        var sourceFilter = WatchStatsSourceFilters.ToDrilldownSource(_source);
 
         await _drawer.OpenAsync(row, _range, sourceFilter);
     }

@@ -57,25 +57,24 @@ public static class PlayEventAnalyticsService
     {
         var (start, end) = range.Bounds();
         var endExclusive = end.Date.AddDays(1);
-
-        if (WatchStatsPeriodHelper.UsesMonthlyBuckets(range.Period))
-        {
-            return events
-                .Where(e => e.PlayedAtUtc >= start && e.PlayedAtUtc < endExclusive)
-                .GroupBy(e => new DateTime(e.PlayedAtUtc.Year, e.PlayedAtUtc.Month, 1))
-                .OrderBy(g => g.Key)
-                .Select(g => new ActivityChartPoint(g.Key.ToString("MMM yyyy"), g.Count()))
-                .ToList();
-        }
-
-        return events
+        var inRange = events
             .Where(e => e.PlayedAtUtc >= start && e.PlayedAtUtc < endExclusive)
-            .GroupBy(e => e.PlayedAtUtc.Date)
-            .OrderBy(g => g.Key)
-            .Select(g => new ActivityChartPoint(
-                g.Key.ToString(range.Period == WatchStatsPeriod.Today ? "HH:mm" : "MMM d"),
-                g.Count()))
             .ToList();
+        if (inRange.Count == 0)
+            return [];
+
+        // Stacked bar chart expects Series = Plex/Emby/Jellyfin/Trakt (+ Total).
+        var bySource = inRange
+            .GroupBy(e => WatchStatsSources.Label(e.Source), StringComparer.OrdinalIgnoreCase)
+            .Select(g => (
+                Series: g.Key,
+                Daily: (IReadOnlyList<(DateTime Date, double Count)>)g
+                    .GroupBy(e => e.PlayedAtUtc.Date)
+                    .Select(d => (d.Key, (double)d.Count()))
+                    .OrderBy(d => d.Key)
+                    .ToList()));
+
+        return ActivityChartSeriesHelper.BuildMultiSeriesChart(range, bySource);
     }
 
     private static ActivityMediaMix? BuildMediaMix(IReadOnlyList<PlayEventEntity> events)

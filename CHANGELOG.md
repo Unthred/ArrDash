@@ -8,10 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Activity source filter is multi-select (All / Plex / Emby / Trakt / Jellyfin) on Overview and Users, styled like the period segmented control ([#50](https://github.com/Unthred/ArrDash/issues/50))
+- Combined Activity collapses same user + canonical media within 24h so one real watch is not counted once per source ([#50](https://github.com/Unthred/ArrDash/issues/50))
+- Emby/Jellyfin play events are enriched with provider ids and Tracearr season/episode indexes so Trakt push can scrobble without Emby's Trakt plugin ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Settings → Diagnostics: configurable log level (Trace through Critical, or "Server default"), takes effect immediately with no restart ([#47](https://github.com/Unthred/ArrDash/issues/47))
 
 ### Fixed
 
+- Activity **Plays over time** and **Media mix** were empty after the warehouse switch: plays lacked Plex/Emby/Jellyfin/Trakt series tags the stacked chart expects, and media mix pie rows ignored category labels (treating the "Hours" series name as a slice and dividing by 3600 twice) ([#50](https://github.com/Unthred/ArrDash/issues/50))
+- Trakt **Push new plays**: Emby/Jellyfin history is enriched with IMDb/TMDB/TVDB from the media server so ArrDash can push watches to Trakt without Emby's built-in Trakt plugin; push also accepts TMDB/TVDB and show+season+episode payloads; push history links no longer collide on `TraktHistoryId = 0` ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Every catch block across the service/client layer now logs instead of failing silently — makes real problems (a stalled sync, a failed HTTP call, a parse error) visible via `docker logs` instead of requiring a database query to diagnose ([#47](https://github.com/Unthred/ArrDash/issues/47))
 - Settings → Playback tab: fields were split into two lopsided columns (14 vs 1) instead of an even 2-column grid ([#48](https://github.com/Unthred/ArrDash/issues/48))
 - Settings → Diagnostics: the "Log level" dropdown's label overlapped the selected value until clicked (a MudBlazor floating-label quirk triggered by using an empty string as the "Server default" option's value) ([#48](https://github.com/Unthred/ArrDash/issues/48))

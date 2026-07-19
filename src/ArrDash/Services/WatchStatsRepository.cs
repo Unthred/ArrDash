@@ -29,7 +29,17 @@ public sealed class WatchStatsRepository(
             .Where(e => e.PlayedAtUtc >= startUtc && e.PlayedAtUtc < endExclusive);
 
         if (!string.IsNullOrWhiteSpace(source))
-            query = query.Where(e => e.Source == source);
+        {
+            if (source.Contains(',', StringComparison.Ordinal))
+            {
+                var keys = source.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                query = query.Where(e => keys.Contains(e.Source));
+            }
+            else
+            {
+                query = query.Where(e => e.Source == source);
+            }
+        }
 
         var events = await query.ToListAsync(ct);
         return ApplyLibraryFilter(events);
@@ -48,17 +58,28 @@ public sealed class WatchStatsRepository(
         var query = db.PlayEvents.AsNoTracking()
             .Where(e => e.PlayedAtUtc >= startUtc && e.PlayedAtUtc < endExclusive);
 
-        query = filter switch
-        {
-            WatchStatsSourceFilter.Plex => query.Where(e => e.Source == WatchStatsSources.Plex),
-            WatchStatsSourceFilter.Emby => query.Where(e => e.Source == WatchStatsSources.Emby),
-            WatchStatsSourceFilter.Jellyfin => query.Where(e => e.Source == WatchStatsSources.Jellyfin),
-            WatchStatsSourceFilter.Trakt => query.Where(e => e.Source == WatchStatsSources.Trakt),
-            _ => query.Where(e => sources.Contains(e.Source))
-        };
+        query = ApplySourceFilter(query, filter, sources);
 
         var events = await query.ToListAsync(ct);
         return ApplyLibraryFilter(events);
+    }
+
+    private static IQueryable<PlayEventEntity> ApplySourceFilter(
+        IQueryable<PlayEventEntity> query,
+        WatchStatsSourceFilter filter,
+        IReadOnlyList<string> sources)
+    {
+        var keys = WatchStatsSourceFilters.ToSourceKeys(filter);
+        if (keys.Count == 0 || filter == WatchStatsSourceFilter.Combined)
+            return query.Where(e => sources.Contains(e.Source));
+
+        if (keys.Count == 1)
+        {
+            var only = keys[0];
+            return query.Where(e => e.Source == only);
+        }
+
+        return query.Where(e => keys.Contains(e.Source));
     }
 
     private IReadOnlyList<PlayEventEntity> ApplyLibraryFilter(IReadOnlyList<PlayEventEntity> events) =>
@@ -101,10 +122,7 @@ public sealed class WatchStatsRepository(
             return EmptySnapshot("combined", "Combined");
         }
 
-        var mapped = events
-            .Select(e => CloneWithUser(e, ResolveCanonicalUser(e.Source, e.UserDisplayName, aliases)))
-            .ToList();
-
+        var mapped = PrepareCombinedEvents(events, aliases);
         var bundle = PlayEventAnalyticsService.Build(mapped, range, limit);
         return bundle.Leaderboard with { Key = "combined", Label = "Combined" };
     }
@@ -121,14 +139,23 @@ public sealed class WatchStatsRepository(
         if (events.Count == 0)
             return ActivityAnalyticsBundle.Empty;
 
-        if (filter == WatchStatsSourceFilter.Combined && aliases.Count > 0)
-        {
-            events = events
-                .Select(e => CloneWithUser(e, ResolveCanonicalUser(e.Source, e.UserDisplayName, aliases)))
-                .ToList();
-        }
+        if (WatchStatsSourceFilters.ShouldCollapse(filter))
+            events = PrepareCombinedEvents(events, aliases);
 
         return PlayEventAnalyticsService.Build(events, range, limit);
+    }
+
+    /// <summary>
+    /// Alias-remap users then collapse same user + media within 24h for Combined views.
+    /// </summary>
+    public static IReadOnlyList<PlayEventEntity> PrepareCombinedEvents(
+        IReadOnlyList<PlayEventEntity> events,
+        IReadOnlyList<WatchStatsUserAlias> aliases)
+    {
+        var mapped = events
+            .Select(e => CloneWithUser(e, ResolveCanonicalUser(e.Source, e.UserDisplayName, aliases)))
+            .ToList();
+        return PlayEventDedupeHelper.CollapseForCombined(mapped);
     }
 
     private static WatchStatsSourceSnapshot EmptySnapshot(string key, string label) =>
@@ -184,6 +211,7 @@ public sealed class WatchStatsRepository(
         TraktId = source.TraktId,
         WasCompleted = source.WasCompleted,
         DurationIsEstimated = source.DurationIsEstimated,
-        CanonicalMediaKey = source.CanonicalMediaKey
+        CanonicalMediaKey = source.CanonicalMediaKey,
+        ItemTitle = source.ItemTitle
     };
 }

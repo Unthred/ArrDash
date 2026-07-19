@@ -19,8 +19,6 @@ public sealed class ActivitySourceAvailability(
         var filters = new List<WatchStatsSourceFilter>();
         var configured = await GetConfiguredSourcesAsync(ct);
 
-        if (configured.Count > 1)
-            filters.Add(WatchStatsSourceFilter.Combined);
         if (configured.Contains(WatchStatsSources.Plex))
             filters.Add(WatchStatsSourceFilter.Plex);
         if (configured.Contains(WatchStatsSources.Emby))
@@ -32,6 +30,10 @@ public sealed class ActivitySourceAvailability(
 
         return filters;
     }
+
+    public async Task<WatchStatsSourceFilter> GetAvailableMaskAsync(CancellationToken ct = default) =>
+        WatchStatsSourceFilters.FromConfigured(await GetConfiguredSourcesAsync(ct));
+
 
     public async Task<IReadOnlyList<string>> GetConfiguredSourcesAsync(CancellationToken ct = default)
     {

@@ -10,13 +10,94 @@ public enum WatchStatsPeriod
     Custom
 }
 
+[Flags]
 public enum WatchStatsSourceFilter
 {
-    Combined,
-    Plex,
-    Emby,
-    Jellyfin,
-    Trakt
+    None = 0,
+    Plex = 1 << 0,
+    Emby = 1 << 1,
+    Jellyfin = 1 << 2,
+    Trakt = 1 << 3,
+    /// <summary>All known sources (API / legacy “Combined”).</summary>
+    Combined = Plex | Emby | Jellyfin | Trakt
+}
+
+public static class WatchStatsSourceFilters
+{
+    public static bool IsSingleSource(WatchStatsSourceFilter filter) =>
+        System.Numerics.BitOperations.PopCount((uint)filter) == 1;
+
+    public static bool ShouldCollapse(WatchStatsSourceFilter filter) =>
+        !IsSingleSource(filter);
+
+    public static IReadOnlyList<string> ToSourceKeys(WatchStatsSourceFilter filter)
+    {
+        var keys = new List<string>(4);
+        if (filter.HasFlag(WatchStatsSourceFilter.Plex))
+            keys.Add(WatchStatsSources.Plex);
+        if (filter.HasFlag(WatchStatsSourceFilter.Emby))
+            keys.Add(WatchStatsSources.Emby);
+        if (filter.HasFlag(WatchStatsSourceFilter.Jellyfin))
+            keys.Add(WatchStatsSources.Jellyfin);
+        if (filter.HasFlag(WatchStatsSourceFilter.Trakt))
+            keys.Add(WatchStatsSources.Trakt);
+        return keys;
+    }
+
+    public static WatchStatsSourceFilter FromSourceKey(string? key) =>
+        key?.ToLowerInvariant() switch
+        {
+            WatchStatsSources.Plex => WatchStatsSourceFilter.Plex,
+            WatchStatsSources.Emby => WatchStatsSourceFilter.Emby,
+            WatchStatsSources.Jellyfin => WatchStatsSourceFilter.Jellyfin,
+            WatchStatsSources.Trakt => WatchStatsSourceFilter.Trakt,
+            _ => WatchStatsSourceFilter.None
+        };
+
+    public static WatchStatsSourceFilter FromConfigured(IEnumerable<string> configured)
+    {
+        var filter = WatchStatsSourceFilter.None;
+        foreach (var key in configured)
+            filter |= FromSourceKey(key);
+        return filter;
+    }
+
+    public static WatchStatsSourceFilter RestrictToAvailable(
+        WatchStatsSourceFilter selected,
+        WatchStatsSourceFilter available)
+    {
+        var next = selected & available;
+        return next == WatchStatsSourceFilter.None ? available : next;
+    }
+
+    public static string Label(WatchStatsSourceFilter filter) => filter switch
+    {
+        WatchStatsSourceFilter.Plex => "Plex",
+        WatchStatsSourceFilter.Emby => "Emby",
+        WatchStatsSourceFilter.Jellyfin => "Jellyfin",
+        WatchStatsSourceFilter.Trakt => "Trakt",
+        WatchStatsSourceFilter.Combined => "All",
+        WatchStatsSourceFilter.None => "None",
+        _ => string.Join(" + ", ToSourceKeys(filter).Select(WatchStatsSources.Label))
+    };
+
+    public static string CacheToken(WatchStatsSourceFilter filter) =>
+        IsSingleSource(filter) || filter == WatchStatsSourceFilter.Combined
+            ? filter.ToString()
+            : string.Join("+", ToSourceKeys(filter).OrderBy(k => k, StringComparer.Ordinal));
+
+    /// <summary>
+    /// Drilldown source token: null = all/collapse, single key, or comma-separated multi.
+    /// </summary>
+    public static string? ToDrilldownSource(WatchStatsSourceFilter filter)
+    {
+        var keys = ToSourceKeys(filter);
+        if (keys.Count == 0)
+            return null;
+        if (keys.Count == 1)
+            return keys[0];
+        return string.Join(',', keys);
+    }
 }
 
 public sealed record WatchStatsRange(

@@ -35,8 +35,10 @@ public sealed class LiveWatchStatsProvider(
             if (!IsSourceVisible(source))
                 continue;
 
-            if (filter != WatchStatsSourceFilter.Combined
-                && !string.Equals(source, MapFilterKey(filter), StringComparison.OrdinalIgnoreCase))
+            var selectedKeys = WatchStatsSourceFilters.ToSourceKeys(filter);
+            if (selectedKeys.Count > 0
+                && !selectedKeys.Contains(source, StringComparer.OrdinalIgnoreCase)
+                && filter != WatchStatsSourceFilter.Combined)
                 continue;
 
             var snapshot = await repository.BuildSourceSnapshotAsync(source, range, limit, ct);
@@ -45,8 +47,17 @@ public sealed class LiveWatchStatsProvider(
         }
 
         WatchStatsSourceSnapshot? combined = null;
-        if (filter == WatchStatsSourceFilter.Combined && prefs.Current.ShowCombinedWatchStats && enabledSources.Count > 0)
-            combined = await repository.BuildCombinedSnapshotAsync(enabledSources, range, aliases, limit, ct);
+        if (WatchStatsSourceFilters.ShouldCollapse(filter)
+            && prefs.Current.ShowCombinedWatchStats
+            && enabledSources.Count > 0)
+        {
+            var keys = WatchStatsSourceFilters.ToSourceKeys(filter);
+            var combinedSources = keys.Count == 0 || filter == WatchStatsSourceFilter.Combined
+                ? enabledSources
+                : enabledSources.Where(s => keys.Contains(s, StringComparer.OrdinalIgnoreCase)).ToList();
+            if (combinedSources.Count > 0)
+                combined = await repository.BuildCombinedSnapshotAsync(combinedSources, range, aliases, limit, ct);
+        }
 
         return new WatchStatsSnapshot(
             range.Period,

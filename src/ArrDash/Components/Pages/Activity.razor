@@ -43,18 +43,10 @@
 
         @if (_filters.Count > 0)
         {
-            <MudToggleGroup T="WatchStatsSourceFilter"
-                            Value="_source"
-                            ValueChanged="SetSource"
-                            Rounded="true"
-                            SelectedClass="segmented-toggle-selected"
-                            Class="arrdash-segmented-toggle watch-stats-chips activity-filter-toggle"
-                            Disabled="_refreshing">
-                @foreach (var filter in _filters)
-                {
-                    <MudToggleItem T="WatchStatsSourceFilter" Value="filter" Text="@FilterLabel(filter)" />
-                }
-            </MudToggleGroup>
+            <ActivitySourceFilterBar Available="_filters"
+                                     Value="_source"
+                                     ValueChanged="SetSource"
+                                     Disabled="_refreshing" />
         }
     </div>
 
@@ -105,7 +97,7 @@
             </div>
             <div class="activity-kpi-card accent-amber">
                 <div class="activity-kpi-label">Active streams</div>
-                <div class="activity-kpi-hint">@(_source == WatchStatsSourceFilter.Combined ? "Live streams right now (Tracearr)" : $"Live {_source} streams right now")</div>
+                <div class="activity-kpi-hint">@(WatchStatsSourceFilters.ShouldCollapse(_source) ? "Live streams right now (Tracearr)" : $"Live {WatchStatsSourceFilters.Label(_source)} streams right now")</div>
                 <div class="activity-kpi-value">@_snapshot.ActiveStreams</div>
             </div>
         </div>
@@ -156,23 +148,24 @@
     private ElementReference _layoutGrid;
 
     private string _refreshStatusText =>
-        $"Updating {WatchStatsPeriodHelper.Label(_range)} · {FilterLabel(_source)}…";
+        $"Updating {WatchStatsPeriodHelper.Label(_range)} · {WatchStatsSourceFilters.Label(_source)}…";
 
     private IReadOnlyList<ActivityChartPoint> _concurrentSeries =>
         _snapshot is null ? [] : ActivityChartSeriesHelper.BuildConcurrentSeries(_snapshot.ConcurrentStreams);
 
-    private string _concurrentEmptyMessage => _source switch
-    {
-        WatchStatsSourceFilter.Plex => "Peak concurrent breakdown is tracked via Tracearr (Emby/Jellyfin only)",
-        WatchStatsSourceFilter.Emby or WatchStatsSourceFilter.Jellyfin => "No concurrent stream data for this period",
-        _ => "No concurrent stream data"
-    };
+    private string _concurrentEmptyMessage =>
+        WatchStatsSourceFilters.IsSingleSource(_source) && _source == WatchStatsSourceFilter.Plex
+            ? "Peak concurrent breakdown is tracked via Tracearr (Emby/Jellyfin only)"
+            : WatchStatsSourceFilters.IsSingleSource(_source)
+                && (_source == WatchStatsSourceFilter.Emby || _source == WatchStatsSourceFilter.Jellyfin)
+                ? "No concurrent stream data for this period"
+                : "No concurrent stream data";
 
     private string _filterSubtitle =>
-        $"{WatchStatsPeriodHelper.Label(_range)} · {FilterLabel(_source)}";
+        $"{WatchStatsPeriodHelper.Label(_range)} · {WatchStatsSourceFilters.Label(_source)}";
 
     private string _layoutRenderKey =>
-        $"{WatchStatsPeriodHelper.Label(_range)}|{_source}";
+        $"{WatchStatsPeriodHelper.Label(_range)}|{WatchStatsSourceFilters.CacheToken(_source)}";
 
     private IReadOnlyList<ActivityDataSourceStatus> _filteredSources =>
         _snapshot?.Sources.Where(MatchesSourceFilter).ToList() ?? [];
@@ -180,15 +173,13 @@
     private string? _plexDataWarning =>
         _filteredSources.FirstOrDefault(s => string.Equals(s.Key, WatchStatsSources.Plex, StringComparison.OrdinalIgnoreCase))?.Error;
 
-    private bool MatchesSourceFilter(ActivityDataSourceStatus source) => _source switch
+    private bool MatchesSourceFilter(ActivityDataSourceStatus source)
     {
-        WatchStatsSourceFilter.Combined => true,
-        WatchStatsSourceFilter.Plex => string.Equals(source.Key, WatchStatsSources.Plex, StringComparison.OrdinalIgnoreCase),
-        WatchStatsSourceFilter.Emby => string.Equals(source.Key, WatchStatsSources.Emby, StringComparison.OrdinalIgnoreCase),
-        WatchStatsSourceFilter.Jellyfin => string.Equals(source.Key, WatchStatsSources.Jellyfin, StringComparison.OrdinalIgnoreCase),
-        WatchStatsSourceFilter.Trakt => string.Equals(source.Key, WatchStatsSources.Trakt, StringComparison.OrdinalIgnoreCase),
-        _ => false
-    };
+        var keys = WatchStatsSourceFilters.ToSourceKeys(_source);
+        return keys.Count == 0
+            || keys.Contains(source.Key, StringComparer.OrdinalIgnoreCase)
+            || string.Equals(source.Key, "warehouse", StringComparison.OrdinalIgnoreCase);
+    }
 
     private bool _hasMusic => _snapshot?.Leaderboards?.TopMusic.Count > 0;
 
@@ -203,8 +194,10 @@
         Prefs.Changed += OnPrefsChanged;
         _filters = await SourceAvailability.GetAvailableFiltersAsync();
         _configuredSources = await SourceAvailability.GetConfiguredSourcesAsync();
-        if (_filters.Count > 0 && !_filters.Contains(_source))
-            _source = _filters[0];
+        var available = WatchStatsSourceFilters.FromConfigured(_configuredSources);
+        _source = available == WatchStatsSourceFilter.None
+            ? WatchStatsSourceFilter.Combined
+            : available;
         await RefreshAsync();
     }
 
@@ -663,15 +656,8 @@
         public string? TargetId { get; set; }
     }
 
-    private static string FilterLabel(WatchStatsSourceFilter filter) => filter switch
-    {
-        WatchStatsSourceFilter.Combined => "Combined",
-        WatchStatsSourceFilter.Plex => "Plex",
-        WatchStatsSourceFilter.Emby => "Emby",
-        WatchStatsSourceFilter.Jellyfin => "Jellyfin",
-        WatchStatsSourceFilter.Trakt => "Trakt",
-        _ => filter.ToString()
-    };
+    private static string FilterLabel(WatchStatsSourceFilter filter) =>
+        WatchStatsSourceFilters.Label(filter);
 
     private async Task OnRangeChanged((WatchStatsPeriod Period, DateTime? StartUtc, DateTime? EndUtc) args)
     {
@@ -814,41 +800,13 @@
         if (_drawer is null)
             return;
 
-        var sourceFilter = _source switch
-        {
-            WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
-            WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
-            WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
-            WatchStatsSourceFilter.Trakt => WatchStatsSources.Trakt,
-            _ => row.Source
-        };
+        var sourceFilter = WatchStatsSourceFilters.ToDrilldownSource(_source);
 
         await _drawer.OpenAsync(row, _range, sourceFilter);
     }
 
-    private static IReadOnlyList<ActivityChartPoint> BuildMediaMixRows(ActivityMediaMix mix)
-    {
-        var totals = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-        foreach (var series in mix.Series.Where(s => !string.Equals(s.Name, "Total", StringComparison.OrdinalIgnoreCase)))
-        {
-            var name = NormalizeMediaMixLabel(series.Name);
-            totals[name] = totals.GetValueOrDefault(name) + series.Values.Sum();
-        }
-
-        return totals
-            .Select(kv => new ActivityChartPoint(kv.Key, kv.Value / 3600.0))
-            .Where(p => p.Value > 0)
-            .OrderByDescending(p => p.Value)
-            .ToList();
-    }
-
-    private static string NormalizeMediaMixLabel(string name) => name switch
-    {
-        "Movies" or "Movie" => "Movies",
-        "TV" or "Episodes" or "Episode" => "TV",
-        "Music" or "Tracks" => "Music",
-        _ => name
-    };
+    private static IReadOnlyList<ActivityChartPoint> BuildMediaMixRows(ActivityMediaMix mix) =>
+        ActivityChartSeriesHelper.BuildMediaMixPieRows(mix);
 
     private static IReadOnlyList<ActivityChartPoint> BuildQualityRows(ActivityAnalyticsSnapshot snapshot)
     {
