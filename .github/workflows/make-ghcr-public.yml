@@ -1,0 +1,37 @@
+# One-shot: set ghcr.io/<owner>/arrdash package visibility to public.
+# Uses GITHUB_TOKEN (packages:write). Safe to re-run.
+name: Make GHCR package public
+
+on:
+  workflow_dispatch:
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  set-public:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set arrdash container package visibility to public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          OWNER="${{ github.repository_owner }}"
+          PKG="arrdash"
+          echo "Setting visibility of ghcr.io/${OWNER,,}/${PKG} to public…"
+          # User-owned package API (owner is a user account)
+          code=$(curl -sS -o /tmp/vis.json -w "%{http_code}" -X PUT \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/user/packages/container/${PKG}/visibility" \
+            -d '{"visibility":"public"}')
+          echo "HTTP ${code}"
+          cat /tmp/vis.json || true
+          if [ "$code" != "204" ] && [ "$code" != "200" ]; then
+            echo "::error::Failed to set package visibility (HTTP ${code}). Set it manually: GitHub → Packages → arrdash → Package settings → Change visibility → Public."
+            exit 1
+          fi
+          echo "Package is public."

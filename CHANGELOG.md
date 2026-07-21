@@ -6,8 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Colleague handoff: minimal `docker-compose.example.yml` (Unraid mounts moved to `docker-compose.unraid.example.yml`); README/deployment stress **`main` only**, GHCR pull + build fallback, and **no built-in auth**
+- Unraid template: service URL/key fields optional (configure in Settings on first run); overview notes lack of built-in login
+
 ### Added
 
+- Workflow `make-ghcr-public.yml` to set `ghcr.io/unthred/arrdash` visibility to public
 - Settings → Diagnostics: configurable log level (Trace through Critical, or "Server default"), takes effect immediately with no restart ([#47](https://github.com/Unthred/ArrDash/issues/47))
 
 ### Fixed

@@ -1,8 +1,11 @@
+# Minimal ArrDash compose for any Docker host.
+# Unraid extras (parity/mover/docker metrics): see docker-compose.unraid.example.yml
 services:
   arrdash:
     image: ghcr.io/unthred/arrdash:latest
-    # Building from source instead: replace the image line with
-    #   build: .
+    # Build from source instead of pulling (if GHCR pull fails):
+    # image: # (comment out the image line above)
+    # build: .
     container_name: arrdash
     init: true
     ports:
@@ -10,47 +13,31 @@ services:
     environment:
       TZ: Europe/London
       ARRDASH_CONFIG_PATH: /config
-      # Host metrics — override per platform (Settings → Playback can also set these)
       ARRDASH_HOST_LABEL: Host
       ARRDASH_DISK_PATH: /
-      # Unraid example: ARRDASH_HOST_LABEL=Unraid  ARRDASH_DISK_PATH=/mnt/user
       ARRDASH_METRICS_POLL_SECONDS: 2
-      # Host network throughput — interface name to read from /host/proc/1/net/dev
-      # (see the /proc mount below). Unraid example: br0. Adjust to your bridge/NIC name.
-      ARRDASH_NET_INTERFACE: br0
-      SONARR_URL: https://sonarr.example.com
+      # Optional service URLs/keys — leave blank and configure in Settings → API keys
+      SONARR_URL: ""
       SONARR_API_KEY: ""
-      RADARR_URL: https://radarr.example.com
+      RADARR_URL: ""
       RADARR_API_KEY: ""
-      CHAPTARR_URL: https://chaptarr.example.com
+      CHAPTARR_URL: ""
       CHAPTARR_API_KEY: ""
-      AUDIOBOOKSHELF_URL: https://audiobooks.example.com
+      AUDIOBOOKSHELF_URL: ""
       AUDIOBOOKSHELF_API_KEY: ""
-      LIDARR_URL: https://lidarr.example.com
+      LIDARR_URL: ""
       LIDARR_API_KEY: ""
-      SLSKD_URL: https://soulseek.example.com
+      SLSKD_URL: ""
       SLSKD_API_KEY: ""
-      PLEX_URL: https://plex.example.com
+      PLEX_URL: ""
       PLEX_TOKEN: ""
-      EMBY_URL: https://emby.example.com
+      EMBY_URL: ""
       EMBY_API_KEY: ""
-      JELLYFIN_URL: https://jellyfin.example.com
+      JELLYFIN_URL: ""
       JELLYFIN_API_KEY: ""
-      # Posters for Trakt history (optional) — free key from themoviedb.org
       TMDB_API_KEY: ""
       POLL_INTERVAL_SECONDS: 30
       RECENT_LIMIT: 20
     volumes:
       - ./config:/config
-      - /mnt/user:/mnt/user:ro
-      # Unraid host activity awareness (parity check / mover status). Optional —
-      # feature no-ops if this path isn't mounted/present.
-      - /var/local/emhttp/var.ini:/var/local/emhttp/var.ini:ro
-      # Disk health / SMART temps. Optional, same low-privilege pattern as var.ini.
-      - /var/local/emhttp/disks.ini:/var/local/emhttp/disks.ini:ro
-      # Docker container update/restart visibility + top resource usage. Optional —
-      # grants read access to the whole Docker daemon API, not just ArrDash's own
-      # container. Omit this line if you don't want that exposure; the feature
-      # degrades silently.
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
