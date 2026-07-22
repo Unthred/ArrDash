@@ -50,42 +50,32 @@ public static class ActivityLayoutCatalog
         WatchStatsSourceFilter filter,
         IReadOnlyList<string> configuredSources,
         bool hasMusic,
-        bool hasGenres) =>
-        id.ToLowerInvariant() switch
+        bool hasGenres)
+    {
+        var keys = WatchStatsSourceFilters.ToSourceKeys(filter);
+        var includes = (string source) =>
+            keys.Count == 0
+                ? configuredSources.Contains(source)
+                : keys.Contains(source);
+        var includesAnyMediaServer = includes(WatchStatsSources.Plex)
+            || includes(WatchStatsSources.Emby)
+            || includes(WatchStatsSources.Jellyfin);
+
+        return id.ToLowerInvariant() switch
         {
-            "media-mix" => filter is WatchStatsSourceFilter.Combined or WatchStatsSourceFilter.Plex
-                && configuredSources.Contains(WatchStatsSources.Plex),
-            "platforms" => filter switch
-            {
-                WatchStatsSourceFilter.Combined => configuredSources.Count > 0,
-                WatchStatsSourceFilter.Plex => configuredSources.Contains(WatchStatsSources.Plex),
-                WatchStatsSourceFilter.Emby => configuredSources.Contains(WatchStatsSources.Emby),
-                WatchStatsSourceFilter.Jellyfin => configuredSources.Contains(WatchStatsSources.Jellyfin),
-                WatchStatsSourceFilter.Trakt => configuredSources.Contains(WatchStatsSources.Trakt),
-                _ => false
-            },
-            "stream-quality" or "by-day" or "by-hour" => filter switch
-            {
-                WatchStatsSourceFilter.Combined => configuredSources.Any(s =>
-                    s is WatchStatsSources.Plex or WatchStatsSources.Emby or WatchStatsSources.Jellyfin or WatchStatsSources.Trakt),
-                WatchStatsSourceFilter.Plex => configuredSources.Contains(WatchStatsSources.Plex),
-                WatchStatsSourceFilter.Emby => configuredSources.Contains(WatchStatsSources.Emby),
-                WatchStatsSourceFilter.Jellyfin => configuredSources.Contains(WatchStatsSources.Jellyfin),
-                WatchStatsSourceFilter.Trakt => configuredSources.Contains(WatchStatsSources.Trakt),
-                _ => false
-            },
-            "peak-concurrent" => filter switch
-            {
-                WatchStatsSourceFilter.Combined => configuredSources.Any(s =>
-                    s is WatchStatsSources.Plex or WatchStatsSources.Emby or WatchStatsSources.Jellyfin),
-                WatchStatsSourceFilter.Plex => configuredSources.Contains(WatchStatsSources.Plex),
-                WatchStatsSourceFilter.Emby => configuredSources.Contains(WatchStatsSources.Emby),
-                WatchStatsSourceFilter.Jellyfin => configuredSources.Contains(WatchStatsSources.Jellyfin),
-                _ => false
-            },
+            "media-mix" => includes(WatchStatsSources.Plex) && configuredSources.Contains(WatchStatsSources.Plex),
+            "platforms" => keys.Count == 0 ? configuredSources.Count > 0 : keys.Any(configuredSources.Contains),
+            "stream-quality" or "by-day" or "by-hour" =>
+                keys.Count == 0
+                    ? configuredSources.Any(s => s is WatchStatsSources.Plex or WatchStatsSources.Emby
+                        or WatchStatsSources.Jellyfin or WatchStatsSources.Trakt)
+                    : keys.Any(configuredSources.Contains),
+            "peak-concurrent" => includesAnyMediaServer && configuredSources.Any(s =>
+                s is WatchStatsSources.Plex or WatchStatsSources.Emby or WatchStatsSources.Jellyfin),
             "top-music" => hasMusic,
             "top-genres" => hasGenres,
             "popular-tv" or "popular-movies" or "top-libraries" => true,
             _ => true
         };
+    }
 }

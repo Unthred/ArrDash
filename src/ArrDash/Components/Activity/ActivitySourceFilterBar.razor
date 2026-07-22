@@ -1,0 +1,65 @@
+@using ArrDash.Models
+
+<div class="activity-source-checkboxes arrdash-segmented-toggle activity-filter-toggle @(Disabled ? "is-disabled" : null)"
+     role="group"
+     aria-label="Watch sources">
+    @if (Available.Count > 1)
+    {
+        <button type="button"
+                class="activity-source-chip @(AllSelected ? "is-selected" : null)"
+                disabled="@Disabled"
+                @onclick="ToggleAllAsync">
+            All
+        </button>
+    }
+
+    @foreach (var source in Available)
+    {
+        <button type="button"
+                class="activity-source-chip @(Value.HasFlag(source) ? "is-selected" : null)"
+                disabled="@Disabled"
+                @onclick="() => ToggleAsync(source)">
+            @WatchStatsSourceFilters.Label(source)
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public WatchStatsSourceFilter Value { get; set; } = WatchStatsSourceFilter.Combined;
+    [Parameter] public EventCallback<WatchStatsSourceFilter> ValueChanged { get; set; }
+    [Parameter] public IReadOnlyList<WatchStatsSourceFilter> Available { get; set; } = [];
+    [Parameter] public bool Disabled { get; set; }
+
+    private WatchStatsSourceFilter AvailableMask =>
+        Available.Aggregate(WatchStatsSourceFilter.None, (acc, s) => acc | s);
+
+    private bool AllSelected =>
+        Available.Count > 0 && (Value & AvailableMask) == AvailableMask;
+
+    private async Task ToggleAllAsync()
+    {
+        if (Disabled || Available.Count == 0)
+            return;
+
+        var next = AllSelected
+            ? Available[0] // keep at least one source
+            : AvailableMask;
+        await ValueChanged.InvokeAsync(next);
+    }
+
+    private async Task ToggleAsync(WatchStatsSourceFilter source)
+    {
+        if (Disabled || !Available.Contains(source))
+            return;
+
+        var next = Value.HasFlag(source)
+            ? Value & ~source
+            : Value | source;
+
+        // Never allow an empty selection.
+        if ((next & AvailableMask) == WatchStatsSourceFilter.None)
+            next = source;
+
+        await ValueChanged.InvokeAsync(next);
+    }
+}

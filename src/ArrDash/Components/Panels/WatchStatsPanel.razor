@@ -226,7 +226,8 @@
             WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
             WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
             WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
-            _ => row.Source
+            WatchStatsSourceFilter.Trakt => WatchStatsSources.Trakt,
+            _ => null // Combined: all sources, collapsed in GetDrilldownAsync
         };
 
         await _drawer.OpenAsync(row, _drilldownRange, sourceFilter);

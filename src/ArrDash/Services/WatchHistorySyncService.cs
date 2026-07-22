@@ -193,23 +193,31 @@ public sealed class WatchHistorySyncService(
 
             report(fetched == 0 ? "No new history found" : $"Importing {fetched} events…");
 
+            var patched = 0;
             foreach (var batch in events.Chunk(200))
             {
                 foreach (var ev in batch)
                 {
-                    var exists = await db.PlayEvents.AnyAsync(
+                    var existing = await db.PlayEvents.FirstOrDefaultAsync(
                         e => e.Source == ev.Source && e.ExternalPlayId == ev.ExternalPlayId, ct);
-                    if (exists)
+                    if (existing is not null)
+                    {
+                        if (PlayEventImportHelper.TryBackfillEpisodeMetadata(existing, ev))
+                            patched++;
                         continue;
+                    }
 
                     db.PlayEvents.Add(PlayEventImportHelper.MapEntity(ev));
                     imported++;
                 }
 
                 await db.SaveChangesAsync(ct);
-                if (imported > 0)
-                    report($"Imported {imported} new events…");
+                if (imported > 0 || patched > 0)
+                    report($"Imported {imported} new · patched {patched}…");
             }
+
+            if (patched > 0)
+                logger.LogInformation("Patched episode metadata on {Count} existing {Source} events", patched, source);
 
             cursor.LastSyncedAtUtc = DateTimeOffset.UtcNow;
             cursor.LastError = null;

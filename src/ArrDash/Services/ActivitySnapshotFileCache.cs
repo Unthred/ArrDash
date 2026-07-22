@@ -21,7 +21,7 @@ public sealed class ActivitySnapshotFileCache(IOptions<DatabaseOptions> dbOption
         WatchStatsRange range,
         WatchStatsSourceFilter filter,
         string? libraryFingerprint = null) =>
-        $"warehouse-v2|{range.Period}|{range.CustomStartUtc:yyyy-MM-dd}|{range.CustomEndUtc:yyyy-MM-dd}|{filter}|{libraryFingerprint ?? "all"}";
+        $"warehouse-v3|{range.Period}|{range.CustomStartUtc:yyyy-MM-dd}|{range.CustomEndUtc:yyyy-MM-dd}|{WatchStatsSourceFilters.CacheToken(filter)}|{libraryFingerprint ?? "all"}";
 
     public async Task<CachedActivitySnapshot?> TryGetAsync(string key, CancellationToken ct = default)
     {

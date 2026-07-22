@@ -4,7 +4,7 @@ namespace ArrDash.Services;
 
 public static class ActivityChartSeriesHelper
 {
-    public static readonly string[] ServerSeriesOrder = ["Plex", "Emby", "Jellyfin"];
+    public static readonly string[] ServerSeriesOrder = ["Plex", "Emby", "Jellyfin", "Trakt"];
     public static readonly string[] DeliverySeriesOrder = ["Direct play", "Direct stream", "Transcode"];
 
     public static readonly IReadOnlyDictionary<string, string> ServerSeriesHints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -12,7 +12,8 @@ public static class ActivityChartSeriesHelper
         ["Plex"] = "Play sessions on Plex (Tautulli)",
         ["Emby"] = "Play sessions on Emby (Tracearr)",
         ["Jellyfin"] = "Play sessions on Jellyfin (Tracearr)",
-        ["Total"] = "Combined plays across all servers in the stack"
+        ["Trakt"] = "Plays imported from Trakt history",
+        ["Total"] = "Combined plays across all sources in the stack"
     };
 
     public static readonly IReadOnlyDictionary<string, string> DeliverySeriesHints = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -164,10 +165,56 @@ public static class ActivityChartSeriesHelper
         "Plex" => 0,
         "Emby" => 1,
         "Jellyfin" => 2,
+        "Trakt" => 3,
         "Direct play" => 0,
         "Direct stream" => 1,
         "Transcode" => 2,
         "Total" => 99,
         _ => 50
+    };
+
+    /// <summary>
+    /// Pie rows for Activity media mix. Supports warehouse shape (categories + single
+    /// "Hours" series already in hours) and legacy Tautulli shape (series named
+    /// Movies/TV/… with duration values in seconds).
+    /// </summary>
+    public static IReadOnlyList<ActivityChartPoint> BuildMediaMixPieRows(ActivityMediaMix mix)
+    {
+        if (mix.Series.Count == 1
+            && string.Equals(mix.Series[0].Name, "Hours", StringComparison.OrdinalIgnoreCase)
+            && mix.Categories.Count > 0)
+        {
+            var values = mix.Series[0].Values;
+            return mix.Categories
+                .Select((cat, i) => new ActivityChartPoint(
+                    NormalizeMediaMixLabel(cat),
+                    i < values.Count ? values[i] : 0))
+                .Where(p => p.Value > 0)
+                .OrderByDescending(p => p.Value)
+                .ToList();
+        }
+
+        var totals = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var series in mix.Series.Where(s =>
+                     !string.Equals(s.Name, "Total", StringComparison.OrdinalIgnoreCase)
+                     && !string.Equals(s.Name, "Hours", StringComparison.OrdinalIgnoreCase)))
+        {
+            var name = NormalizeMediaMixLabel(series.Name);
+            totals[name] = totals.GetValueOrDefault(name) + series.Values.Sum();
+        }
+
+        return totals
+            .Select(kv => new ActivityChartPoint(kv.Key, kv.Value / 3600.0))
+            .Where(p => p.Value > 0)
+            .OrderByDescending(p => p.Value)
+            .ToList();
+    }
+
+    private static string NormalizeMediaMixLabel(string name) => name switch
+    {
+        "Movies" or "Movie" => "Movies",
+        "TV" or "Episodes" or "Episode" => "TV",
+        "Music" or "Tracks" => "Music",
+        _ => name
     };
 }

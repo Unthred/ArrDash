@@ -450,6 +450,145 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
         }
     }
 
+    /// <summary>
+    /// Episode list for a series id (used when Tracearr stored the series thumb id but we have an episode title).
+    /// </summary>
+    public async Task<IReadOnlyList<MediaSeriesEpisode>> FetchSeriesEpisodesAsync(
+        string seriesId,
+        CancellationToken ct)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(seriesId))
+            return [];
+
+        try
+        {
+            var url = BuildUrl($"/Shows/{Uri.EscapeDataString(seriesId)}/Episodes",
+                ("Fields", "IndexNumber,ParentIndexNumber,ProviderIds"),
+                ("EnableUserData", "false"));
+            using var response = await http.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+                return [];
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (!doc.RootElement.TryGetProperty("Items", out var items) || items.ValueKind != JsonValueKind.Array)
+                return [];
+
+            var list = new List<MediaSeriesEpisode>();
+            foreach (var item in items.EnumerateArray())
+            {
+                var id = ReadString(item, "Id");
+                var name = ReadString(item, "Name");
+                if (string.IsNullOrWhiteSpace(id) || string.IsNullOrWhiteSpace(name))
+                    continue;
+
+                list.Add(new MediaSeriesEpisode(
+                    id,
+                    name,
+                    ReadInt(item, "ParentIndexNumber"),
+                    ReadInt(item, "IndexNumber")));
+            }
+
+            return list;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "FetchSeriesEpisodesAsync failed for {SeriesId}", seriesId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Provider ids (and optional episode indexes) for a batch of Emby/Jellyfin item ids.
+    /// Tracearr history often stores the series id for episodes — callers still get show-level ids.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, MediaItemProviderInfo>> FetchItemProviderInfoAsync(
+        IReadOnlyList<string> itemIds,
+        CancellationToken ct)
+    {
+        var map = new Dictionary<string, MediaItemProviderInfo>(StringComparer.OrdinalIgnoreCase);
+        if (!IsConfigured || itemIds.Count == 0)
+            return map;
+
+        try
+        {
+            var url = BuildUrl("/Items",
+                ("Ids", string.Join(',', itemIds)),
+                ("Fields", "ProviderIds,ProductionYear,IndexNumber,ParentIndexNumber,SeriesId,Type"));
+            using var response = await http.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+                return map;
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (!doc.RootElement.TryGetProperty("Items", out var items) || items.ValueKind != JsonValueKind.Array)
+                return map;
+
+            foreach (var item in items.EnumerateArray())
+            {
+                var id = ReadString(item, "Id");
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+
+                string? imdb = null;
+                int? tmdb = null;
+                int? tvdb = null;
+                int? trakt = null;
+                if (item.TryGetProperty("ProviderIds", out var providers) && providers.ValueKind == JsonValueKind.Object)
+                {
+                    imdb = ReadProviderString(providers, "Imdb", "IMDB", "imdb");
+                    tmdb = ReadProviderInt(providers, "Tmdb", "TMDb", "tmdb");
+                    tvdb = ReadProviderInt(providers, "Tvdb", "TVDB", "tvdb");
+                    trakt = ReadProviderInt(providers, "Trakt", "trakt");
+                }
+
+                map[id] = new MediaItemProviderInfo(
+                    id,
+                    ReadString(item, "Type"),
+                    imdb,
+                    tmdb,
+                    tvdb,
+                    trakt,
+                    ReadInt(item, "ProductionYear"),
+                    ReadInt(item, "ParentIndexNumber"),
+                    ReadInt(item, "IndexNumber"),
+                    ReadString(item, "SeriesId"));
+            }
+
+            return map;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "FetchItemProviderInfoAsync failed");
+            return map;
+        }
+    }
+
+    private static string? ReadProviderString(JsonElement providers, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!providers.TryGetProperty(name, out var value))
+                continue;
+            var s = value.ValueKind switch
+            {
+                JsonValueKind.String => value.GetString(),
+                JsonValueKind.Number => value.GetRawText(),
+                _ => null
+            };
+            if (!string.IsNullOrWhiteSpace(s))
+                return s.Trim();
+        }
+
+        return null;
+    }
+
+    private static int? ReadProviderInt(JsonElement providers, params string[] names)
+    {
+        var raw = ReadProviderString(providers, names);
+        return int.TryParse(raw, out var n) && n > 0 ? n : null;
+    }
+
     private static string? ReadString(JsonElement el, params string[] names)
     {
         foreach (var name in names)
@@ -550,3 +689,22 @@ public sealed class EmbyPlaybackReportingClient(HttpClient http, MediaServiceOpt
 
 public sealed class JellyfinPlaybackReportingClient(HttpClient http, MediaServiceOptionsAccessor options, ILogger<JellyfinPlaybackReportingClient> logger)
     : PlaybackReportingClient(http, options.Options.Jellyfin, WatchStatsSources.Jellyfin, "Jellyfin", logger);
+
+public sealed record MediaItemProviderInfo(
+    string ItemId,
+    string? Type,
+    string? ImdbId,
+    int? TmdbId,
+    int? TvdbId,
+    int? TraktId,
+    int? Year,
+    int? SeasonNumber,
+    int? EpisodeNumber,
+    string? SeriesId);
+
+public sealed record MediaSeriesEpisode(
+    string ItemId,
+    string Name,
+    int? SeasonNumber,
+    int? EpisodeNumber);
+

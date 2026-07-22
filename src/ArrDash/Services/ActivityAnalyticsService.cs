@@ -142,8 +142,8 @@ public sealed class ActivityAnalyticsService(
     {
         if (warehouseCount > 0)
         {
-            if (filter == WatchStatsSourceFilter.Combined)
-                return analytics.Leaderboard with { Key = "combined", Label = "Combined" };
+            if (WatchStatsSourceFilters.ShouldCollapse(filter))
+                return analytics.Leaderboard with { Key = "combined", Label = WatchStatsSourceFilters.Label(filter) };
 
             var key = MapFilterKey(filter);
             return analytics.Leaderboard with { Key = key, Label = WatchStatsSources.Label(key) };
@@ -152,7 +152,7 @@ public sealed class ActivityAnalyticsService(
         if (watchSnapshot is null)
             return null;
 
-        if (filter == WatchStatsSourceFilter.Combined)
+        if (WatchStatsSourceFilters.ShouldCollapse(filter))
             return watchSnapshot.Combined;
 
         var filterKey = MapFilterKey(filter);
@@ -226,6 +226,14 @@ public sealed class ActivityAnalyticsService(
 
         var range = new WatchStatsRange(request.Period, request.CustomStartUtc, request.CustomEndUtc);
         var dbEvents = await repository.QueryEventsAsync(range, request.Source, ct);
+
+        // Multi-source / Combined drilldowns collapse like Combined charts.
+        var sourceKeys = string.IsNullOrWhiteSpace(request.Source)
+            ? []
+            : request.Source.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (sourceKeys.Length != 1)
+            dbEvents = WatchStatsRepository.PrepareCombinedEvents(dbEvents, prefs.Current.UserAliases);
+
         dbEvents = FilterEventsForRequest(request, dbEvents);
 
         var snapshot = PlayEventAnalyticsService.BuildDrilldown(request, dbEvents);

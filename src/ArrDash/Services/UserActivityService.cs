@@ -37,7 +37,7 @@ public sealed class UserActivityService(
         }
 
         var watch = await watchStats.GetAsync(range, filter, force, ct, topLimit: UserLimit);
-        var leaderboard = filter == WatchStatsSourceFilter.Combined
+        var leaderboard = WatchStatsSourceFilters.ShouldCollapse(filter)
             ? watch.Combined
             : watch.Sources.FirstOrDefault(s =>
                 string.Equals(s.Key, MapFilterKey(filter), StringComparison.OrdinalIgnoreCase));
@@ -114,6 +114,7 @@ public sealed class UserActivityService(
         WatchStatsSourceFilter.Plex => WatchStatsSources.Plex,
         WatchStatsSourceFilter.Emby => WatchStatsSources.Emby,
         WatchStatsSourceFilter.Jellyfin => WatchStatsSources.Jellyfin,
+        WatchStatsSourceFilter.Trakt => WatchStatsSources.Trakt,
         _ => "combined"
     };
 }
