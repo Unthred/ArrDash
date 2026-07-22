@@ -8,6 +8,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- `arrdash-issue-create.sh` caches project/Status metadata once per run, indexes board items for bulk `--add`, and aborts early when GraphQL remaining is low; workflow docs recommend a closed→Done project automation ([#64](https://github.com/Unthred/ArrDash/issues/64))
 - Colleague handoff: minimal `docker-compose.example.yml` (Unraid mounts moved to `docker-compose.unraid.example.yml`); README/deployment stress **`main` only**, GHCR pull + build fallback, and **no built-in auth**
 - Unraid template: service URL/key fields optional (configure in Settings on first run); overview notes lack of built-in login
 
