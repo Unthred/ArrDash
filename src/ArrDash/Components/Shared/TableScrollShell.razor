@@ -1,0 +1,83 @@
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+<div class="@($"table-scroll-shell {Class}".Trim())" @ref="_host">
+    @ChildContent
+
+    <button type="button"
+            class="back-to-top-pill @(_visible ? "is-visible" : null)"
+            aria-label="Back to top"
+            @onclick="ScrollToTopAsync">
+        <MudIcon Icon="@Icons.Material.Filled.KeyboardArrowUp" Size="Size.Small" />
+        <span>Top</span>
+    </button>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public int ThresholdPixels { get; set; } = 280;
+
+    private ElementReference _host;
+    private DotNetObjectReference<TableScrollShell>? _dotNet;
+    private bool _visible;
+    private bool _attached;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _attached)
+            return;
+
+        _dotNet = DotNetObjectReference.Create(this);
+        try
+        {
+            await Js.InvokeVoidAsync("arrdashBackToTop.attach", _host, _dotNet, ThresholdPixels);
+            _attached = true;
+        }
+        catch
+        {
+            // Ignore disconnects during navigation / first paint races.
+        }
+    }
+
+    [JSInvokable]
+    public Task OnBackToTopVisibility(bool visible)
+    {
+        if (_visible == visible)
+            return Task.CompletedTask;
+
+        _visible = visible;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ScrollToTopAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("arrdashBackToTop.scrollToTop", _host);
+        }
+        catch
+        {
+            // Ignore disconnects during navigation.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_attached)
+        {
+            try
+            {
+                await Js.InvokeVoidAsync("arrdashBackToTop.detach", _host);
+            }
+            catch
+            {
+                // Circuit may already be gone.
+            }
+        }
+
+        _dotNet?.Dispose();
+        _dotNet = null;
+        _attached = false;
+    }
+}

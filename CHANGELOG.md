@@ -13,6 +13,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Cleanup candidates page: sync Sonarr/Radarr inventory and list never-watched / stale / largest titles (report-only; Keep flags) ([#62](https://github.com/Unthred/ArrDash/issues/62))
+- Cleanup candidates table shows **Watched by** (distinct users from local play history, with Watch Stats aliases) and **Tags** (Sonarr/Radarr labels such as requester tags; empty for most titles) ([#52](https://github.com/Unthred/ArrDash/issues/52))
+- Cleanup **Deletion queue**: mark candidates with the trash icon; switch to the Deletion queue view for a planning list with a would-free total (still report-only — ArrDash does not delete files) ([#53](https://github.com/Unthred/ArrDash/issues/53))
+- Cleanup Keep/Delete toggles update the UI immediately (persist in the background) and the table is virtualized so clicks stay snappy on large libraries ([#54](https://github.com/Unthred/ArrDash/issues/54))
+- Cleanup TV rows show Sonarr series status as a compact icon next to Type (Ended / Continuing / Upcoming); removed the redundant Queued chip from Reasons ([#55](https://github.com/Unthred/ArrDash/issues/55))
+- Scrollable tables show a floating **Top** pill after you scroll down; click returns to the top of that table (Cleanup + download Table view) ([#56](https://github.com/Unthred/ArrDash/issues/56))
+- Page-level **Top** pill on any scrolled page; Cleanup chrome compacted so the table fills the viewport with a single scrollbar ([#57](https://github.com/Unthred/ArrDash/issues/57))
+- Cleanup chrome restored to the prior layout; table still fills remaining viewport height so only the table scrolls ([#58](https://github.com/Unthred/ArrDash/issues/58))
+- Cleanup: Kept + stale threshold sit on the Show row; main content locked so the page does not scroll — only the table does ([#60](https://github.com/Unthred/ArrDash/issues/60))
+- Cleanup nav is shown only when Sonarr and/or Radarr is configured and enabled; `/cleanup` explains the requirement otherwise ([#61](https://github.com/Unthred/ArrDash/issues/61))
 - Activity source filter is multi-select (All / Plex / Emby / Trakt / Jellyfin) on Overview and Users, styled like the period segmented control ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Combined Activity collapses same user + canonical media within 24h so one real watch is not counted once per source ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Emby/Jellyfin play events are enriched with provider ids and Tracearr season/episode indexes so Trakt push can scrobble without Emby's Trakt plugin ([#50](https://github.com/Unthred/ArrDash/issues/50))

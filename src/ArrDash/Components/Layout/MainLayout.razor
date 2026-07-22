@@ -2,6 +2,8 @@
 @inject ThemeService ThemeService
 @inject LayoutPreferencesService Prefs
 @inject LayoutSettingsSaveService PreviewSave
+@inject MediaServiceOptionsAccessor ServiceOptions
+@inject CleanupFeatureAvailability CleanupAvailability
 @inject ISnackbar Snackbar
 @implements IDisposable
 
@@ -52,6 +54,12 @@
                     <MudTooltip Text="Watch activity">
                         <MudIconButton Icon="@Icons.Material.Filled.Analytics" Color="Color.Default" Href="/activity" Class="header-icon-btn" />
                     </MudTooltip>
+                    @if (CleanupAvailability.IsAvailable)
+                    {
+                        <MudTooltip Text="Cleanup candidates">
+                            <MudIconButton Icon="@Icons.Material.Filled.CleaningServices" Color="Color.Default" Href="/cleanup" Class="header-icon-btn" />
+                        </MudTooltip>
+                    }
                     <MudTooltip Text="Kiosk mode">
                         <MudIconButton Icon="@Icons.Material.Filled.Tv" Color="Color.Default" OnClick="ToggleKiosk" Class="header-icon-btn" />
                     </MudTooltip>
@@ -70,6 +78,7 @@
 
         <MudMainContent Class="arrdash-main">
             @Body
+            <PageBackToTop />
         </MudMainContent>
     </MudLayout>
     </CascadingValue>
@@ -101,10 +110,13 @@
         }
 
         Prefs.Changed += OnPrefsChanged;
+        ServiceOptions.Changed += OnServiceOptionsChanged;
         ThemeService.OnChange += OnThemeChangedInternal;
         await ThemeService.RegisterSystemListenerAsync();
         await ApplyThemeAsync();
     }
+
+    private void OnServiceOptionsChanged() => _ = InvokeAsync(StateHasChanged);
 
     private void ApplyThemeSources()
     {
@@ -173,5 +185,6 @@
     {
         ThemeService.OnChange -= OnThemeChangedInternal;
         Prefs.Changed -= OnPrefsChanged;
+        ServiceOptions.Changed -= OnServiceOptionsChanged;
     }
 }

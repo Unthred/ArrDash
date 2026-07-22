@@ -37,7 +37,7 @@ flowchart LR
 ArrDash/
 ├── src/ArrDash/                 # Main web app
 │   ├── Components/
-│   │   ├── Pages/               # Home (dashboard), Settings, Error
+│   │   ├── Pages/               # Home (dashboard), Settings, Cleanup, Error
 │   │   ├── Panels/              # DownloadPanel, NowPlayingPanel, LibrariesPanel
 │   │   ├── Layout/              # MainLayout (app bar, nav)
 │   │   └── Shared/              # Reusable UI (metrics, status bar, pickers)
@@ -46,6 +46,8 @@ ArrDash/
 │   │   ├── DashboardCollector.cs
 │   │   ├── DashboardRefreshService.cs
 │   │   ├── DashboardState.cs
+│   │   ├── MediaInventorySyncService.cs  # Sonarr/Radarr library + tags for Cleanup
+│   │   ├── CleanupCandidateAnalysisService.cs
 │   │   ├── LayoutPreferencesService.cs
 │   │   ├── ThemeBuilder.cs / ThemeService.cs
 │   │   ├── PosterProxyService.cs

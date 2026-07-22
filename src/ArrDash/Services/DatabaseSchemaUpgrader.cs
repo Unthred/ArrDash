@@ -30,6 +30,14 @@ public static class DatabaseSchemaUpgrader
         ("ItemTitle", "TEXT NULL")
     ];
 
+    private static readonly (string Column, string SqlType)[] MediaInventoryItemColumns =
+    [
+        ("NeverDelete", "INTEGER NOT NULL DEFAULT 0"),
+        ("MarkedForDeletion", "INTEGER NOT NULL DEFAULT 0"),
+        ("SeriesStatus", "TEXT NULL"),
+        ("Rating", "REAL NULL")
+    ];
+
     public static async Task UpgradeAsync(ArrDashDbContext db, ILogger logger, CancellationToken ct = default)
     {
         await db.Database.EnsureCreatedAsync(ct);
@@ -41,6 +49,66 @@ public static class DatabaseSchemaUpgrader
             await TryAddColumnAsync(db, "PlayEvents", column, sqlType, logger, ct);
 
         await EnsureTraktTablesAsync(db, ct);
+        await EnsureMediaInventoryTableAsync(db, ct);
+        await EnsureArrTagsTableAsync(db, ct);
+
+        foreach (var (column, sqlType) in MediaInventoryItemColumns)
+            await TryAddColumnAsync(db, "MediaInventoryItems", column, sqlType, logger, ct);
+    }
+
+    private static async Task EnsureArrTagsTableAsync(ArrDashDbContext db, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "ArrTags" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_ArrTags" PRIMARY KEY AUTOINCREMENT,
+                "Source" TEXT NOT NULL,
+                "TagId" INTEGER NOT NULL,
+                "Label" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ArrTags_Source_TagId"
+                ON "ArrTags" ("Source", "TagId");
+            """,
+            ct);
+    }
+
+    private static async Task EnsureMediaInventoryTableAsync(ArrDashDbContext db, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "MediaInventoryItems" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_MediaInventoryItems" PRIMARY KEY AUTOINCREMENT,
+                "Source" TEXT NOT NULL,
+                "SourceItemId" INTEGER NOT NULL,
+                "MediaType" TEXT NOT NULL,
+                "Title" TEXT NOT NULL,
+                "Year" INTEGER NULL,
+                "TitleSlug" TEXT NULL,
+                "ImdbId" TEXT NULL,
+                "TmdbId" INTEGER NULL,
+                "TvdbId" INTEGER NULL,
+                "SizeOnDiskBytes" INTEGER NOT NULL,
+                "FileCount" INTEGER NULL,
+                "Monitored" INTEGER NOT NULL,
+                "HasFile" INTEGER NOT NULL,
+                "NeverDelete" INTEGER NOT NULL DEFAULT 0,
+                "MarkedForDeletion" INTEGER NOT NULL DEFAULT 0,
+                "SeriesStatus" TEXT NULL,
+                "Rating" REAL NULL,
+                "AddedUtc" TEXT NULL,
+                "TagsJson" TEXT NOT NULL,
+                "LastSeenUtc" TEXT NOT NULL,
+                "UpdatedAtUtc" TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_MediaInventoryItems_Source_SourceItemId"
+                ON "MediaInventoryItems" ("Source", "SourceItemId");
+            CREATE INDEX IF NOT EXISTS "IX_MediaInventoryItems_TmdbId" ON "MediaInventoryItems" ("TmdbId");
+            CREATE INDEX IF NOT EXISTS "IX_MediaInventoryItems_TvdbId" ON "MediaInventoryItems" ("TvdbId");
+            CREATE INDEX IF NOT EXISTS "IX_MediaInventoryItems_SizeOnDiskBytes" ON "MediaInventoryItems" ("SizeOnDiskBytes");
+            CREATE INDEX IF NOT EXISTS "IX_MediaInventoryItems_LastSeenUtc" ON "MediaInventoryItems" ("LastSeenUtc");
+            """,
+            ct);
     }
 
     private static async Task EnsureTraktTablesAsync(ArrDashDbContext db, CancellationToken ct)

@@ -10,6 +10,8 @@ public sealed class ArrDashDbContext(DbContextOptions<ArrDashDbContext> options)
     public DbSet<TraktAccountEntity> TraktAccounts => Set<TraktAccountEntity>();
     public DbSet<TraktHistoryLinkEntity> TraktHistoryLinks => Set<TraktHistoryLinkEntity>();
     public DbSet<MediaIdentityEntity> MediaIdentities => Set<MediaIdentityEntity>();
+    public DbSet<MediaInventoryItemEntity> MediaInventoryItems => Set<MediaInventoryItemEntity>();
+    public DbSet<ArrTagEntity> ArrTags => Set<ArrTagEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,6 +64,26 @@ public sealed class ArrDashDbContext(DbContextOptions<ArrDashDbContext> options)
             entity.HasIndex(e => e.ImdbId);
             entity.HasIndex(e => e.TmdbId);
             entity.HasIndex(e => e.TraktId);
+        });
+
+        modelBuilder.Entity<MediaInventoryItemEntity>(entity =>
+        {
+            entity.HasIndex(e => new { e.Source, e.SourceItemId }).IsUnique();
+            entity.HasIndex(e => e.TmdbId);
+            entity.HasIndex(e => e.TvdbId);
+            entity.HasIndex(e => e.SizeOnDiskBytes);
+            entity.HasIndex(e => e.LastSeenUtc);
+            entity.Property(e => e.Source).HasMaxLength(32);
+            entity.Property(e => e.MediaType).HasMaxLength(32);
+            entity.Property(e => e.TitleSlug).HasMaxLength(512);
+            entity.Property(e => e.ImdbId).HasMaxLength(32);
+        });
+
+        modelBuilder.Entity<ArrTagEntity>(entity =>
+        {
+            entity.HasIndex(e => new { e.Source, e.TagId }).IsUnique();
+            entity.Property(e => e.Source).HasMaxLength(32);
+            entity.Property(e => e.Label).HasMaxLength(256);
         });
     }
 }
