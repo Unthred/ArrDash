@@ -13,8 +13,8 @@ Uses **GitHub Issues** + **ArrDash** project board — see [docs/github-workflow
 
 - Create an issue **before code** unless the user explicitly says docs-only / typo / chore with no tracking needed.
 - **Always** use `scripts/arrdash-issue-create.sh` (repo issue + project board card). Do **not** use bare `gh issue create`.
-- Move card status as work progresses: Todo → In Progress → Done.
-- Chat is not the system of record — **issues**, **PRs**, and **docs/** are.
+- Move card status sparingly: Todo → **In Progress** once when work starts; prefer a project **closed → Done** automation over bulk `--add … --status Done` after merge (GraphQL budget is tight).
+- Bulk board updates: one `--add 1 2 3 --status …` per run, not many separate invocations. Chat is not the system of record — **issues**, **PRs**, and **docs/** are.
 
 ## Branches
 

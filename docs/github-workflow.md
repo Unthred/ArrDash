@@ -56,19 +56,28 @@ EOF
   --status Todo
 ```
 
-Add an existing issue to the board:
+Add existing issues to the board (one run, many numbers — cheaper on GraphQL):
 
 ```bash
-bash scripts/arrdash-issue-create.sh --add 5 --status "In progress"
+bash scripts/arrdash-issue-create.sh --add 5 6 7 --status "In Progress"
 ```
+
+### Project board + GraphQL rate limits
+
+Board APIs use GitHub **GraphQL** (5 000 points/hour). The create script now caches project metadata once per run; still:
+
+1. Prefer **one** `--add` with many issue numbers over many separate invocations.
+2. Do **not** bulk `--add … --status Done` after merge if you can use a project automation instead: **when issue is closed → set Status to Done** (Project → ⋯ → Workflows). Then `Closes #N` on merge is enough.
+3. Move to **In Progress** when you start / open the PR — not on every micro-commit.
+4. If the script exits with “GraphQL budget too low”, wait for the hourly reset (`gh api rate_limit --jq '.resources.graphql'`).
 
 ## Typical flow
 
 1. **Create issue** → card on board → **Todo**
 2. **Branch** `feature/issue-5-short-name` from `main`
-3. **Implement** + tests + docs + CHANGELOG → move to **In Progress**
-4. **PR** to `main` with `Closes #5`
-5. **Merge** → rebuild container → verify → **Done**
+3. **Implement** + tests + docs + CHANGELOG → move to **In Progress** (once)
+4. **PR** to `main` with `Closes #N`
+5. **Merge** → issue closes → board **Done** via automation (or one manual drag)
 
 ## Labels
 
