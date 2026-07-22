@@ -4,9 +4,11 @@ Complete reference for installing, configuring, and developing ArrDash.
 
 ## Getting started
 
-1. [Deployment](deployment.md) — Docker Compose, Unraid template, reverse proxy
+1. [Deployment](deployment.md) — Docker Compose, Unraid template, reverse proxy, **auth warning**
 2. [Configuration](configuration.md) — environment variables, config volume, secrets
 3. [Services](services.md) — connect Sonarr, Radarr, Chaptarr, Plex, etc.
+
+Always install from **`main`** (or the GHCR image built from `main`).
 
 ## Using ArrDash
 
@@ -27,7 +29,8 @@ Complete reference for installing, configuring, and developing ArrDash.
 | File | Purpose |
 |------|---------|
 | `README.md` | Project overview |
-| `docker-compose.example.yml` | Sample Compose file (no secrets) |
+| `docker-compose.example.yml` | Minimal Compose sample (any Docker host) |
+| `docker-compose.unraid.example.yml` | Unraid Compose sample (host metrics mounts) |
 | `Dockerfile` | Multi-stage .NET 10 build |
 | `unraid/my-arrdash.xml` | Unraid Community Applications template stub |
 | `CHECKPOINT.md` | Maintainer notes (optional) |

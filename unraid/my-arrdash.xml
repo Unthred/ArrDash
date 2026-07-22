@@ -9,7 +9,7 @@
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Overview>ArrDash - Blazor media dashboard for recent *arr downloads and Plex/Emby sessions</Overview>
+  <Overview>ArrDash - Blazor media dashboard for recent *arr downloads and Plex/Emby/Jellyfin sessions. No built-in login — keep on a trusted LAN or behind reverse-proxy auth. Service URLs/keys are optional in the template; configure in the WebUI Settings on first run.</Overview>
   <WebUI>http://[IP]:[PORT:7979]/</WebUI>
   <Icon>https://raw.githubusercontent.com/gethomepage/homepage/main/public/android-chrome-512x512.png</Icon>
   <ExtraParams>--init</ExtraParams>
@@ -20,20 +20,20 @@
   <Config Name="WebUI Port" Target="8080" Default="7979" Mode="tcp" Description="ArrDash web UI" Type="Port" Display="always" Required="true" Mask="false">7979</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/arrdash" Mode="rw" Description="Layout preferences" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/arrdash</Config>
   <Config Name="TZ" Target="TZ" Default="Europe/London" Mode="" Description="Timezone" Type="Variable" Display="always" Required="true" Mask="false">Europe/London</Config>
-  <Config Name="SONARR_URL" Target="SONARR_URL" Default="https://sonarr.example.com" Mode="" Description="Sonarr base URL" Type="Variable" Display="always" Required="true" Mask="false"/>
-  <Config Name="SONARR_API_KEY" Target="SONARR_API_KEY" Default="" Mode="" Description="Sonarr API key" Type="Variable" Display="always" Required="true" Mask="true"/>
-  <Config Name="RADARR_URL" Target="RADARR_URL" Default="https://radarr.example.com" Mode="" Description="Radarr base URL" Type="Variable" Display="always" Required="true" Mask="false"/>
-  <Config Name="RADARR_API_KEY" Target="RADARR_API_KEY" Default="" Mode="" Description="Radarr API key" Type="Variable" Display="always" Required="true" Mask="true"/>
-  <Config Name="CHAPTARR_URL" Target="CHAPTARR_URL" Default="https://chaptarr.example.com" Mode="" Description="Chaptarr base URL" Type="Variable" Display="always" Required="true" Mask="false"/>
-  <Config Name="CHAPTARR_API_KEY" Target="CHAPTARR_API_KEY" Default="" Mode="" Description="Chaptarr API key" Type="Variable" Display="always" Required="true" Mask="true"/>
-  <Config Name="AUDIOBOOKSHELF_URL" Target="AUDIOBOOKSHELF_URL" Default="https://audiobooks.example.com" Mode="" Description="AudioBookShelf base URL" Type="Variable" Display="always" Required="true" Mask="false"/>
-  <Config Name="AUDIOBOOKSHELF_API_KEY" Target="AUDIOBOOKSHELF_API_KEY" Default="" Mode="" Description="AudioBookShelf API key (Bearer token)" Type="Variable" Display="always" Required="true" Mask="true"/>
-  <Config Name="LIDARR_URL" Target="LIDARR_URL" Default="https://lidarr.example.com" Mode="" Description="Lidarr base URL" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="SONARR_URL" Target="SONARR_URL" Default="" Mode="" Description="Sonarr base URL (optional — or set in Settings)" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="SONARR_API_KEY" Target="SONARR_API_KEY" Default="" Mode="" Description="Sonarr API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="RADARR_URL" Target="RADARR_URL" Default="" Mode="" Description="Radarr base URL (optional — or set in Settings)" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="RADARR_API_KEY" Target="RADARR_API_KEY" Default="" Mode="" Description="Radarr API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="CHAPTARR_URL" Target="CHAPTARR_URL" Default="" Mode="" Description="Chaptarr base URL (optional — or set in Settings)" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="CHAPTARR_API_KEY" Target="CHAPTARR_API_KEY" Default="" Mode="" Description="Chaptarr API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="AUDIOBOOKSHELF_URL" Target="AUDIOBOOKSHELF_URL" Default="" Mode="" Description="AudioBookShelf base URL (optional — or set in Settings)" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="AUDIOBOOKSHELF_API_KEY" Target="AUDIOBOOKSHELF_API_KEY" Default="" Mode="" Description="AudioBookShelf API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="LIDARR_URL" Target="LIDARR_URL" Default="" Mode="" Description="Lidarr base URL (optional)" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="LIDARR_API_KEY" Target="LIDARR_API_KEY" Default="" Mode="" Description="Lidarr API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>
-  <Config Name="SLSKD_URL" Target="SLSKD_URL" Default="https://soulseek.example.com" Mode="" Description="slskd base URL" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="SLSKD_URL" Target="SLSKD_URL" Default="" Mode="" Description="slskd base URL (optional)" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="SLSKD_API_KEY" Target="SLSKD_API_KEY" Default="" Mode="" Description="slskd API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>
-  <Config Name="PLEX_URL" Target="PLEX_URL" Default="https://plex.example.com" Mode="" Description="Plex base URL" Type="Variable" Display="always" Required="true" Mask="false"/>
-  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Plex token" Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Plex base URL (optional — or set in Settings)" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Plex token (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="EMBY_URL" Target="EMBY_URL" Default="https://emby.example.com" Mode="" Description="Emby base URL" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="EMBY_API_KEY" Target="EMBY_API_KEY" Default="" Mode="" Description="Emby API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="JELLYFIN_URL" Target="JELLYFIN_URL" Default="https://jellyfin.example.com" Mode="" Description="Jellyfin base URL" Type="Variable" Display="always" Required="false" Mask="false"/>

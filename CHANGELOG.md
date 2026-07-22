@@ -6,11 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Colleague handoff: minimal `docker-compose.example.yml` (Unraid mounts moved to `docker-compose.unraid.example.yml`); README/deployment stress **`main` only**, GHCR pull + build fallback, and **no built-in auth**
+- Unraid template: service URL/key fields optional (configure in Settings on first run); overview notes lack of built-in login
+
 ### Added
 
 - Activity source filter is multi-select (All / Plex / Emby / Trakt / Jellyfin) on Overview and Users, styled like the period segmented control ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Combined Activity collapses same user + canonical media within 24h so one real watch is not counted once per source ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Emby/Jellyfin play events are enriched with provider ids and Tracearr season/episode indexes so Trakt push can scrobble without Emby's Trakt plugin ([#50](https://github.com/Unthred/ArrDash/issues/50))
+- Workflow `make-ghcr-public.yml` to set `ghcr.io/unthred/arrdash` visibility to public
 - Settings → Diagnostics: configurable log level (Trace through Critical, or "Server default"), takes effect immediately with no restart ([#47](https://github.com/Unthred/ArrDash/issues/47))
 
 ### Fixed

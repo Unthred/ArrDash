@@ -7,6 +7,8 @@
 ![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)
 ![MudBlazor](https://img.shields.io/badge/UI-MudBlazor-594AE2)
 
+> **No built-in authentication.** ArrDash has no login page. Anyone who can reach the WebUI sees media titles, watch history, API-key Settings, and host metrics. Run it on a **trusted LAN only**, or put it behind your reverse proxy’s auth (Authelia, Authentik, basic auth, Cloudflare Access, etc.). Do **not** expose port 7979 directly to the internet.
+
 ## Features
 
 | Area | What you get |
@@ -24,17 +26,29 @@
 
 ## Quick start
 
+Use the **`main`** branch only (or the published image built from `main`). Feature branches may be incomplete.
+
 ```bash
-curl -O https://raw.githubusercontent.com/Unthred/ArrDash/main/docker-compose.example.yml
-mv docker-compose.example.yml docker-compose.yml
-# Edit docker-compose.yml — set service URLs and API keys (all optional; the
-# Settings UI can configure everything at runtime too)
+# Prefer the published image (amd64 + arm64)
+curl -fsSL -o docker-compose.yml \
+  https://raw.githubusercontent.com/Unthred/ArrDash/main/docker-compose.example.yml
 docker compose up -d
 ```
 
-Open **http://localhost:7979**. Images are published to `ghcr.io/unthred/arrdash` (amd64 + arm64); building from source is one `docker compose build` away. Further setup (reverse proxy, Unraid, secrets) is in the [deployment guide](docs/deployment.md).
+Open **http://localhost:7979**. On first run you’ll see a welcome card — open **Settings → API keys**, add the services you use, Save. Env vars in compose are optional.
 
-> **Authentication:** ArrDash has no built-in login. Run it on a trusted LAN or behind your reverse proxy's authentication (Authelia, basic auth, etc.) — the dashboard exposes media titles, watch history, and server metrics to anyone who can reach it.
+**If `docker pull ghcr.io/unthred/arrdash:latest` fails** (package not public yet), build from source instead:
+
+```bash
+git clone https://github.com/Unthred/ArrDash.git
+cd ArrDash
+git checkout main
+cp docker-compose.example.yml docker-compose.yml
+# In docker-compose.yml: comment out `image:` and uncomment `build: .`
+docker compose up -d --build
+```
+
+Unraid users who want parity/mover/docker metrics: start from [`docker-compose.unraid.example.yml`](docker-compose.unraid.example.yml) or the template under `unraid/`. Further setup (proxy, secrets) is in the [deployment guide](docs/deployment.md).
 
 ## Documentation
 
@@ -43,7 +57,7 @@ Open **http://localhost:7979**. Images are published to `ghcr.io/unthred/arrdash
 | [docs/README.md](docs/README.md) | Documentation index |
 | [architecture.md](docs/architecture.md) | How the app is structured |
 | [configuration.md](docs/configuration.md) | Environment variables and config files |
-| [deployment.md](docs/deployment.md) | Docker, Unraid, reverse proxy |
+| [deployment.md](docs/deployment.md) | Docker, Unraid, reverse proxy, auth |
 | [settings-reference.md](docs/settings-reference.md) | Every Settings tab and option |
 | [services.md](docs/services.md) | Supported apps and API requirements |
 | [api.md](docs/api.md) | HTTP endpoints |
@@ -70,6 +84,7 @@ See [services.md](docs/services.md) for per-app notes.
 |------|---------|
 | `/config/user-layout.json` | Theme, layout, behaviour preferences |
 | `/config/service-secrets.json` | API keys saved from the Settings UI |
+| `/config/arrdash.db` | Watch history warehouse (SQLite default) |
 
 Environment variables seed initial URLs and keys; the Settings UI can override and persist secrets without redeploying.
 
