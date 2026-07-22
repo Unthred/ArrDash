@@ -1,0 +1,17 @@
+/* Viewport-fit layout for Cleanup lives in wwwroot/css/arrdash.css
+   (needs to style MudBlazor / MainLayout nodes outside CSS isolation). */
+
+.stat-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+}
+
+.cleanup-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    max-width: 220px;
+}

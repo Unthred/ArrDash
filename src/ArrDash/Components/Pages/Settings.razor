@@ -11,6 +11,7 @@
 @inject WatchStatsService WatchStats
 @inject TraktAccountService TraktAccounts
 @inject TraktSyncService TraktSync
+@inject CleanupFeatureAvailability CleanupAvailability
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @implements IDisposable
@@ -476,6 +477,18 @@
                     <SettingField Text="@SettingsHelpTexts.WatchStatsTopLimit">
                         <MudNumericField @bind-Value="_watchStatsTopLimit" @bind-Value:after="ScheduleLivePreviewNow" Label="Leaderboard size" Variant="Variant.Outlined" Min="3" Max="25" />
                     </SettingField>
+                    @if (!CleanupAvailability.IsAvailable)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2" Style="grid-column: 1 / -1">
+                            Cleanup appears in the header once Sonarr or Radarr has a URL and API key and is enabled under Services.
+                        </MudAlert>
+                    }
+                    <SettingField Text="@SettingsHelpTexts.CleanupCandidatesStaleThresholdMonths">
+                        <MudNumericField @bind-Value="_cleanupCandidatesStaleThresholdMonths" @bind-Value:after="ScheduleLivePreviewNow" Label="Cleanup stale threshold (months)" Variant="Variant.Outlined" Min="0" Max="60" HelperText="0 = default (12 months)" />
+                    </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.CleanupCandidatesSyncInterval">
+                        <MudNumericField @bind-Value="_cleanupCandidatesSyncIntervalMinutes" @bind-Value:after="ScheduleLivePreviewNow" Label="Cleanup inventory sync interval (min)" Variant="Variant.Outlined" Min="0" Max="720" HelperText="0 = default (60 min)" />
+                    </SettingField>
                     <SettingField Text="@SettingsHelpTexts.WatchStatsUserAliases" Span2="true">
                         <MudTextField @bind-Value="_watchStatsAliasesText" @bind-Value:after="ScheduleLivePreviewDebounced" Label="User aliases" Variant="Variant.Outlined" Lines="4" Placeholder="Mom|plex|Margaret&#10;Mom|emby|Margaret" />
                     </SettingField>
@@ -795,6 +808,8 @@
     private int _watchStatsBackfillDays;
     private int _watchStatsSyncIntervalMinutes;
     private int _watchStatsTopLimit = 10;
+    private int _cleanupCandidatesStaleThresholdMonths;
+    private int _cleanupCandidatesSyncIntervalMinutes;
     private string _watchStatsAliasesText = "";
     private readonly HashSet<string> _excludedLibraryKeys = new(StringComparer.OrdinalIgnoreCase);
     private List<WatchStatsLibraryInfo> _libraryCatalog = [];
@@ -998,6 +1013,8 @@
         _watchStatsBackfillDays = prefs.WatchStatsBackfillDays;
         _watchStatsSyncIntervalMinutes = prefs.WatchStatsSyncIntervalMinutes;
         _watchStatsTopLimit = prefs.WatchStatsTopLimit;
+        _cleanupCandidatesStaleThresholdMonths = prefs.CleanupCandidatesStaleThresholdMonths;
+        _cleanupCandidatesSyncIntervalMinutes = prefs.CleanupCandidatesSyncIntervalMinutes;
         _watchStatsAliasesText = FormatAliases(prefs.UserAliases);
         _excludedLibraryKeys.Clear();
         foreach (var key in prefs.WatchStatsExcludedLibraries)
@@ -1317,6 +1334,8 @@
         p.WatchStatsBackfillDays = Math.Clamp(_watchStatsBackfillDays, 0, 730);
         p.WatchStatsSyncIntervalMinutes = Math.Clamp(_watchStatsSyncIntervalMinutes, 0, 240);
         p.WatchStatsTopLimit = Math.Clamp(_watchStatsTopLimit, 3, 25);
+        p.CleanupCandidatesStaleThresholdMonths = Math.Clamp(_cleanupCandidatesStaleThresholdMonths, 0, 60);
+        p.CleanupCandidatesSyncIntervalMinutes = Math.Clamp(_cleanupCandidatesSyncIntervalMinutes, 0, 720);
         p.UserAliases = ParseAliases(_watchStatsAliasesText);
         p.WatchStatsExcludedLibraries = _excludedLibraryKeys.Count == 0
             ? []

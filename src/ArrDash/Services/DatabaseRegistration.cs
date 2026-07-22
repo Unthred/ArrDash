@@ -10,6 +10,7 @@ public static class DatabaseRegistration
     {
         services.Configure<DatabaseOptions>(configuration.GetSection(DatabaseOptions.SectionName));
         services.Configure<WatchStatsOptions>(configuration.GetSection(WatchStatsOptions.SectionName));
+        services.Configure<CleanupCandidatesOptions>(configuration.GetSection(CleanupCandidatesOptions.SectionName));
 
         services.AddDbContext<ArrDashDbContext>(options =>
         {

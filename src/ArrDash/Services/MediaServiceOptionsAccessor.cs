@@ -25,7 +25,13 @@ public sealed class MediaServiceOptionsAccessor
 
     public MediaServiceOptions Options => _current;
 
-    public void Reload() => _current = Build();
+    public event Action? Changed;
+
+    public void Reload()
+    {
+        _current = Build();
+        Changed?.Invoke();
+    }
 
     private MediaServiceOptions Build()
     {

@@ -511,6 +511,73 @@ html {
     padding-top: calc(var(--mud-appbar-height, 64px) + 24px);
 }
 
+/* Cleanup: lock page height so only the table body scrolls (#60). */
+.arrdash-main:has(.cleanup-page) {
+    height: 100dvh;
+    overflow: hidden;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.cleanup-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    max-width: 1536px;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+.cleanup-chrome {
+    flex: 0 0 auto;
+}
+
+.cleanup-table-region {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.cleanup-table-fill {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.cleanup-table-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.cleanup-table-shell .mud-table {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100% !important;
+    display: flex;
+    flex-direction: column;
+}
+
+.cleanup-table-shell .mud-table-container {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto !important;
+    height: auto !important;
+    max-height: none !important;
+}
+
 .dashboard-shell {
     max-width: 1440px;
     margin: 0 auto;
@@ -5043,4 +5110,51 @@ html {
     .activity-bar-row {
         grid-template-columns: 4.5rem 1fr 2rem;
     }
+}
+
+/* Shared table scroll shell + back-to-top pill (#56) */
+.table-scroll-shell {
+    position: relative;
+}
+
+.back-to-top-pill {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 14px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--mud-palette-surface) 88%, transparent);
+    color: var(--mud-palette-text-primary);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+    backdrop-filter: blur(10px);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.back-to-top-pill.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+
+.back-to-top-pill:hover {
+    background: var(--mud-palette-surface);
+}
+
+.back-to-top-pill-page {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 1200;
 }

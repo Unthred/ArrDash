@@ -1,0 +1,562 @@
+@page "/cleanup"
+@using ArrDash.Configuration
+@using ArrDash.Models
+@using ArrDash.Services
+@using Microsoft.Extensions.Options
+@inject CleanupCandidatesRepository Repository
+@inject MediaInventorySyncService Sync
+@inject LayoutPreferencesService Prefs
+@inject MediaServiceOptionsAccessor ServiceOptions
+@inject CleanupFeatureAvailability CleanupAvailability
+@inject IOptions<CleanupCandidatesOptions> DefaultOptions
+@inject ExternalLinkService Links
+
+<PageTitle>Cleanup · ArrDash</PageTitle>
+
+@if (!CleanupAvailability.IsAvailable)
+{
+    <div class="cleanup-page" style="max-width:720px;margin:0 auto">
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-4" Icon="@Icons.Material.Filled.CleaningServices">
+            <MudText Typo="Typo.subtitle1" Class="mb-1">Cleanup needs Sonarr or Radarr</MudText>
+            <MudText Typo="Typo.body2" Class="mb-3">
+                This page builds candidates from your Sonarr/Radarr library plus watch history.
+                Configure at least one of those services (URL + API key) in Settings, and leave it enabled.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/settings" StartIcon="@Icons.Material.Filled.Settings">
+                Open Settings
+            </MudButton>
+        </MudAlert>
+    </div>
+}
+else
+{
+<div class="cleanup-page">
+    <div class="cleanup-chrome">
+        <div class="d-flex align-center gap-4 mb-1 flex-wrap">
+            <MudIcon Icon="@Icons.Material.Filled.CleaningServices" Color="Color.Primary" Size="Size.Large" />
+            <MudText Typo="Typo.h4">Cleanup candidates</MudText>
+            <MudSpacer />
+            @if (_status.IsRunning)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+            }
+            <MudText Typo="Typo.caption" Class="muted">@StatusText</MudText>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh"
+                       Disabled="_status.IsRunning" OnClick="RefreshNowAsync">
+                Refresh
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Dashboard" Href="/">
+                Dashboard
+            </MudButton>
+        </div>
+        <MudText Typo="Typo.body2" Class="muted mb-3">
+            Movies and TV largest, unwatched, or untouched in a while. Report only — nothing here deletes anything;
+            click a title to open it in Radarr or Sonarr, or the IMDb icon to look it up.
+            Mark items for deletion to build a planning queue with a reclaimable total; Tags are Sonarr/Radarr
+            requester labels and are empty for most titles.
+        </MudText>
+
+        <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+            <div class="d-flex align-center gap-2 flex-wrap">
+                <MudText Typo="Typo.caption" Class="muted mr-2">View:</MudText>
+                <MudChip T="string" Variant="@(_listView == ListView.Candidates ? Variant.Filled : Variant.Outlined)"
+                         Color="@(_listView == ListView.Candidates ? Color.Primary : Color.Default)"
+                         Icon="@Icons.Material.Filled.CleaningServices"
+                         OnClick="@(() => SetListView(ListView.Candidates))">
+                    Candidates
+                </MudChip>
+                <MudChip T="string" Variant="@(_listView == ListView.DeletionQueue ? Variant.Filled : Variant.Outlined)"
+                         Color="@(_listView == ListView.DeletionQueue ? Color.Error : Color.Default)"
+                         Icon="@Icons.Material.Filled.DeleteSweep"
+                         OnClick="@(() => SetListView(ListView.DeletionQueue))">
+                    Deletion queue (@MarkedCount)
+                </MudChip>
+            </div>
+        </MudPaper>
+
+        @if (!_loading)
+        {
+            <MudGrid Class="mb-3" Spacing="2">
+                <MudItem xs="6" sm="3">
+                    <MudPaper Class="pa-3 stat-card" Elevation="1">
+                        <MudText Typo="Typo.caption" Class="muted">@(_listView == ListView.DeletionQueue ? "Marked" : "Candidates shown")</MudText>
+                        <MudText Typo="Typo.h5">@FilteredCandidates.Count</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Class="pa-3 stat-card" Elevation="1">
+                        <MudText Typo="Typo.caption" Class="muted">@(_listView == ListView.DeletionQueue ? "Would free" : "Reclaimable")</MudText>
+                        <MudText Typo="Typo.h5">@ByteDisplayHelper.Format(FilteredCandidates.Sum(c => c.SizeBytes))</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Class="pa-3 stat-card" Elevation="1">
+                        <MudText Typo="Typo.caption" Class="muted">Movies</MudText>
+                        <MudText Typo="Typo.h5">@FilteredCandidates.Count(c => c.MediaType == "movie")</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Class="pa-3 stat-card" Elevation="1">
+                        <MudText Typo="Typo.caption" Class="muted">Series</MudText>
+                        <MudText Typo="Typo.h5">@FilteredCandidates.Count(c => c.MediaType == "series")</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+        }
+
+        @if (_listView == ListView.Candidates)
+        {
+            <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
+                <div class="d-flex align-center gap-2 mb-2 flex-wrap">
+                    <MudText Typo="Typo.caption" Class="muted mr-2">Show:</MudText>
+                    <MudChip T="string" Variant="@(_mediaTypeFilter == MediaTypeFilter.All ? Variant.Filled : Variant.Outlined)"
+                             Color="@(_mediaTypeFilter == MediaTypeFilter.All ? Color.Primary : Color.Default)"
+                             Icon="@Icons.Material.Filled.SelectAll"
+                             OnClick="@(() => SetMediaTypeFilter(MediaTypeFilter.All))">
+                        All
+                    </MudChip>
+                    <MudChip T="string" Variant="@(_mediaTypeFilter == MediaTypeFilter.Movie ? Variant.Filled : Variant.Outlined)"
+                             Color="@(_mediaTypeFilter == MediaTypeFilter.Movie ? Color.Primary : Color.Default)"
+                             Icon="@Icons.Material.Filled.Movie"
+                             OnClick="@(() => SetMediaTypeFilter(MediaTypeFilter.Movie))">
+                        Movies
+                    </MudChip>
+                    <MudChip T="string" Variant="@(_mediaTypeFilter == MediaTypeFilter.Series ? Variant.Filled : Variant.Outlined)"
+                             Color="@(_mediaTypeFilter == MediaTypeFilter.Series ? Color.Primary : Color.Default)"
+                             Icon="@Icons.Material.Filled.LiveTv"
+                             OnClick="@(() => SetMediaTypeFilter(MediaTypeFilter.Series))">
+                        TV
+                    </MudChip>
+                    <MudSpacer />
+                    <MudSwitch T="bool" Value="_showKept" ValueChanged="OnShowKeptChanged" Color="Color.Success" Label="Show kept items" />
+                    <MudNumericField T="int" Value="_thresholdMonths" ValueChanged="OnThresholdChanged"
+                                      Label="Stale threshold (months)" Variant="Variant.Outlined" Min="1" Max="60"
+                                      Style="max-width:200px" Margin="Margin.Dense" />
+                </div>
+
+                <div class="d-flex align-center gap-2 flex-wrap">
+                    <MudText Typo="Typo.caption" Class="muted mr-2">Reason:</MudText>
+                    <MudChip T="string" Variant="@(_activeFilters.Contains(CleanupReason.NeverWatched) ? Variant.Filled : Variant.Outlined)"
+                             Color="@(_activeFilters.Contains(CleanupReason.NeverWatched) ? Color.Info : Color.Default)"
+                             OnClick="@(() => ToggleFilter(CleanupReason.NeverWatched))">
+                        Never watched
+                    </MudChip>
+                    <MudChip T="string" Variant="@(_activeFilters.Contains(CleanupReason.WatchedLongAgo) ? Variant.Filled : Variant.Outlined)"
+                             Color="@(_activeFilters.Contains(CleanupReason.WatchedLongAgo) ? Color.Warning : Color.Default)"
+                             OnClick="@(() => ToggleFilter(CleanupReason.WatchedLongAgo))">
+                        Watched long ago
+                    </MudChip>
+                    <MudChip T="string" Variant="@(_activeFilters.Contains(CleanupReason.Largest) ? Variant.Filled : Variant.Outlined)"
+                             Color="@(_activeFilters.Contains(CleanupReason.Largest) ? Color.Error : Color.Default)"
+                             OnClick="@(() => ToggleFilter(CleanupReason.Largest))">
+                        Largest
+                    </MudChip>
+                </div>
+            </MudPaper>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3" Dense="true">
+                Planning list only — ArrDash does not delete files. Open each title in Sonarr/Radarr to remove it yourself,
+                then unmark it here. Would free: @ByteDisplayHelper.Format(_candidates.Where(c => c.MarkedForDeletion).Sum(c => c.SizeBytes)).
+            </MudAlert>
+        }
+    </div>
+
+    <div class="cleanup-table-region">
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (FilteredCandidates.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            @(_listView == ListView.DeletionQueue
+                ? "Nothing marked for deletion yet. Use the trash icon on a candidate to add it here."
+                : "No cleanup candidates match the current filters.")
+        </MudAlert>
+    }
+    else
+    {
+        <TableScrollShell Class="cleanup-table-fill">
+            <MudPaper Elevation="1" Class="cleanup-table-shell">
+            <MudTable Items="FilteredCandidates" Hover="true" Dense="true" Striped="true" SortLabel="Sort by"
+                      RowStyleFunc="@RowStyleFor" Virtualize="true">
+                <HeaderContent>
+                    <MudTh Style="width:56px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.NeverDelete)">Keep</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:56px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.MarkedForDeletion)">Delete</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.Title)">Title</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.MediaType)">Type</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => (object?)x.Rating ?? -1d)">Rating</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.SizeBytes)" InitialDirection="SortDirection.Descending">Size</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => (object?)x.AddedUtc ?? DateTimeOffset.MinValue)">Added</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => (object?)x.LastWatchedUtc ?? DateTimeOffset.MinValue)">Last watched</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.WatchedBy.Count)">Watched by</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.Tags.Count)">Tags</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.Reasons.Count)">Reasons</MudTableSortLabel></MudTh>
+                </HeaderContent>
+<RowTemplate>
+                    <MudTd DataLabel="Keep">
+                        <MudTooltip Text="@(context.NeverDelete ? "Marked never delete — click to unmark" : "Mark as never delete")">
+                            <MudIconButton Size="Size.Small"
+                                           Icon="@(context.NeverDelete ? Icons.Material.Filled.Bookmark : Icons.Material.Outlined.BookmarkBorder)"
+                                           Color="@(context.NeverDelete ? Color.Warning : Color.Default)"
+                                           Disabled="@(context.MarkedForDeletion)"
+                                           OnClick="@(() => ToggleKeepAsync(context))" />
+                        </MudTooltip>
+                    </MudTd>
+                    <MudTd DataLabel="Delete">
+                        <MudTooltip Text="@(context.MarkedForDeletion ? "Remove from deletion queue" : "Add to deletion queue")">
+                            <MudIconButton Size="Size.Small"
+                                           Icon="@(context.MarkedForDeletion ? Icons.Material.Filled.Delete : Icons.Material.Outlined.DeleteOutline)"
+                                           Color="@(context.MarkedForDeletion ? Color.Error : Color.Default)"
+                                           Disabled="@(context.NeverDelete)"
+                                           OnClick="@(() => ToggleDeleteMarkAsync(context))" />
+                        </MudTooltip>
+                    </MudTd>
+                    <MudTd DataLabel="Title">
+                        <div class="d-flex align-center gap-1">
+                            @RenderLinkedTitle(context)
+                            @if (!string.IsNullOrWhiteSpace(context.ImdbId))
+                            {
+                                <MudTooltip Text="Look up on IMDb">
+                                    <a href="@($"https://www.imdb.com/title/{context.ImdbId}/")" target="_blank" rel="noopener noreferrer" class="d-flex align-center">
+                                        <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Default" />
+                                    </a>
+                                </MudTooltip>
+                            }
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Type">
+                        <div class="d-flex align-center gap-1">
+                            <MudTooltip Text="@(context.MediaType == "movie" ? "Movie" : "Series")">
+                                <MudIcon Icon="@(context.MediaType == "movie" ? Icons.Material.Filled.Movie : Icons.Material.Filled.LiveTv)" Size="Size.Small" />
+                            </MudTooltip>
+                            @if (context.MediaType == "series" && !string.IsNullOrWhiteSpace(context.SeriesStatus))
+                            {
+                                <MudTooltip Text="@SeriesStatusLabel(context.SeriesStatus)">
+                                    <MudIcon Icon="@SeriesStatusIcon(context.SeriesStatus)"
+                                             Size="Size.Small"
+                                             Color="@SeriesStatusColor(context.SeriesStatus)" />
+                                </MudTooltip>
+                            }
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Rating">
+                        @if (context.Rating is { } rating)
+                        {
+                            <div class="d-flex align-center gap-1">
+                                <MudIcon Icon="@Icons.Material.Filled.Star" Size="Size.Small" Color="@RatingColor(rating)" />
+                                <MudText Typo="Typo.body2">@rating.ToString("0.0")</MudText>
+                            </div>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="muted">—</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Size">@ByteDisplayHelper.Format(context.SizeBytes)</MudTd>
+                    <MudTd DataLabel="Added">@(context.AddedUtc is { } a ? a.ToLocalTime().ToString("dd MMM yyyy") : "—")</MudTd>
+                    <MudTd DataLabel="Last watched">@(context.LastWatchedUtc is { } w ? w.ToLocalTime().ToString("dd MMM yyyy") : "Never")</MudTd>
+                    <MudTd DataLabel="Watched by">
+                        @if (context.WatchedBy.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="muted">—</MudText>
+                        }
+                        else
+                        {
+                            <div class="cleanup-chip-row">
+                                @foreach (var watcher in context.WatchedBy)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Info" Class="mr-1 mb-1">@watcher</MudChip>
+                                }
+                            </div>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Tags">
+                        @if (context.Tags.Count == 0)
+                        {
+                            <MudText Typo="Typo.body2" Class="muted">—</MudText>
+                        }
+                        else
+                        {
+                            <div class="cleanup-chip-row">
+                                @foreach (var tag in context.Tags)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" Class="mr-1 mb-1">@tag</MudChip>
+                                }
+                            </div>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Reasons">
+                        @if (context.NeverDelete)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="Color.Success" Icon="@Icons.Material.Filled.Bookmark" Class="mr-1">Kept</MudChip>
+                        }
+                        @foreach (var reason in context.Reasons)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@ReasonColor(reason)" Class="mr-1">@ReasonLabel(reason)</MudChip>
+                        }
+                        @if (context.Reasons.Count == 0 && context.MarkedForDeletion)
+                        {
+                            <MudText Typo="Typo.caption" Class="muted">No longer a candidate</MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+            </MudPaper>
+        </TableScrollShell>
+    }
+    </div>
+</div>
+}
+
+@code {
+    private enum MediaTypeFilter { All, Movie, Series }
+    private enum ListView { Candidates, DeletionQueue }
+
+    private List<CleanupCandidateItem> _candidates = [];
+    private IReadOnlyList<CleanupCandidateItem> _filtered = [];
+    private int _markedCount;
+    private readonly HashSet<CleanupReason> _activeFilters = new();
+    private MediaTypeFilter _mediaTypeFilter = MediaTypeFilter.All;
+    private ListView _listView = ListView.Candidates;
+    private bool _showKept;
+    private int _thresholdMonths;
+    private bool _loading = true;
+    private MediaInventorySyncStatus _status = new(false, "", null);
+
+    private int MarkedCount => _markedCount;
+    private IReadOnlyList<CleanupCandidateItem> FilteredCandidates => _filtered;
+
+    private string StatusText =>
+        _status.IsRunning
+            ? _status.CurrentMessage
+            : _status.LastSyncAt is { } last
+                ? $"Last synced {TimeDisplayHelper.FormatRelative(last)}"
+                : "Not yet synced";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!CleanupAvailability.IsAvailable)
+            return;
+
+        _thresholdMonths = Prefs.Current.CleanupCandidatesStaleThresholdMonths > 0
+            ? Prefs.Current.CleanupCandidatesStaleThresholdMonths
+            : DefaultOptions.Value.StaleThresholdMonths;
+        _status = Sync.CurrentStatus;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var aliases = Prefs.Current.UserAliases;
+        var inventory = await Repository.GetInventoryAsync(CancellationToken.None);
+        var movieLastPlayed = await Repository.GetMovieLastPlayedAsync(CancellationToken.None);
+        var seriesLastPlayed = await Repository.GetSeriesLastPlayedAsync(CancellationToken.None);
+        var movieWatchers = await Repository.GetMovieWatchersAsync(aliases, CancellationToken.None);
+        var seriesWatchers = await Repository.GetSeriesWatchersAsync(aliases, CancellationToken.None);
+        var tagLabels = await Repository.GetTagLabelsAsync(CancellationToken.None);
+
+        _candidates = CleanupCandidateAnalysisService.Build(
+            inventory,
+            movieLastPlayed,
+            seriesLastPlayed,
+            movieWatchers,
+            seriesWatchers,
+            tagLabels,
+            _thresholdMonths,
+            ServiceOptions.Options.Radarr.Url,
+            ServiceOptions.Options.Sonarr.Url).ToList();
+
+        RebuildFiltered();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void RebuildFiltered()
+    {
+        _markedCount = 0;
+        foreach (var c in _candidates)
+        {
+            if (c.MarkedForDeletion)
+                _markedCount++;
+        }
+
+        if (_listView == ListView.DeletionQueue)
+        {
+            _filtered = _candidates.Where(c => c.MarkedForDeletion).ToList();
+            return;
+        }
+
+        IEnumerable<CleanupCandidateItem> query = _candidates.Where(c => !c.MarkedForDeletion);
+
+        if (!_showKept)
+            query = query.Where(c => !c.NeverDelete);
+
+        query = _mediaTypeFilter switch
+        {
+            MediaTypeFilter.Movie => query.Where(c => c.MediaType == "movie"),
+            MediaTypeFilter.Series => query.Where(c => c.MediaType == "series"),
+            _ => query
+        };
+
+        if (_activeFilters.Count > 0)
+            query = query.Where(c => c.Reasons.Any(_activeFilters.Contains));
+
+        _filtered = query.ToList();
+    }
+
+    private async Task OnThresholdChanged(int value)
+    {
+        _thresholdMonths = Math.Clamp(value, 1, 60);
+        await LoadAsync();
+    }
+
+    private void SetMediaTypeFilter(MediaTypeFilter filter)
+    {
+        _mediaTypeFilter = filter;
+        RebuildFiltered();
+    }
+
+    private void SetListView(ListView view)
+    {
+        _listView = view;
+        RebuildFiltered();
+    }
+
+    private void OnShowKeptChanged(bool value)
+    {
+        _showKept = value;
+        RebuildFiltered();
+    }
+
+    private void ToggleFilter(CleanupReason reason)
+    {
+        if (!_activeFilters.Remove(reason))
+            _activeFilters.Add(reason);
+        RebuildFiltered();
+    }
+
+    private async Task RefreshNowAsync()
+    {
+        await Sync.SyncAsync(CancellationToken.None);
+        _status = Sync.CurrentStatus;
+        await LoadAsync();
+    }
+
+    private async Task ToggleKeepAsync(CleanupCandidateItem item)
+    {
+        var next = !item.NeverDelete;
+        var previous = item;
+        ApplyLocalUpdate(item with { NeverDelete = next, MarkedForDeletion = next ? false : item.MarkedForDeletion });
+        try
+        {
+            await Repository.SetNeverDeleteAsync(item.Source, item.SourceItemId, next, CancellationToken.None);
+        }
+        catch
+        {
+            ApplyLocalUpdate(previous);
+        }
+    }
+
+    private async Task ToggleDeleteMarkAsync(CleanupCandidateItem item)
+    {
+        var next = !item.MarkedForDeletion;
+        var previous = item;
+        ApplyLocalUpdate(item with { MarkedForDeletion = next, NeverDelete = next ? false : item.NeverDelete });
+        try
+        {
+            await Repository.SetMarkedForDeletionAsync(item.Source, item.SourceItemId, next, CancellationToken.None);
+        }
+        catch
+        {
+            ApplyLocalUpdate(previous);
+        }
+    }
+
+    private void ApplyLocalUpdate(CleanupCandidateItem updated)
+    {
+        var index = _candidates.FindIndex(c => c.Source == updated.Source && c.SourceItemId == updated.SourceItemId);
+        if (index < 0)
+            return;
+
+        _candidates[index] = updated;
+        RebuildFiltered();
+    }
+
+    private static string ReasonLabel(CleanupReason reason) => reason switch
+    {
+        CleanupReason.NeverWatched => "Never watched",
+        CleanupReason.WatchedLongAgo => "Watched long ago",
+        CleanupReason.Largest => "Largest",
+        _ => reason.ToString()
+    };
+
+    private static string SeriesStatusLabel(string? status) => status?.ToLowerInvariant() switch
+    {
+        "ended" => "Ended",
+        "continuing" => "Continuing",
+        "upcoming" => "Upcoming",
+        "deleted" => "Deleted from TVDB",
+        _ => string.IsNullOrWhiteSpace(status) ? "Unknown" : status
+    };
+
+    private static string SeriesStatusIcon(string? status) => status?.ToLowerInvariant() switch
+    {
+        "ended" => Icons.Material.Filled.Flag,
+        "continuing" => Icons.Material.Filled.PlayCircle,
+        "upcoming" => Icons.Material.Filled.Event,
+        "deleted" => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.HelpOutline
+    };
+
+    private static Color SeriesStatusColor(string? status) => status?.ToLowerInvariant() switch
+    {
+        "ended" => Color.Success,
+        "continuing" => Color.Info,
+        "upcoming" => Color.Warning,
+        "deleted" => Color.Error,
+        _ => Color.Default
+    };
+
+    private static Color RatingColor(double rating) => rating switch
+    {
+        >= 7 => Color.Success,
+        >= 5 => Color.Warning,
+        _ => Color.Error
+    };
+
+    private static Color ReasonColor(CleanupReason reason) => reason switch
+    {
+        CleanupReason.NeverWatched => Color.Info,
+        CleanupReason.WatchedLongAgo => Color.Warning,
+        CleanupReason.Largest => Color.Error,
+        _ => Color.Default
+    };
+
+    private string RowStyleFor(CleanupCandidateItem item, int index) =>
+        item.NeverDelete ? "opacity:0.6" : item.MarkedForDeletion ? "opacity:0.85" : "";
+
+    private RenderFragment RenderLinkedTitle(CleanupCandidateItem item) => builder =>
+    {
+        if (item.ExternalUrl is not null)
+        {
+            builder.OpenElement(0, "a");
+            builder.AddAttribute(1, "href", item.ExternalUrl);
+            builder.AddAttribute(2, "target", ExternalLinkService.TargetAttribute(Prefs.Current.ExternalLinkTarget));
+            builder.AddAttribute(3, "rel", "noopener noreferrer");
+        }
+        else
+        {
+            builder.OpenElement(0, "span");
+        }
+
+        var label = item.Year is { } year ? $"{item.Title} ({year})" : item.Title;
+        builder.AddContent(4, label);
+        builder.CloseElement();
+    };
+}

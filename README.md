@@ -17,6 +17,7 @@
 | **Now playing** | Live Plex, Emby, and Jellyfin sessions with progress |
 | **Activity** | Watch history warehouse (Plex/Emby/Jellyfin/Trakt) — charts, leaderboards, drilldowns, per-library include/exclude |
 | **Trakt** | Multi-account watched-history import (full depth), optional push of new plays, posters via library match or TMDB |
+| **Cleanup** | Optional Sonarr/Radarr library cleanup candidates (nav hidden until one is configured) |
 | **Layout** | Panel order, hide/show, Cards / List / Table per panel |
 | **Appearance** | Light / dark / system theme, colours, density, poster size |
 | **Kiosk** | Full-screen TV mode, panel rotation, screensaver |

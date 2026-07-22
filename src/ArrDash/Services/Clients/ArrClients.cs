@@ -156,6 +156,32 @@ public abstract class ArrClientBase
         return doc.RootElement.Clone();
     }
 
+    /// <summary>Sonarr/Radarr <c>/api/v3/tag</c> — label map for inventory TagsJson ids.</summary>
+    public async Task<IReadOnlyList<ArrTagDto>> FetchTagsAsync(CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return [];
+
+        var tags = await GetJsonAsync($"/api/{ApiVersion}/tag", ct);
+        if (tags is null || tags.Value.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var results = new List<ArrTagDto>();
+        foreach (var item in tags.Value.EnumerateArray())
+        {
+            if (!item.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.Number)
+                continue;
+
+            var label = item.TryGetProperty("label", out var labelEl) ? labelEl.GetString() : null;
+            if (string.IsNullOrWhiteSpace(label))
+                continue;
+
+            results.Add(new ArrTagDto(idEl.GetInt32(), label.Trim()));
+        }
+
+        return results;
+    }
+
     protected async Task<(ServiceWorkload? Workload, ServiceAttentionLevel Attention)> FetchArrSnapshotAsync(CancellationToken ct)
     {
         if (!IsConfigured)
@@ -650,6 +676,58 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
             showCount);
     }
 
+    public async Task<IReadOnlyList<SeriesInventoryDto>> FetchInventoryAsync(CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return [];
+
+        var series = await GetJsonAsync("/api/v3/series", ct);
+        if (series is null || series.Value.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var items = new List<SeriesInventoryDto>();
+        foreach (var item in series.Value.EnumerateArray())
+        {
+            if (!item.TryGetProperty("id", out var idEl))
+                continue;
+
+            var title = item.TryGetProperty("title", out var titleEl) ? titleEl.GetString() ?? "Unknown" : "Unknown";
+            int? year = item.TryGetProperty("year", out var yearEl) && yearEl.GetInt32() > 0 ? yearEl.GetInt32() : null;
+            var slug = item.TryGetProperty("titleSlug", out var slugEl) ? slugEl.GetString() : null;
+            var imdbId = item.TryGetProperty("imdbId", out var imdbEl) ? imdbEl.GetString() : null;
+            int? tvdbId = item.TryGetProperty("tvdbId", out var tvdbEl) ? tvdbEl.GetInt32() : null;
+            var monitored = item.TryGetProperty("monitored", out var monEl) && monEl.GetBoolean();
+            DateTimeOffset? added = item.TryGetProperty("added", out var addedEl)
+                && DateTimeOffset.TryParse(addedEl.GetString(), out var addedParsed)
+                    ? addedParsed
+                    : null;
+            var tagIds = item.TryGetProperty("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array
+                ? tagsEl.EnumerateArray().Select(t => t.GetInt32()).ToList()
+                : [];
+            var seriesStatus = item.TryGetProperty("status", out var statusEl) ? statusEl.GetString() : null;
+
+            long sizeOnDisk = 0;
+            int? episodeFileCount = null;
+            var hasFile = false;
+            if (item.TryGetProperty("statistics", out var stats))
+            {
+                sizeOnDisk = stats.TryGetProperty("sizeOnDisk", out var sizeEl) ? sizeEl.GetInt64() : 0;
+                episodeFileCount = stats.TryGetProperty("episodeFileCount", out var filesEl) ? filesEl.GetInt32() : null;
+                hasFile = episodeFileCount is > 0;
+            }
+
+            double? rating = item.TryGetProperty("ratings", out var ratingsEl) && ratingsEl.TryGetProperty("value", out var ratingValueEl)
+                && ratingValueEl.ValueKind is JsonValueKind.Number
+                    ? ratingValueEl.GetDouble()
+                    : null;
+
+            items.Add(new SeriesInventoryDto(
+                idEl.GetInt32(), title, year, slug, imdbId, tvdbId, sizeOnDisk, episodeFileCount, monitored, hasFile, added, tagIds, rating, seriesStatus));
+        }
+
+        return items;
+    }
+
     private static List<List<ParsedHistoryEntry>> ClusterByImportWindow(
         IReadOnlyList<ParsedHistoryEntry> episodes,
         TimeSpan maxGap)
@@ -1028,6 +1106,51 @@ public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor op
             "#f5c518",
             Options.Url.TrimEnd('/'),
             total);
+    }
+
+    public async Task<IReadOnlyList<MovieInventoryDto>> FetchInventoryAsync(CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return [];
+
+        var movies = await GetJsonAsync("/api/v3/movie", ct);
+        if (movies is null || movies.Value.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var items = new List<MovieInventoryDto>();
+        foreach (var item in movies.Value.EnumerateArray())
+        {
+            if (!item.TryGetProperty("id", out var idEl))
+                continue;
+
+            var title = item.TryGetProperty("title", out var titleEl) ? titleEl.GetString() ?? "Unknown" : "Unknown";
+            int? year = item.TryGetProperty("year", out var yearEl) && yearEl.GetInt32() > 0 ? yearEl.GetInt32() : null;
+            var slug = item.TryGetProperty("titleSlug", out var slugEl) ? slugEl.GetString() : null;
+            var imdbId = item.TryGetProperty("imdbId", out var imdbEl) ? imdbEl.GetString() : null;
+            int? tmdbId = item.TryGetProperty("tmdbId", out var tmdbEl) ? tmdbEl.GetInt32() : null;
+            var sizeOnDisk = item.TryGetProperty("sizeOnDisk", out var sizeEl) ? sizeEl.GetInt64() : 0;
+            var monitored = item.TryGetProperty("monitored", out var monEl) && monEl.GetBoolean();
+            var hasFile = item.TryGetProperty("hasFile", out var hasFileEl) && hasFileEl.GetBoolean();
+            DateTimeOffset? added = item.TryGetProperty("added", out var addedEl)
+                && DateTimeOffset.TryParse(addedEl.GetString(), out var addedParsed)
+                    ? addedParsed
+                    : null;
+            var tagIds = item.TryGetProperty("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array
+                ? tagsEl.EnumerateArray().Select(t => t.GetInt32()).ToList()
+                : [];
+
+            double? rating = item.TryGetProperty("ratings", out var ratingsEl)
+                && ratingsEl.TryGetProperty("imdb", out var imdbRatingEl)
+                && imdbRatingEl.TryGetProperty("value", out var ratingValueEl)
+                && ratingValueEl.ValueKind is JsonValueKind.Number
+                    ? ratingValueEl.GetDouble()
+                    : null;
+
+            items.Add(new MovieInventoryDto(
+                idEl.GetInt32(), title, year, slug, imdbId, tmdbId, sizeOnDisk, monitored, hasFile, added, tagIds, rating));
+        }
+
+        return items;
     }
 
     private async Task<Dictionary<int, MovieInfo>> LoadMovieLookupAsync(

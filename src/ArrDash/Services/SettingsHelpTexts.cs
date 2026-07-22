@@ -102,6 +102,8 @@ public static class SettingsHelpTexts
     public const string WatchStatsBackfillDays = "On first sync, how many days of history to pull. 0 uses the server default (90).";
     public const string WatchStatsSyncInterval = "Minutes between background history sync runs. 0 uses the server default (20).";
     public const string WatchStatsTopLimit = "How many rows to show in each Watch Stats leaderboard.";
+    public const string CleanupCandidatesStaleThresholdMonths = "How many months since last watched (or since added, if never watched) before a movie/show is flagged as a cleanup candidate. 0 uses the server default (12).";
+    public const string CleanupCandidatesSyncInterval = "Minutes between background inventory sync runs for the Cleanup page. 0 uses the server default (60).";
     public const string ShowCombinedWatchStats = "Show a merged Plex + Emby + Jellyfin view in the Watch Stats panel.";
     public const string ShowPlexWatchStats = "Include Plex stats in the Watch Stats panel.";
     public const string ShowEmbyWatchStats = "Include Emby stats in the Watch Stats panel.";

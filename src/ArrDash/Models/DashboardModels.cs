@@ -389,6 +389,8 @@ public sealed class UserLayoutPreferences
     public KioskRotateMode KioskRotate { get; set; } = KioskRotateMode.Off;
     public int KioskRotateSeconds { get; set; } = 30;
     public bool ShowSettingsHelp { get; set; }
+    public int CleanupCandidatesStaleThresholdMonths { get; set; }
+    public int CleanupCandidatesSyncIntervalMinutes { get; set; }
 }
 
 public enum NetworkBandwidthDirection

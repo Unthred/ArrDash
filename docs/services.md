@@ -128,6 +128,22 @@ Each service reports:
 
 Sonarr, Radarr, and Chaptarr do not show version strings inline; version (if any) may appear on hover for other services.
 
+## Cleanup candidates
+
+The **Cleanup** page (`/cleanup`) is a read-only report of movies/series that are large, never watched, or not watched recently. It does not delete anything.
+
+The Cleanup header icon is shown only when **Sonarr and/or Radarr** is configured (URL + API key) and enabled under Services. Direct visits to `/cleanup` without that setup show a short “configure Sonarr or Radarr” message instead of an empty table.
+
+| Column / signal | Source |
+|-----------------|--------|
+| Inventory (title, size, added, tags) | Periodic sync from Sonarr/Radarr into `MediaInventoryItems` + `ArrTags` |
+| Last watched / Watched by | Local `PlayEvents` warehouse (Plex/Emby/Jellyfin/Trakt history sync) |
+| Tags | Sonarr/Radarr tag labels (often Overseerr requester names); most titles have none |
+| Keep / Deletion queue | Local flags on inventory rows — planning aids only; ArrDash never deletes media |
+| Series status icon | Sonarr `status` (ended / continuing / upcoming) shown next to Type for TV |
+
+Watched-by names respect **Watch Stats user aliases** from Settings. Click a title to open it in Sonarr/Radarr. Use the trash icon to build a **Deletion queue** with a would-free total.
+
 ## Disabling a service
 
 **Settings → Services** toggle off skips HTTP calls entirely. Useful when an app is down for maintenance.

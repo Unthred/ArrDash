@@ -61,6 +61,7 @@
         @switch (ViewMode)
         {
             case PanelViewMode.Table:
+                <TableScrollShell>
                 <MudTable Items="Items" Hover="true" Dense="true" Class="download-table">
                     <HeaderContent>
                         <MudTh><MudTableSortLabel SortBy="new Func<DownloadItem, object>(x => x.Title)">Title</MudTableSortLabel></MudTh>
@@ -85,6 +86,7 @@
                         }
                     </RowTemplate>
                 </MudTable>
+                </TableScrollShell>
                 break;
 
             case PanelViewMode.Compact:
