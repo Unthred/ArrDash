@@ -93,6 +93,22 @@ public static class CountDisplayHelper
 
 public static class TimeDisplayHelper
 {
+    /// <summary>Playback position/duration as m:ss or h:mm:ss.</summary>
+    public static string FormatPlayback(long milliseconds)
+    {
+        if (milliseconds < 0)
+            milliseconds = 0;
+
+        var totalSeconds = milliseconds / 1000;
+        var hours = totalSeconds / 3600;
+        var minutes = totalSeconds % 3600 / 60;
+        var seconds = totalSeconds % 60;
+
+        return hours > 0
+            ? $"{hours}:{minutes:00}:{seconds:00}"
+            : $"{minutes}:{seconds:00}";
+    }
+
     public static string Format(DateTimeOffset ts, TimeDisplayFormat format) => format switch
     {
         TimeDisplayFormat.Clock => ts.ToLocalTime().ToString("HH:mm"),

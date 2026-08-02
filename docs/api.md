@@ -70,6 +70,8 @@ Returns the current in-memory `DashboardSnapshot` (same payload pushed over Sign
 | `user`, `title`, `subtitle`, `device` | Display text |
 | `mediaType` | Upstream media type string |
 | `progressPercent` | 0–100 |
+| `positionMs` | Current playback position in milliseconds (null if duration unknown) |
+| `durationMs` | Total media duration in milliseconds (null if unknown) |
 | `thumbnailUrl`, `externalUrl` | Same-origin poster proxy / deep link |
 | `isLocal` | `true` = LAN, `false` = WAN, `null` if the upstream API didn't expose enough to tell |
 | `bitrateKbps` | Source media bitrate in kbps, if known |

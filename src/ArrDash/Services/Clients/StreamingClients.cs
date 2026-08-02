@@ -58,9 +58,9 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
             ?? el.Descendants("User").FirstOrDefault()?.Attribute("title")?.Value
             ?? "Unknown";
 
-        var duration = ParseLong(el.Attribute("duration")?.Value);
-        var viewOffset = ParseLong(el.Attribute("viewOffset")?.Value);
-        var progress = duration > 0 ? Math.Clamp(viewOffset * 100.0 / duration, 0, 100) : 0;
+        var durationMs = ParseLong(el.Attribute("duration")?.Value);
+        var positionMs = ParseLong(el.Attribute("viewOffset")?.Value);
+        var progress = durationMs > 0 ? Math.Clamp(positionMs * 100.0 / durationMs, 0, 100) : 0;
 
         var ratingKey = el.Attribute("ratingKey")?.Value;
         var thumb = el.Attribute("thumb")?.Value ?? el.Attribute("parentThumb")?.Value ?? el.Attribute("grandparentThumb")?.Value;
@@ -103,7 +103,9 @@ public sealed class PlexClient(HttpClient http, MediaServiceOptionsAccessor opti
             isLocal,
             bitrateKbps,
             bandwidthKbps,
-            resolution);
+            resolution,
+            durationMs > 0 ? positionMs : null,
+            durationMs > 0 ? durationMs : null);
     }
 
     private static string? BuildSubtitle(XElement el)
@@ -186,12 +188,18 @@ public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor opti
         var type = item.TryGetProperty("Type", out var t) ? t.GetString() ?? "Video" : "Video";
 
         double progress = 0;
+        long? positionMs = null;
+        long? durationMs = null;
         if (session.TryGetProperty("PlayState", out var ps))
         {
-            var pos = ps.TryGetProperty("PositionTicks", out var pt) ? pt.GetInt64() : 0;
-            var run = item.TryGetProperty("RunTimeTicks", out var rt) ? rt.GetInt64() : 0;
-            if (run > 0)
-                progress = Math.Clamp(pos * 100.0 / run, 0, 100);
+            var posTicks = ps.TryGetProperty("PositionTicks", out var pt) ? pt.GetInt64() : 0;
+            var runTicks = item.TryGetProperty("RunTimeTicks", out var rt) ? rt.GetInt64() : 0;
+            if (runTicks > 0)
+            {
+                progress = Math.Clamp(posTicks * 100.0 / runTicks, 0, 100);
+                positionMs = posTicks / TimeSpan.TicksPerMillisecond;
+                durationMs = runTicks / TimeSpan.TicksPerMillisecond;
+            }
         }
 
         string? thumbUrl = null;
@@ -225,7 +233,9 @@ public sealed class EmbyClient(HttpClient http, MediaServiceOptionsAccessor opti
             isLocal,
             bitrateKbps,
             bandwidthKbps,
-            resolution);
+            resolution,
+            positionMs,
+            durationMs);
     }
 
     private static (int? BitrateKbps, int? BandwidthKbps) ExtractBitrateAndBandwidth(JsonElement session, JsonElement item)
@@ -331,12 +341,18 @@ public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor 
         var type = item.TryGetProperty("Type", out var t) ? t.GetString() ?? "Video" : "Video";
 
         double progress = 0;
+        long? positionMs = null;
+        long? durationMs = null;
         if (session.TryGetProperty("PlayState", out var ps))
         {
-            var pos = ps.TryGetProperty("PositionTicks", out var pt) ? pt.GetInt64() : 0;
-            var run = item.TryGetProperty("RunTimeTicks", out var rt) ? rt.GetInt64() : 0;
-            if (run > 0)
-                progress = Math.Clamp(pos * 100.0 / run, 0, 100);
+            var posTicks = ps.TryGetProperty("PositionTicks", out var pt) ? pt.GetInt64() : 0;
+            var runTicks = item.TryGetProperty("RunTimeTicks", out var rt) ? rt.GetInt64() : 0;
+            if (runTicks > 0)
+            {
+                progress = Math.Clamp(posTicks * 100.0 / runTicks, 0, 100);
+                positionMs = posTicks / TimeSpan.TicksPerMillisecond;
+                durationMs = runTicks / TimeSpan.TicksPerMillisecond;
+            }
         }
 
         string? thumbUrl = null;
@@ -370,7 +386,9 @@ public sealed class JellyfinClient(HttpClient http, MediaServiceOptionsAccessor 
             isLocal,
             bitrateKbps,
             bandwidthKbps,
-            resolution);
+            resolution,
+            positionMs,
+            durationMs);
     }
 
     private static (int? BitrateKbps, int? BandwidthKbps) ExtractBitrateAndBandwidth(JsonElement session, JsonElement item)

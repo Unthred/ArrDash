@@ -151,7 +151,7 @@ Activated via layout query or auto-kiosk setting. Supports panel rotation, scree
 Key types live in `Models/DashboardModels.cs` and `Models/SettingsModels.cs`:
 
 - `DownloadItem` — one recent import/grab with poster, quality, episode metadata, deep links
-- `ActiveSession` — Plex/Emby/Jellyfin playback row, including LAN/WAN, bitrate, and bandwidth when the upstream API exposes them
+- `ActiveSession` — Plex/Emby/Jellyfin playback row, including position/duration, LAN/WAN, bitrate, and bandwidth when the upstream API exposes them
 - `ServiceHealth` — status chip data
 - `LibraryStatItem` — one library rollup row (used by the Libraries panel)
 - `UnraidActivity` — parity/mover/container-update state for the server metrics bar

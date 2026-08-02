@@ -91,6 +91,14 @@ html {
     background-color: var(--progress-color, var(--arrdash-accent, var(--mud-palette-primary))) !important;
 }
 
+.now-playing-progress.mud-progress-linear {
+    height: 1.5rem;
+}
+
+.now-playing-progress .mud-progress-linear-content {
+    z-index: 2;
+}
+
 .arrdash-root .mud-button.mud-button-filled.mud-primary {
     background-color: var(--arrdash-button-fill, var(--mud-palette-primary)) !important;
     color: var(--arrdash-button-text, var(--mud-palette-primary-text, #fff)) !important;
@@ -1985,6 +1993,55 @@ html {
     margin-top: 6px;
     font-size: 0.8rem;
     color: var(--mud-palette-text-secondary);
+}
+
+.session-progress {
+    width: 100%;
+}
+
+.progress-bar-pct {
+    font-size: 0.7rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.78);
+    padding: 0.15em 0.5em;
+    border-radius: 999px;
+}
+
+.progress-times {
+    position: relative;
+    width: 100%;
+    height: 1.1em;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--mud-palette-text-secondary);
+}
+
+.progress-times-start,
+.progress-times-current,
+.progress-times-end {
+    position: absolute;
+    top: 0;
+    white-space: nowrap;
+}
+
+.progress-times-start {
+    left: 0;
+}
+
+.progress-times-current {
+    left: 50%;
+    transform: translateX(-50%);
+    font-weight: 600;
+    color: var(--mud-palette-text-primary);
+}
+
+.progress-times-end {
+    right: 0;
+    text-align: right;
 }
 
 .compact-list {
