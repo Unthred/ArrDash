@@ -96,7 +96,9 @@ public sealed record ActiveSession(
     bool? IsLocal = null,
     int? BitrateKbps = null,
     int? BandwidthKbps = null,
-    string? Resolution = null);
+    string? Resolution = null,
+    long? PositionMs = null,
+    long? DurationMs = null);
 
 public enum ServiceWorkloadKind
 {

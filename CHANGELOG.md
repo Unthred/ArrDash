@@ -13,6 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Now Playing: percentage chip on the progress bar; start / current / length times aligned under the bar ([#66](https://github.com/Unthred/ArrDash/issues/66))
 - Cleanup candidates page: sync Sonarr/Radarr inventory and list never-watched / stale / largest titles (report-only; Keep flags) ([#62](https://github.com/Unthred/ArrDash/issues/62))
 - Cleanup candidates table shows **Watched by** (distinct users from local play history, with Watch Stats aliases) and **Tags** (Sonarr/Radarr labels such as requester tags; empty for most titles) ([#52](https://github.com/Unthred/ArrDash/issues/52))
 - Cleanup **Deletion queue**: mark candidates with the trash icon; switch to the Deletion queue view for a planning list with a would-free total (still report-only — ArrDash does not delete files) ([#53](https://github.com/Unthred/ArrDash/issues/53))

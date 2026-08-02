@@ -104,11 +104,23 @@
                                     <span>@session.Device</span>
                                 }
                             </div>
-                            <MudProgressLinear Value="@session.ProgressPercent"
-                                               Style="@ProgressStyle"
-                                               Rounded="true"
-                                               Class="mt-3 now-playing-progress" />
-                            <div class="progress-label">@($"{session.ProgressPercent:0.#}%")</div>
+                            <div class="session-progress mt-3">
+                                <MudProgressLinear Value="@session.ProgressPercent"
+                                                   Style="@ProgressStyle"
+                                                   Rounded="true"
+                                                   Size="Size.Large"
+                                                   Class="now-playing-progress">
+                                    <span class="progress-bar-pct">@($"{session.ProgressPercent:0.#}%")</span>
+                                </MudProgressLinear>
+                                @if (session.DurationMs is long durationMs)
+                                {
+                                    <div class="progress-times">
+                                        <span class="progress-times-start" title="Start">@TimeDisplayHelper.FormatPlayback(0)</span>
+                                        <span class="progress-times-current" title="Current">@TimeDisplayHelper.FormatPlayback(session.PositionMs ?? 0)</span>
+                                        <span class="progress-times-end" title="Length">@TimeDisplayHelper.FormatPlayback(durationMs)</span>
+                                    </div>
+                                }
+                            </div>
                         </div>
                     </div>
                 }

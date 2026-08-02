@@ -28,4 +28,14 @@ public sealed class TimeDisplayHelperTests
         var label = TimeDisplayHelper.FormatRelative(ts);
         Assert.Equal("just now", label);
     }
+
+    [Theory]
+    [InlineData(0, "0:00")]
+    [InlineData(1_000, "0:01")]
+    [InlineData(65_000, "1:05")]
+    [InlineData(3_723_000, "1:02:03")]
+    public void FormatPlayback_formats_ms_as_m_ss_or_h_mm_ss(long ms, string expected)
+    {
+        Assert.Equal(expected, TimeDisplayHelper.FormatPlayback(ms));
+    }
 }
