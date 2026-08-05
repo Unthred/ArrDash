@@ -9,7 +9,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 
 - Trakt **library watched → history + collection**: when Push is on, Sync reads Emby IsPlayed / Plex viewCount (including missing-on-disk) and pushes gaps to Trakt (capped 500 history + 500 collection per run; resumes via `TraktLibrarySyncLinks`) ([#70](https://github.com/Unthred/ArrDash/issues/70))
-- Live **Emby/Plex play webhooks** (`POST /api/webhooks/emby|plex?token=…`) scrobble Squiggley’s completed plays to Trakt; token in OpenBao `secret/arrdash/webhook-token`; Settings shows copy-paste URLs ([#70](https://github.com/Unthred/ArrDash/issues/70))
+- Live **Emby/Plex play webhooks** (`POST /api/webhooks/emby|plex?token=…`) scrobble Squiggley’s completed plays to Trakt; token in OpenBao `secret/arrdash/webhook-token`; Settings section titled **Emby / Plex play webhooks** ([#70](https://github.com/Unthred/ArrDash/issues/70))
 - Trakt client: collection get/add + scrobble/stop APIs
 
 ### Changed
