@@ -16,6 +16,98 @@
     max-width: 220px;
 }
 
+.cleanup-chip-row--clamp {
+    flex-wrap: nowrap;
+    max-height: 1.4rem;
+    overflow: hidden;
+    max-width: 180px;
+}
+
+.cleanup-row--kept {
+    opacity: 0.6;
+}
+
+.cleanup-row--delete {
+    opacity: 0.85;
+}
+
+.cleanup-row-poster {
+    display: block;
+    width: 32px;
+    height: 48px;
+    object-fit: cover;
+    border-radius: 2px;
+    background: rgba(127, 127, 127, 0.15);
+}
+
+.cleanup-poster-cell {
+    padding-top: 4px !important;
+    padding-bottom: 4px !important;
+}
+
+.cleanup-cards-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+}
+
+.cleanup-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    padding: 4px 2px 16px;
+}
+
+.cleanup-card {
+    display: flex;
+    gap: 12px;
+    padding: 10px;
+    min-height: 132px;
+}
+
+.cleanup-card--kept {
+    opacity: 0.7;
+}
+
+.cleanup-card--delete {
+    outline: 1px solid var(--mud-palette-error);
+}
+
+.cleanup-card-poster {
+    flex: 0 0 80px;
+    width: 80px;
+    height: 120px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: rgba(127, 127, 127, 0.15);
+}
+
+.cleanup-card-poster img {
+    width: 80px;
+    height: 120px;
+    object-fit: cover;
+    display: block;
+}
+
+.cleanup-card-poster-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.5;
+}
+
+.cleanup-card-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.cleanup-card-title {
+    font-weight: 600;
+    line-height: 1.25;
+}
+
 .cleanup-search-field {
     flex: 1 1 180px;
 }

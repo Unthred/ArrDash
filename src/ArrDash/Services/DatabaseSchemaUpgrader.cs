@@ -35,7 +35,8 @@ public static class DatabaseSchemaUpgrader
         ("NeverDelete", "INTEGER NOT NULL DEFAULT 0"),
         ("MarkedForDeletion", "INTEGER NOT NULL DEFAULT 0"),
         ("SeriesStatus", "TEXT NULL"),
-        ("Rating", "REAL NULL")
+        ("Rating", "REAL NULL"),
+        ("ReleasedUtc", "TEXT NULL")
     ];
 
     public static async Task UpgradeAsync(ArrDashDbContext db, ILogger logger, CancellationToken ct = default)
@@ -141,6 +142,7 @@ public static class DatabaseSchemaUpgrader
                 "SeriesStatus" TEXT NULL,
                 "Rating" REAL NULL,
                 "AddedUtc" TEXT NULL,
+                "ReleasedUtc" TEXT NULL,
                 "TagsJson" TEXT NOT NULL,
                 "LastSeenUtc" TEXT NOT NULL,
                 "UpdatedAtUtc" TEXT NOT NULL

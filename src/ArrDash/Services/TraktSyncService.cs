@@ -46,9 +46,34 @@ public sealed class TraktSyncService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Soft boot: do not kick a full Sync on every container restart. Live plays go via
+        // Emby/Plex webhooks; batch Sync runs once daily at 04:00 Europe/London.
         await Task.Delay(TimeSpan.FromSeconds(45), stoppingToken);
+
         while (!stoppingToken.IsCancellationRequested)
         {
+            var delay = DelayUntilNextLocalHour(hour: 4, timeZoneId: "Europe/London");
+            try
+            {
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("Europe/London");
+                _nextAutoSyncLocal = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow.Add(delay), tz);
+            }
+            catch
+            {
+                _nextAutoSyncLocal = DateTimeOffset.UtcNow.Add(delay);
+            }
+
+            logger.LogInformation("Next Trakt background sync in {Hours:F1}h (04:00 Europe/London)", delay.TotalHours);
+            SetStatus($"Next auto-sync {_nextAutoSyncLocal:dd MMM HH:mm} (London)", forceNotify: false);
+            try
+            {
+                await Task.Delay(delay, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+
             try
             {
                 var list = await accounts.ListAccountsAsync(stoppingToken);
@@ -60,8 +85,47 @@ public sealed class TraktSyncService(
                 logger.LogWarning(ex, "Trakt background sync failed");
                 SetStatus($"Sync failed: {ex.Message}", forceNotify: true);
             }
+        }
+    }
 
-            await Task.Delay(TimeSpan.FromMinutes(60), stoppingToken);
+    private DateTimeOffset _nextAutoSyncLocal;
+
+    /// <summary>Delay until the next occurrence of <paramref name="hour"/>:00 in <paramref name="timeZoneId"/>.</summary>
+    internal static TimeSpan DelayUntilNextLocalHour(int hour, string timeZoneId, DateTimeOffset? nowUtc = null)
+    {
+        var tz = ResolveTimeZone(timeZoneId);
+        var now = nowUtc ?? DateTimeOffset.UtcNow;
+        var localNow = TimeZoneInfo.ConvertTime(now, tz);
+        var nextLocal = new DateTimeOffset(
+            localNow.Year, localNow.Month, localNow.Day, hour, 0, 0, localNow.Offset);
+        if (nextLocal <= localNow)
+            nextLocal = nextLocal.AddDays(1);
+
+        // Recompute offset after AddDays (DST).
+        var nextUnspec = DateTime.SpecifyKind(
+            new DateTime(nextLocal.Year, nextLocal.Month, nextLocal.Day, hour, 0, 0),
+            DateTimeKind.Unspecified);
+        var nextUtc = TimeZoneInfo.ConvertTimeToUtc(nextUnspec, tz);
+        return nextUtc - now.UtcDateTime;
+    }
+
+    private static TimeZoneInfo ResolveTimeZone(string timeZoneId)
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            // Linux sometimes only has the IANA id; Windows may need different id — try UTC+0 fallback via London alias.
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("GB");
+            }
+            catch
+            {
+                return TimeZoneInfo.Utc;
+            }
         }
     }
 

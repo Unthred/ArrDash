@@ -22,6 +22,8 @@ public sealed class MediaInventoryItemEntity
     public string? SeriesStatus { get; set; }
     public double? Rating { get; set; }
     public DateTimeOffset? AddedUtc { get; set; }
+    /// <summary>Theatrical/digital/physical release (movies) or first aired (series).</summary>
+    public DateTimeOffset? ReleasedUtc { get; set; }
     public string TagsJson { get; set; } = "[]";
     public DateTimeOffset LastSeenUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }

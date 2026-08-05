@@ -111,6 +111,7 @@ public static class CleanupCandidateAnalysisService
                 item.Year,
                 item.SizeOnDiskBytes,
                 item.AddedUtc,
+                item.ReleasedUtc,
                 lastWatched,
                 watchedBy,
                 tags,

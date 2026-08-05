@@ -11,6 +11,7 @@ public sealed record MovieInventoryDto(
     bool Monitored,
     bool HasFile,
     DateTimeOffset? AddedUtc,
+    DateTimeOffset? ReleasedUtc,
     IReadOnlyList<int> TagIds,
     double? Rating);
 
@@ -26,6 +27,7 @@ public sealed record SeriesInventoryDto(
     bool Monitored,
     bool HasFile,
     DateTimeOffset? AddedUtc,
+    DateTimeOffset? ReleasedUtc,
     IReadOnlyList<int> TagIds,
     double? Rating,
     string? SeriesStatus);
@@ -52,6 +54,7 @@ public sealed record CleanupCandidateItem(
     int? Year,
     long SizeBytes,
     DateTimeOffset? AddedUtc,
+    DateTimeOffset? ReleasedUtc,
     DateTimeOffset? LastWatchedUtc,
     IReadOnlyList<string> WatchedBy,
     IReadOnlyList<string> Tags,
@@ -62,3 +65,10 @@ public sealed record CleanupCandidateItem(
     bool MarkedForDeletion,
     double? Rating,
     string? SeriesStatus);
+
+public enum CleanupDisplayMode
+{
+    Compact = 0,
+    Posters = 1,
+    Cards = 2
+}

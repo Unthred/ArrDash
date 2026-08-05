@@ -101,6 +101,7 @@ public sealed class MediaInventorySyncService(
                 existing.HasFile = movie.HasFile;
                 existing.Rating = movie.Rating;
                 existing.AddedUtc = movie.AddedUtc;
+                existing.ReleasedUtc = movie.ReleasedUtc;
                 existing.TagsJson = System.Text.Json.JsonSerializer.Serialize(movie.TagIds);
                 existing.LastSeenUtc = syncStartedUtc;
                 existing.UpdatedAtUtc = syncStartedUtc;
@@ -152,6 +153,7 @@ public sealed class MediaInventorySyncService(
                 existing.HasFile = show.HasFile;
                 existing.Rating = show.Rating;
                 existing.AddedUtc = show.AddedUtc;
+                existing.ReleasedUtc = show.ReleasedUtc;
                 existing.TagsJson = System.Text.Json.JsonSerializer.Serialize(show.TagIds);
                 existing.LastSeenUtc = syncStartedUtc;
                 existing.UpdatedAtUtc = syncStartedUtc;
