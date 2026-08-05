@@ -586,6 +586,15 @@ html {
     max-height: none !important;
 }
 
+/* Sticky header without virtualize — avoids MudBlazor Virtualize flicker on scroll. */
+.cleanup-table-shell .mud-table thead tr th,
+.cleanup-table-shell .mud-table .mud-table-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--mud-palette-surface);
+}
+
 .dashboard-shell {
     max-width: 1440px;
     margin: 0 auto;

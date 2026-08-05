@@ -69,6 +69,5 @@ public sealed record CleanupCandidateItem(
 public enum CleanupDisplayMode
 {
     Compact = 0,
-    Posters = 1,
-    Cards = 2
+    Posters = 1
 }

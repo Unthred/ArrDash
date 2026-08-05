@@ -83,11 +83,6 @@ else
                          OnClick="@(() => SetDisplayModeAsync(CleanupDisplayMode.Posters))">
                     Posters
                 </MudChip>
-                <MudChip T="string" Variant="@(_displayMode == CleanupDisplayMode.Cards ? Variant.Filled : Variant.Outlined)"
-                         Color="@(_displayMode == CleanupDisplayMode.Cards ? Color.Primary : Color.Default)"
-                         OnClick="@(() => SetDisplayModeAsync(CleanupDisplayMode.Cards))">
-                    Cards
-                </MudChip>
                 <MudSpacer />
                 <MudSelect T="string"
                            MultiSelection="true"
@@ -228,67 +223,15 @@ else
                     : "No cleanup candidates match the current filters."))
         </MudAlert>
     }
-    else if (_displayMode == CleanupDisplayMode.Cards)
-    {
-        <div class="cleanup-cards-scroll">
-            <div class="cleanup-card-grid">
-                @foreach (var item in FilteredCandidates)
-                {
-                    <MudPaper Class="@($"cleanup-card {(item.NeverDelete ? "cleanup-card--kept" : "")} {(item.MarkedForDeletion ? "cleanup-card--delete" : "")}")" Elevation="1">
-                        <div class="cleanup-card-poster">
-                            @if (PosterUrl(item) is { } poster)
-                            {
-                                <img src="@poster" alt="" loading="lazy" decoding="async" width="80" height="120" />
-                            }
-                            else
-                            {
-                                <div class="cleanup-card-poster-fallback">
-                                    <MudIcon Icon="@(item.MediaType == "movie" ? Icons.Material.Filled.Movie : Icons.Material.Filled.LiveTv)" />
-                                </div>
-                            }
-                        </div>
-                        <div class="cleanup-card-body">
-                            <div class="d-flex align-start gap-1">
-                                <div class="cleanup-card-title">@RenderLinkedTitle(item)</div>
-                                <MudSpacer />
-                                <MudIconButton Size="Size.Small"
-                                               Icon="@(item.NeverDelete ? Icons.Material.Filled.Bookmark : Icons.Material.Outlined.BookmarkBorder)"
-                                               Color="@(item.NeverDelete ? Color.Warning : Color.Default)"
-                                               Disabled="@item.MarkedForDeletion"
-                                               OnClick="@(() => ToggleKeepAsync(item))" />
-                                <MudIconButton Size="Size.Small"
-                                               Icon="@(item.MarkedForDeletion ? Icons.Material.Filled.Delete : Icons.Material.Outlined.DeleteOutline)"
-                                               Color="@(item.MarkedForDeletion ? Color.Error : Color.Default)"
-                                               Disabled="@item.NeverDelete"
-                                               OnClick="@(() => ToggleDeleteMarkAsync(item))" />
-                            </div>
-                            <MudText Typo="Typo.caption" Class="muted">
-                                @(item.ReleasedUtc is { } r ? r.ToLocalTime().ToString("dd MMM yyyy") : item.Year?.ToString() ?? "—")
-                                · @ByteDisplayHelper.Format(item.SizeBytes)
-                                @if (item.Rating is { } rating)
-                                {
-                                    <text> · ★ @rating.ToString("0.0")</text>
-                                }
-                            </MudText>
-                            <div class="cleanup-chip-row cleanup-chip-row--clamp mt-1">
-                                @foreach (var reason in item.Reasons)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@ReasonColor(reason)" Class="mr-1">@ReasonLabel(reason)</MudChip>
-                                }
-                            </div>
-                        </div>
-                    </MudPaper>
-                }
-            </div>
-        </div>
-    }
     else
     {
         <TableScrollShell Class="cleanup-table-fill">
             <MudPaper Elevation="1" Class="cleanup-table-shell">
+            @* Virtualize off: MudBlazor virtualize + flex height overrides caused scroll flicker
+               (worse downward). Dense rows of a few thousand stay acceptable without it. *@
             <MudTable Items="FilteredCandidates" Hover="true" Dense="true" Striped="true" SortLabel="Sort by"
                       Class="@(_displayMode == CleanupDisplayMode.Posters ? "cleanup-table--posters" : "cleanup-table--compact")"
-                      RowClassFunc="@RowClassFor" Virtualize="true" Height="100%" ItemSize="@(_displayMode == CleanupDisplayMode.Posters ? 56f : 44f)">
+                      RowClassFunc="@RowClassFor">
                 <HeaderContent>
                     <MudTh Style="width:48px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.NeverDelete)">Keep</MudTableSortLabel></MudTh>
                     <MudTh Style="width:48px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.MarkedForDeletion)">Delete</MudTableSortLabel></MudTh>
@@ -329,10 +272,12 @@ else
                     @if (_displayMode == CleanupDisplayMode.Posters)
                     {
                         <MudTd DataLabel="Art" Class="cleanup-poster-cell">
+                            <div class="cleanup-row-poster-slot">
                             @if (PosterUrl(context) is { } poster)
                             {
                                 <img class="cleanup-row-poster" src="@poster" alt="" loading="lazy" decoding="async" width="32" height="48" />
                             }
+                            </div>
                         </MudTd>
                     }
                     <MudTd DataLabel="Title">
@@ -479,7 +424,11 @@ else
         _thresholdMonths = Prefs.Current.CleanupCandidatesStaleThresholdMonths > 0
             ? Prefs.Current.CleanupCandidatesStaleThresholdMonths
             : DefaultOptions.Value.StaleThresholdMonths;
-        _displayMode = Prefs.Current.CleanupDisplayMode;
+        _displayMode = Prefs.Current.CleanupDisplayMode == CleanupDisplayMode.Posters
+            ? CleanupDisplayMode.Posters
+            : CleanupDisplayMode.Compact;
+        if (Prefs.Current.CleanupDisplayMode != _displayMode)
+            await Prefs.UpdateAsync(p => p.CleanupDisplayMode = _displayMode);
         _status = Sync.CurrentStatus;
         await LoadAsync();
     }

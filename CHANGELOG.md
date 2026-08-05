@@ -6,9 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed
+
+- Cleanup: removed **Cards** layout (Compact / Posters only); turned off MudTable virtualize to stop scroll flicker ([#73](https://github.com/Unthred/ArrDash/issues/73))
+
 ### Added
 
-- Cleanup: **Released** column (Radarr digital/physical/cinema; Sonarr first aired); layout modes **Compact / Posters / Cards** ([#73](https://github.com/Unthred/ArrDash/issues/73))
+- Cleanup: **Released** column (Radarr digital/physical/cinema; Sonarr first aired); layout modes **Compact / Posters** ([#73](https://github.com/Unthred/ArrDash/issues/73))
 
 ### Changed
 
