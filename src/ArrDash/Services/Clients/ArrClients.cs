@@ -38,6 +38,21 @@ public abstract class ArrClientBase
 
     public bool IsConfigured => Options.IsConfigured;
 
+    /// <summary>First parseable date among Radarr/Sonarr release fields.</summary>
+    protected static DateTimeOffset? ParseReleaseDate(JsonElement item, params string[] fieldNames)
+    {
+        foreach (var name in fieldNames)
+        {
+            if (!item.TryGetProperty(name, out var el))
+                continue;
+            if (el.ValueKind == JsonValueKind.String
+                && DateTimeOffset.TryParse(el.GetString(), out var parsed))
+                return parsed;
+        }
+
+        return null;
+    }
+
     public virtual async Task<(IReadOnlyList<DownloadItem> Items, ServiceHealth Health)> FetchRecentAsync(
         int limit,
         CancellationToken ct)
@@ -701,6 +716,7 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
                 && DateTimeOffset.TryParse(addedEl.GetString(), out var addedParsed)
                     ? addedParsed
                     : null;
+            var released = ParseReleaseDate(item, "firstAired");
             var tagIds = item.TryGetProperty("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array
                 ? tagsEl.EnumerateArray().Select(t => t.GetInt32()).ToList()
                 : [];
@@ -722,7 +738,7 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
                     : null;
 
             items.Add(new SeriesInventoryDto(
-                idEl.GetInt32(), title, year, slug, imdbId, tvdbId, sizeOnDisk, episodeFileCount, monitored, hasFile, added, tagIds, rating, seriesStatus));
+                idEl.GetInt32(), title, year, slug, imdbId, tvdbId, sizeOnDisk, episodeFileCount, monitored, hasFile, added, released, tagIds, rating, seriesStatus));
         }
 
         return items;
@@ -1135,6 +1151,9 @@ public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor op
                 && DateTimeOffset.TryParse(addedEl.GetString(), out var addedParsed)
                     ? addedParsed
                     : null;
+            var released = ParseReleaseDate(
+                item,
+                "digitalRelease", "physicalRelease", "inCinemas");
             var tagIds = item.TryGetProperty("tags", out var tagsEl) && tagsEl.ValueKind == JsonValueKind.Array
                 ? tagsEl.EnumerateArray().Select(t => t.GetInt32()).ToList()
                 : [];
@@ -1147,7 +1166,7 @@ public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor op
                     : null;
 
             items.Add(new MovieInventoryDto(
-                idEl.GetInt32(), title, year, slug, imdbId, tmdbId, sizeOnDisk, monitored, hasFile, added, tagIds, rating));
+                idEl.GetInt32(), title, year, slug, imdbId, tmdbId, sizeOnDisk, monitored, hasFile, added, released, tagIds, rating));
         }
 
         return items;

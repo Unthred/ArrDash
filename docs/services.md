@@ -53,7 +53,7 @@ Enable **Watch stats sync** in Settings and wait for the first backfill. Tautull
    - **Import into ArrDash** — pull Trakt history into the warehouse
    - **Push Emby/Plex plays → Trakt** — additive history add for PlayEvents **and** library Played/viewCount (history + collection; capped ~500 each per Sync)
    - **Mark Emby watched from Trakt** / **Mark Plex watched from Trakt** — additive Played flags on the media servers (never unmarks)
-5. **Preview** then **Sync now**. Each sync processes a batch of mark-watched / library-push writes; re-run until counts settle.
+5. **Preview** then **Sync now**. Each sync processes a batch of mark-watched / library-push writes; re-run until counts settle. Background auto-sync runs once daily at **04:00 Europe/London** (not hourly).
 6. Optional **live webhooks**: Settings → Emby / Plex play webhooks → paste Emby (`playback.stop`, Premiere required) and Plex (`media.scrobble`) URLs. Token is OpenBao `secret/arrdash/webhook-token`.
 
 Per-account: only that Trakt user’s mapped Emby/Plex names are reconciled. Plex mark-watched uses the configured Plex token’s account. Emby’s native Trakt plugin is optional once ArrDash push is healthy.

@@ -8,6 +8,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- Cleanup: **Released** column (Radarr digital/physical/cinema; Sonarr first aired); layout modes **Compact / Posters / Cards** ([#73](https://github.com/Unthred/ArrDash/issues/73))
+
+### Changed
+
+- Trakt background Sync runs once daily at **04:00 Europe/London** (not hourly). Manual Sync Now and Emby/Plex play webhooks unchanged ([#73](https://github.com/Unthred/ArrDash/issues/73))
+- Cleanup table scroll flicker reduced (fixed virtualize row height; clamped watcher/tag cells)
+
+### Added
+
 - Trakt **library watched → history + collection**: when Push is on, Sync reads Emby IsPlayed / Plex viewCount (including missing-on-disk) and pushes gaps to Trakt (capped 500 history + 500 collection per run; resumes via `TraktLibrarySyncLinks`) ([#70](https://github.com/Unthred/ArrDash/issues/70))
 - Live **Emby/Plex play webhooks** (`POST /api/webhooks/emby|plex?token=…`) scrobble Squiggley’s completed plays to Trakt; token in OpenBao `secret/arrdash/webhook-token`; Settings section titled **Emby / Plex play webhooks** ([#70](https://github.com/Unthred/ArrDash/issues/70))
 - Trakt client: collection get/add + scrobble/stop APIs

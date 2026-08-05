@@ -393,6 +393,7 @@ public sealed class UserLayoutPreferences
     public bool ShowSettingsHelp { get; set; }
     public int CleanupCandidatesStaleThresholdMonths { get; set; }
     public int CleanupCandidatesSyncIntervalMinutes { get; set; }
+    public CleanupDisplayMode CleanupDisplayMode { get; set; } = CleanupDisplayMode.Compact;
 }
 
 public enum NetworkBandwidthDirection
