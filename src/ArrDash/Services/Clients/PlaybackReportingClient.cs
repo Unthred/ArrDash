@@ -564,6 +564,343 @@ public class PlaybackReportingClient(HttpClient http, ServiceEndpoint endpoint, 
         }
     }
 
+    /// <summary>Emby/Jellyfin users from the core Users API (preferred for mark-watched).</summary>
+    public async Task<IReadOnlyList<(string Id, string Name)>> ListUsersAsync(CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return [];
+
+        try
+        {
+            var url = BuildUrl("/Users");
+            using var response = await http.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+                return [];
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return [];
+
+            return doc.RootElement.EnumerateArray()
+                .Select(u => (
+                    Id: ReadString(u, "Id") ?? "",
+                    Name: ReadString(u, "Name") ?? ""))
+                .Where(u => !string.IsNullOrWhiteSpace(u.Id) && !string.IsNullOrWhiteSpace(u.Name))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "ListUsersAsync failed");
+            return [];
+        }
+    }
+
+    /// <summary>Find a library item by provider id (Imdb / Tmdb / Tvdb / Trakt).</summary>
+    public async Task<string?> FindItemIdByProviderAsync(
+        string mediaType,
+        string? imdbId,
+        int? tmdbId,
+        int? tvdbId,
+        int? traktId,
+        int? seasonNumber,
+        int? episodeNumber,
+        CancellationToken ct)
+    {
+        if (!IsConfigured)
+            return null;
+
+        var includeType = string.Equals(mediaType, "episode", StringComparison.OrdinalIgnoreCase)
+            ? "Episode"
+            : "Movie";
+
+        foreach (var providerKey in BuildProviderKeys(imdbId, tmdbId, tvdbId, traktId))
+        {
+            try
+            {
+                var url = BuildUrl("/Items",
+                    ("Recursive", "true"),
+                    ("IncludeItemTypes", includeType),
+                    ("AnyProviderIdEquals", providerKey),
+                    ("Fields", "ProviderIds,ParentIndexNumber,IndexNumber"),
+                    ("Limit", "25"));
+                using var response = await http.GetAsync(url, ct);
+                if (!response.IsSuccessStatusCode)
+                    continue;
+
+                await using var stream = await response.Content.ReadAsStreamAsync(ct);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                if (!doc.RootElement.TryGetProperty("Items", out var items) || items.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                foreach (var item in items.EnumerateArray())
+                {
+                    var id = ReadString(item, "Id");
+                    if (string.IsNullOrWhiteSpace(id))
+                        continue;
+
+                    if (string.Equals(includeType, "Episode", StringComparison.OrdinalIgnoreCase)
+                        && seasonNumber is int sn
+                        && episodeNumber is int en)
+                    {
+                        var itemSeason = ReadInt(item, "ParentIndexNumber");
+                        var itemEpisode = ReadInt(item, "IndexNumber");
+                        if (itemSeason != sn || itemEpisode != en)
+                            continue;
+                    }
+
+                    return id;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "FindItemIdByProviderAsync failed for {Provider}", providerKey);
+            }
+        }
+
+        if (string.Equals(mediaType, "episode", StringComparison.OrdinalIgnoreCase)
+            && seasonNumber is int season
+            && episodeNumber is int episode)
+        {
+            foreach (var providerKey in BuildProviderKeys(imdbId, tmdbId, tvdbId, traktId))
+            {
+                try
+                {
+                    var seriesUrl = BuildUrl("/Items",
+                        ("Recursive", "true"),
+                        ("IncludeItemTypes", "Series"),
+                        ("AnyProviderIdEquals", providerKey),
+                        ("Limit", "5"));
+                    using var seriesResponse = await http.GetAsync(seriesUrl, ct);
+                    if (!seriesResponse.IsSuccessStatusCode)
+                        continue;
+
+                    await using var seriesStream = await seriesResponse.Content.ReadAsStreamAsync(ct);
+                    using var seriesDoc = await JsonDocument.ParseAsync(seriesStream, cancellationToken: ct);
+                    if (!seriesDoc.RootElement.TryGetProperty("Items", out var seriesItems)
+                        || seriesItems.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    foreach (var series in seriesItems.EnumerateArray())
+                    {
+                        var seriesId = ReadString(series, "Id");
+                        if (string.IsNullOrWhiteSpace(seriesId))
+                            continue;
+
+                        var episodes = await FetchSeriesEpisodesAsync(seriesId, ct);
+                        var match = episodes.FirstOrDefault(e => e.SeasonNumber == season && e.EpisodeNumber == episode);
+                        if (match is not null)
+                            return match.ItemId;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex, "Series episode resolve failed for {Provider}", providerKey);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Marks an item played for a user. Additive only — never unmarks.</summary>
+    public async Task<bool> MarkPlayedAsync(string userId, string itemId, DateTimeOffset? playedAt, CancellationToken ct)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        try
+        {
+            var query = new List<(string Key, string Value)>();
+            if (playedAt is { } at)
+                query.Add(("DatePlayed", at.UtcDateTime.ToString("yyyyMMddHHmmss")));
+
+            var url = BuildUrl($"/Users/{Uri.EscapeDataString(userId)}/PlayedItems/{Uri.EscapeDataString(itemId)}",
+                query.ToArray());
+            using var response = await http.PostAsync(url, content: null, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "MarkPlayedAsync failed for user {UserId} item {ItemId}", userId, itemId);
+            return false;
+        }
+    }
+
+    public async Task<bool> IsPlayedAsync(string userId, string itemId, CancellationToken ct)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(itemId))
+            return false;
+
+        try
+        {
+            var url = BuildUrl($"/Users/{Uri.EscapeDataString(userId)}/Items/{Uri.EscapeDataString(itemId)}",
+                ("Fields", "UserData"));
+            using var response = await http.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+                return false;
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (!doc.RootElement.TryGetProperty("UserData", out var userData))
+                return false;
+            return userData.TryGetProperty("Played", out var played)
+                   && played.ValueKind == JsonValueKind.True;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "IsPlayedAsync failed for {ItemId}", itemId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Pages Emby/Jellyfin library items marked Played for a user (movies + episodes),
+    /// including items with missing files. Optionally scoped to a library ParentId.
+    /// </summary>
+    public async Task<IReadOnlyList<LibraryWatchedItem>> FetchPlayedItemsAsync(
+        string userId,
+        string? libraryParentId,
+        CancellationToken ct,
+        int maxItems = 10_000)
+    {
+        var results = new List<LibraryWatchedItem>();
+        if (!IsConfigured || string.IsNullOrWhiteSpace(userId))
+            return results;
+
+        const int pageSize = 200;
+        var start = 0;
+
+        while (results.Count < maxItems)
+        {
+            ct.ThrowIfCancellationRequested();
+            var query = new List<(string Key, string Value)>
+            {
+                ("Recursive", "true"),
+                ("IsPlayed", "true"),
+                ("IncludeItemTypes", "Movie,Episode"),
+                ("Fields", "ProviderIds,UserData,Path,ProductionYear,ParentId,SeriesId,SeriesName,IndexNumber,ParentIndexNumber"),
+                ("StartIndex", start.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                ("Limit", pageSize.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            };
+            if (!string.IsNullOrWhiteSpace(libraryParentId))
+                query.Add(("ParentId", libraryParentId));
+
+            try
+            {
+                var url = BuildUrl($"/Users/{Uri.EscapeDataString(userId)}/Items", query.ToArray());
+                using var response = await http.GetAsync(url, ct);
+                if (!response.IsSuccessStatusCode)
+                    break;
+
+                await using var stream = await response.Content.ReadAsStreamAsync(ct);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                if (!doc.RootElement.TryGetProperty("Items", out var items) || items.ValueKind != JsonValueKind.Array)
+                    break;
+
+                var batchCount = 0;
+                foreach (var item in items.EnumerateArray())
+                {
+                    batchCount++;
+                    var parsed = ParseLibraryWatchedItem(item, userId, libraryParentId);
+                    if (parsed is not null)
+                        results.Add(parsed);
+                    if (results.Count >= maxItems)
+                        break;
+                }
+
+                var total = doc.RootElement.TryGetProperty("TotalRecordCount", out var totalEl)
+                            && totalEl.TryGetInt32(out var t)
+                    ? t
+                    : 0;
+                start += pageSize;
+                if (batchCount == 0)
+                    break;
+                if (total > 0 && start >= total)
+                    break;
+                if (batchCount < pageSize)
+                    break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "FetchPlayedItemsAsync failed for user {UserId} library {Library}", userId, libraryParentId);
+                break;
+            }
+        }
+
+        return results;
+    }
+
+    private LibraryWatchedItem? ParseLibraryWatchedItem(JsonElement item, string userId, string? libraryParentId)
+    {
+        var id = ReadString(item, "Id");
+        if (string.IsNullOrWhiteSpace(id))
+            return null;
+
+        var typeRaw = ReadString(item, "Type") ?? "";
+        var mediaType = typeRaw.Equals("Episode", StringComparison.OrdinalIgnoreCase) ? "episode"
+            : typeRaw.Equals("Movie", StringComparison.OrdinalIgnoreCase) ? "movie"
+            : null;
+        if (mediaType is null)
+            return null;
+
+        string? imdb = null;
+        int? tmdb = null;
+        int? tvdb = null;
+        int? trakt = null;
+        if (item.TryGetProperty("ProviderIds", out var providers) && providers.ValueKind == JsonValueKind.Object)
+        {
+            imdb = ReadProviderString(providers, "Imdb", "IMDB", "imdb");
+            tmdb = ReadProviderInt(providers, "Tmdb", "TMDb", "tmdb");
+            tvdb = ReadProviderInt(providers, "Tvdb", "TVDB", "tvdb");
+            trakt = ReadProviderInt(providers, "Trakt", "trakt");
+        }
+
+        DateTimeOffset? watchedAt = null;
+        if (item.TryGetProperty("UserData", out var userData) && userData.ValueKind == JsonValueKind.Object
+            && userData.TryGetProperty("LastPlayedDate", out var lastPlayed)
+            && lastPlayed.ValueKind == JsonValueKind.String
+            && DateTimeOffset.TryParse(lastPlayed.GetString(), out var parsedAt))
+        {
+            watchedAt = parsedAt;
+        }
+
+        var title = ReadString(item, "Name") ?? "Unknown";
+        var series = ReadString(item, "SeriesName");
+        return new LibraryWatchedItem(
+            sourceKey,
+            userId,
+            id,
+            mediaType,
+            mediaType == "episode" && !string.IsNullOrWhiteSpace(series) ? series : title,
+            series,
+            imdb,
+            tmdb,
+            tvdb,
+            trakt,
+            ReadInt(item, "ProductionYear"),
+            ReadInt(item, "ParentIndexNumber"),
+            ReadInt(item, "IndexNumber"),
+            watchedAt,
+            libraryParentId);
+    }
+
+    /// <summary>
+    /// Emby/Jellyfin <c>AnyProviderIdEquals</c> expects <c>Tmdb.123</c> / <c>Imdb.tt…</c>
+    /// (dot separator). Equals-sign forms return zero hits.
+    /// </summary>
+    private static IEnumerable<string> BuildProviderKeys(string? imdbId, int? tmdbId, int? tvdbId, int? traktId)
+    {
+        if (!string.IsNullOrWhiteSpace(imdbId))
+            yield return $"Imdb.{imdbId.Trim()}";
+        if (tmdbId is int tmdb and > 0)
+            yield return $"Tmdb.{tmdb}";
+        if (tvdbId is int tvdb and > 0)
+            yield return $"Tvdb.{tvdb}";
+        if (traktId is int trakt and > 0)
+            yield return $"Trakt.{trakt}";
+    }
+
     private static string? ReadProviderString(JsonElement providers, params string[] names)
     {
         foreach (var name in names)
@@ -707,4 +1044,22 @@ public sealed record MediaSeriesEpisode(
     string Name,
     int? SeasonNumber,
     int? EpisodeNumber);
+
+/// <summary>Library item marked watched on Emby/Jellyfin/Plex (may have no file on disk).</summary>
+public sealed record LibraryWatchedItem(
+    string Source,
+    string ServerUserId,
+    string ServerItemId,
+    string MediaType,
+    string Title,
+    string? SeriesTitle,
+    string? ImdbId,
+    int? TmdbId,
+    int? TvdbId,
+    int? TraktId,
+    int? Year,
+    int? SeasonNumber,
+    int? EpisodeNumber,
+    DateTimeOffset? WatchedAt,
+    string? LibraryExternalId);
 

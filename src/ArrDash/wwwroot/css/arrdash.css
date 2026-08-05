@@ -2497,6 +2497,91 @@ html {
     flex: 1 1 auto;
     justify-content: center;
     flex-wrap: wrap;
+    min-width: 0;
+}
+
+.trakt-work-status {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    max-width: min(42rem, 100%);
+}
+
+.trakt-work-status--appbar {
+    /* Center in the app bar, independent of brand (left) / actions (right). */
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    flex: 0 1 auto;
+    width: min(36rem, 46vw);
+    max-width: min(36rem, 46vw);
+    margin: 0;
+    min-width: 12rem;
+    z-index: 2;
+}
+
+.arrdash-appbar .trakt-work-status--appbar,
+.kiosk-bar .trakt-work-status--appbar {
+    align-self: center;
+}
+
+.trakt-work-status--appbar .trakt-work-status-row {
+    justify-content: center;
+}
+
+.trakt-work-status--appbar .trakt-work-status-text {
+    flex: 0 1 auto;
+    text-align: center;
+}
+
+.trakt-work-status--hero {
+    flex: 1 1 16rem;
+}
+
+.trakt-work-status--banner,
+.trakt-work-status--settings {
+    width: 100%;
+    max-width: none;
+    margin: 4px 0 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--mud-palette-primary) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--mud-palette-primary) 28%, transparent);
+}
+
+.trakt-work-status-bar {
+    height: 3px !important;
+    border-radius: 999px;
+}
+
+.trakt-work-status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.trakt-work-status-icon {
+    flex: 0 0 auto;
+    opacity: 0.9;
+}
+
+.trakt-work-status-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trakt-work-status-cancel {
+    flex: 0 0 auto;
+    min-width: auto;
 }
 
 .network-speed-wrap:has(.network-bandwidth-panel) {

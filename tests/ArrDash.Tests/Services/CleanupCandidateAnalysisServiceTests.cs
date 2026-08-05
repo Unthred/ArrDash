@@ -170,5 +170,58 @@ public class CleanupCandidateAnalysisServiceTests
         var item = Assert.Single(results, r => r.SourceItemId == 99);
         Assert.True(item.MarkedForDeletion);
         Assert.Empty(item.Reasons);
+        Assert.Equal(11, results.Count);
+    }
+
+    [Fact]
+    public void Build_includes_recent_titles_with_empty_reasons_for_library_search()
+    {
+        // Ten larger files so Criminal Minds is not flagged "Largest".
+        var inventory = Enumerable.Range(1, 10)
+            .Select(i => new MediaInventoryItemEntity
+            {
+                Source = "radarr",
+                SourceItemId = i,
+                MediaType = "movie",
+                Title = $"Big {i}",
+                TmdbId = 100 + i,
+                SizeOnDiskBytes = 80_000_000_000L,
+                HasFile = true,
+                AddedUtc = DateTimeOffset.UtcNow.AddDays(-3),
+                TagsJson = "[]",
+                TitleSlug = $"big-{i}"
+            })
+            .Append(new MediaInventoryItemEntity
+            {
+                Source = "sonarr",
+                SourceItemId = 1140,
+                MediaType = "series",
+                Title = "Criminal Minds",
+                Year = 2005,
+                SizeOnDiskBytes = 40_000_000_000,
+                HasFile = true,
+                AddedUtc = DateTimeOffset.UtcNow.AddMonths(-7),
+                TagsJson = "[]",
+                TitleSlug = "criminal-minds",
+                SeriesStatus = "continuing"
+            })
+            .ToList();
+
+        var movieLastPlayed = Enumerable.Range(1, 10)
+            .ToDictionary(i => 100 + i, _ => DateTimeOffset.UtcNow.AddHours(-1));
+
+        var results = CleanupCandidateAnalysisService.Build(
+            inventory,
+            movieLastPlayed,
+            new Dictionary<string, DateTimeOffset>(),
+            new Dictionary<int, IReadOnlyList<string>>(),
+            new Dictionary<string, IReadOnlyList<string>>(),
+            new Dictionary<(string Source, int TagId), string>(),
+            thresholdMonths: 12,
+            radarrBaseUrl: null,
+            sonarrBaseUrl: "https://sonarr.example.com");
+
+        var series = Assert.Single(results, r => r.Title == "Criminal Minds");
+        Assert.Empty(series.Reasons);
     }
 }

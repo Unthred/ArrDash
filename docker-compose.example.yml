@@ -1,5 +1,7 @@
 # Minimal ArrDash compose for any Docker host.
 # Unraid extras (parity/mover/docker metrics): see docker-compose.unraid.example.yml
+# Optional OpenBao: set OPENBAO_ADDR / OPENBAO_ROLE_ID / OPENBAO_SECRET_ID (or env_file)
+# so Settings saves to secret/arrdash/media-services instead of service-secrets.json.
 services:
   arrdash:
     image: ghcr.io/unthred/arrdash:latest

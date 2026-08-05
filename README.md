@@ -84,7 +84,8 @@ See [services.md](docs/services.md) for per-app notes.
 | Path | Purpose |
 |------|---------|
 | `/config/user-layout.json` | Theme, layout, behaviour preferences |
-| `/config/service-secrets.json` | API keys saved from the Settings UI |
+| OpenBao `secret/arrdash/media-services` | API keys/tokens (production; AppRole via `OPENBAO_*`) |
+| `/config/service-secrets.json` | API keys when OpenBao is unset (local/dev) |
 | `/config/arrdash.db` | Watch history warehouse (SQLite default) |
 
 Environment variables seed initial URLs and keys; the Settings UI can override and persist secrets without redeploying.

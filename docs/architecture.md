@@ -105,7 +105,7 @@ Loads/saves `user-layout.json` under `ARRDASH_CONFIG_PATH` (default `/config`).
 
 ### ServiceSecretsStore
 
-Persists API keys in `service-secrets.json`. `MediaServiceOptionsAccessor` merges:
+Persists API keys/tokens (and optional service URLs) via `OpenBaoSecretsClient` when `OPENBAO_*` is set (KV `secret/arrdash/media-services`), otherwise `service-secrets.json` for local/dev. Vault mode fails closed on load errors. `MediaServiceOptionsAccessor` merges:
 
 1. `appsettings.json`
 2. Environment variables

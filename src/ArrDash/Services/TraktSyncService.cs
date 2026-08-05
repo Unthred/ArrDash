@@ -14,11 +14,18 @@ public sealed class TraktSyncService(
     ActivityAnalyticsService activityAnalytics,
     WatchStatsService watchStats,
     LayoutPreferencesService prefs,
+    PlayEventLibraryEnrichmentService enrichment,
+    ServerWatchedMarkService serverWatchedMark,
+    LibraryWatchedToTraktService libraryWatchedToTrakt,
     ILogger<TraktSyncService> logger) : BackgroundService
 {
     private readonly object _statusLock = new();
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private string _statusMessage = "Idle";
+    private DateTime _lastStatusNotifyUtc = DateTime.MinValue;
+    private CancellationTokenSource? _activeRunCts;
+
+    public event Action? StatusChanged;
 
     public string StatusMessage
     {
@@ -26,6 +33,16 @@ public sealed class TraktSyncService(
     }
 
     public bool IsBusy => _syncLock.CurrentCount == 0;
+
+    /// <summary>Cancel the in-flight preview/sync (if any).</summary>
+    public void CancelCurrent()
+    {
+        CancellationTokenSource? cts;
+        lock (_statusLock)
+            cts = _activeRunCts;
+        cts?.Cancel();
+        SetStatus("Cancelling…", forceNotify: true);
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -41,7 +58,7 @@ public sealed class TraktSyncService(
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogWarning(ex, "Trakt background sync failed");
-                SetStatus($"Sync failed: {ex.Message}");
+                SetStatus($"Sync failed: {ex.Message}", forceNotify: true);
             }
 
             await Task.Delay(TimeSpan.FromMinutes(60), stoppingToken);
@@ -63,24 +80,43 @@ public sealed class TraktSyncService(
             return false;
         }
 
+        var cts = new CancellationTokenSource();
+        lock (_statusLock)
+        {
+            _activeRunCts?.Dispose();
+            _activeRunCts = cts;
+        }
+
         _ = Task.Run(async () =>
         {
             try
             {
-                await SyncAccountAsync(accountId, previewOnly: false, CancellationToken.None, alreadyLocked: true);
+                await SyncAccountAsync(accountId, previewOnly: false, cts.Token, alreadyLocked: true);
+            }
+            catch (OperationCanceledException)
+            {
+                SetStatus("Cancelled", forceNotify: true);
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Background Trakt sync failed for {AccountId}", accountId);
-                SetStatus($"Sync failed: {ex.Message}");
+                SetStatus($"Sync failed: {ex.Message}", forceNotify: true);
             }
             finally
             {
+                lock (_statusLock)
+                {
+                    if (ReferenceEquals(_activeRunCts, cts))
+                        _activeRunCts = null;
+                }
+
+                cts.Dispose();
                 _syncLock.Release();
             }
         });
 
-        message = "Sync started in background…";
+        message = "Sync started…";
+        SetStatus("Starting sync…", forceNotify: true);
         return true;
     }
 
@@ -93,34 +129,58 @@ public sealed class TraktSyncService(
         if (!alreadyLocked)
             await _syncLock.WaitAsync(ct);
 
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        lock (_statusLock)
+        {
+            if (!alreadyLocked)
+            {
+                _activeRunCts?.Dispose();
+                _activeRunCts = linked;
+            }
+        }
+
+        var runCt = alreadyLocked ? ct : linked.Token;
+
         try
         {
-            SetStatus(previewOnly ? "Fetching Trakt history…" : "Fetching Trakt history…");
-            var (accessToken, account) = await accounts.GetValidAccessTokenAsync(accountId, ct);
+            SetStatus(previewOnly ? "Starting preview…" : "Starting sync…", forceNotify: true);
+            var (accessToken, account) = await accounts.GetValidAccessTokenAsync(accountId, runCt);
 
-            SetStatus(previewOnly ? "Downloading movies…" : "Downloading movies…");
-            var movies = account.SyncMovies
-                ? await trakt.GetHistoryAsync(accessToken, "movies", account.HistoryStartUtc, ct)
-                : [];
-            SetStatus($"Downloading episodes… ({movies.Count:N0} movies)");
-            var episodes = account.SyncEpisodes
-                ? await trakt.GetHistoryAsync(accessToken, "episodes", account.HistoryStartUtc, ct)
-                : [];
+            IReadOnlyList<TraktHistoryItem> movies = [];
+            if (account.SyncMovies)
+            {
+                movies = await trakt.GetHistoryAsync(
+                    accessToken, "movies", account.HistoryStartUtc, runCt,
+                    (page, pages, items) => SetStatus(
+                        pages > 0
+                            ? $"Downloading movies… page {page}/{pages} ({items:N0} items)"
+                            : $"Downloading movies… page {page} ({items:N0} items)"));
+            }
 
-            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            IReadOnlyList<TraktHistoryItem> episodes = [];
+            if (account.SyncEpisodes)
+            {
+                episodes = await trakt.GetHistoryAsync(
+                    accessToken, "episodes", account.HistoryStartUtc, runCt,
+                    (page, pages, items) => SetStatus(
+                        pages > 0
+                            ? $"Downloading episodes… page {page}/{pages} ({items:N0} items)"
+                            : $"Downloading episodes… page {page} ({items:N0} items)"));
+            }
 
-            // Links whose play event was deleted (e.g. retention prune) would otherwise
-            // block those history items from ever re-importing (#36).
+            await using var db = await dbFactory.CreateDbContextAsync(runCt);
+
+            SetStatus("Cleaning orphaned history links…");
             await db.TraktHistoryLinks
                 .Where(l => l.AccountId == accountId
                             && l.PlayEventId != null
                             && !db.PlayEvents.Any(p => p.Id == l.PlayEventId))
-                .ExecuteDeleteAsync(ct);
+                .ExecuteDeleteAsync(runCt);
 
             var linkedIds = await db.TraktHistoryLinks.AsNoTracking()
                 .Where(l => l.AccountId == accountId)
                 .Select(l => l.TraktHistoryId)
-                .ToListAsync(ct);
+                .ToListAsync(runCt);
             var linkedSet = linkedIds.ToHashSet();
 
             var wouldImport = 0;
@@ -135,9 +195,10 @@ public sealed class TraktSyncService(
                 var i = 0;
                 foreach (var item in history)
                 {
+                    runCt.ThrowIfCancellationRequested();
                     i++;
-                    if (i % 500 == 0)
-                        SetStatus($"{(previewOnly ? "Previewing" : "Preparing")} {i:N0}/{history.Count:N0}…");
+                    if (i == 1 || i % 250 == 0 || i == history.Count)
+                        SetStatus($"{(previewOnly ? "Previewing" : "Preparing")} history {i:N0}/{history.Count:N0}…");
 
                     var mapped = MapHistoryItem(item, account.CanonicalUserName);
                     if (mapped is null)
@@ -165,13 +226,14 @@ public sealed class TraktSyncService(
                     const int batchSize = 250;
                     for (var offset = 0; offset < pendingEntities.Count; offset += batchSize)
                     {
+                        runCt.ThrowIfCancellationRequested();
                         var batch = pendingEntities.Skip(offset).Take(batchSize).ToList();
-                        SetStatus($"Importing {Math.Min(offset + batch.Count, pendingEntities.Count):N0}/{pendingEntities.Count:N0}…");
+                        SetStatus($"Importing {Math.Min(offset + batch.Count, pendingEntities.Count):N0}/{pendingEntities.Count:N0}…", forceNotify: true);
 
                         foreach (var (entity, _) in batch)
                             db.PlayEvents.Add(entity);
 
-                        await db.SaveChangesAsync(ct);
+                        await db.SaveChangesAsync(runCt);
 
                         foreach (var (entity, traktHistoryId) in batch)
                         {
@@ -186,58 +248,144 @@ public sealed class TraktSyncService(
                             linkedSet.Add(traktHistoryId);
                         }
 
-                        await db.SaveChangesAsync(ct);
+                        await db.SaveChangesAsync(runCt);
                     }
                 }
             }
 
             var wouldPush = 0;
+            var wouldLibraryHistory = 0;
+            var wouldLibraryCollection = 0;
             if (account.PushToTrakt && !previewOnly)
-                wouldPush = await PushLocalPlaysAsync(db, account, accessToken, ct);
+            {
+                SetStatus("Pushing local plays to Trakt…", forceNotify: true);
+                wouldPush = await PushLocalPlaysAsync(db, account, accessToken, runCt);
+
+                SetStatus("Syncing library watched → Trakt…", forceNotify: true);
+                var libResult = await libraryWatchedToTrakt.SyncAsync(
+                    account, accessToken, previewOnly: false, runCt, msg => SetStatus(msg));
+                wouldLibraryHistory = libResult.HistoryAdded;
+                wouldLibraryCollection = libResult.CollectionAdded;
+                if (samples.Count < 8)
+                {
+                    foreach (var s in libResult.Samples)
+                    {
+                        if (samples.Count >= 8)
+                            break;
+                        samples.Add(s);
+                    }
+                }
+            }
             else if (account.PushToTrakt)
-                wouldPush = await CountPushCandidatesAsync(db, account, ct);
+            {
+                SetStatus("Counting push candidates…");
+                wouldPush = await CountPushCandidatesAsync(db, account, runCt);
+                SetStatus("Previewing library watched → Trakt…", forceNotify: true);
+                var libResult = await libraryWatchedToTrakt.SyncAsync(
+                    account, accessToken, previewOnly: true, runCt, msg => SetStatus(msg));
+                wouldLibraryHistory = libResult.HistoryAdded;
+                wouldLibraryCollection = libResult.CollectionAdded;
+                if (samples.Count < 8)
+                {
+                    foreach (var s in libResult.Samples)
+                    {
+                        if (samples.Count >= 8)
+                            break;
+                        samples.Add(s);
+                    }
+                }
+            }
+
+            if (!previewOnly
+                && (account.MarkEmbyWatched || account.MarkPlexWatched || account.MarkJellyfinWatched || account.PushToTrakt))
+            {
+                SetStatus("Enriching library provider ids…", forceNotify: true);
+                await enrichment.EnrichAsync(runCt);
+            }
+
+            var wouldMarkEmby = 0;
+            var wouldMarkPlex = 0;
+            if (account.MarkEmbyWatched || account.MarkPlexWatched || account.MarkJellyfinWatched)
+            {
+                SetStatus(previewOnly ? "Previewing server mark-watched…" : "Marking Emby/Plex watched…", forceNotify: true);
+                var (embyMark, plexMark) = await serverWatchedMark.MarkForAccountAsync(
+                    account, previewOnly, runCt,
+                    msg => SetStatus(msg));
+                wouldMarkEmby = previewOnly ? embyMark.WouldMark : embyMark.Marked;
+                wouldMarkPlex = previewOnly ? plexMark.WouldMark : plexMark.Marked;
+                if (samples.Count < 8)
+                {
+                    foreach (var s in embyMark.Samples.Concat(plexMark.Samples))
+                    {
+                        if (samples.Count >= 8)
+                            break;
+                        samples.Add(s);
+                    }
+                }
+            }
 
             if (!previewOnly)
             {
-                var tracked = await db.TraktAccounts.FindAsync([accountId], ct);
+                var tracked = await db.TraktAccounts.FindAsync([accountId], runCt);
                 if (tracked is not null)
                 {
                     tracked.LastSyncedAtUtc = DateTimeOffset.UtcNow;
                     tracked.LastError = null;
                     tracked.LastPreviewJson = JsonSerializer.Serialize(new
                     {
+                        kind = "sync",
+                        historyMovies = movies.Count,
+                        historyEpisodes = episodes.Count,
                         wouldImport,
                         wouldLink,
                         wouldPush,
+                        wouldLibraryHistory,
+                        wouldLibraryCollection,
+                        wouldMarkEmby,
+                        wouldMarkPlex,
                         unmatched,
-                        imported = pendingEntities.Count
+                        imported = pendingEntities.Count,
+                        samples
                     });
                 }
 
-                await db.SaveChangesAsync(ct);
+                await db.SaveChangesAsync(runCt);
                 activityAnalytics.InvalidateCache();
                 watchStats.InvalidateCache();
             }
             else
             {
-                var tracked = await db.TraktAccounts.FindAsync([accountId], ct);
+                var tracked = await db.TraktAccounts.FindAsync([accountId], runCt);
                 if (tracked is not null)
                 {
                     tracked.LastPreviewAtUtc = DateTimeOffset.UtcNow;
                     tracked.LastPreviewJson = JsonSerializer.Serialize(new
                     {
+                        kind = "preview",
+                        historyMovies = movies.Count,
+                        historyEpisodes = episodes.Count,
                         wouldImport,
                         wouldLink,
                         wouldPush,
-                        unmatched
+                        wouldLibraryHistory,
+                        wouldLibraryCollection,
+                        wouldMarkEmby,
+                        wouldMarkPlex,
+                        unmatched,
+                        samples
                     });
-                    await db.SaveChangesAsync(ct);
+                    await db.SaveChangesAsync(runCt);
                 }
             }
 
-            var note = account.MarkPlexWatched || account.MarkEmbyWatched || account.MarkJellyfinWatched
-                ? "Server watched-state writes are configured but preview-gated; enable after reviewing matches. Additive only."
-                : null;
+            var noteParts = new List<string>();
+            if (account.MarkEmbyWatched || account.MarkJellyfinWatched)
+                noteParts.Add("Emby/Jellyfin mark-watched is additive (never unmarks)");
+            if (account.MarkPlexWatched)
+                noteParts.Add("Plex mark-watched uses the server token owner account");
+            if (account.PushToTrakt)
+                noteParts.Add("Library Played/viewCount also push to Trakt history + collection (capped per run)");
+            var note = noteParts.Count > 0 ? string.Join(". ", noteParts) + "." : null;
 
             var preview = new TraktSyncPreview(
                 accountId,
@@ -246,19 +394,37 @@ public sealed class TraktSyncService(
                 wouldImport,
                 wouldLink,
                 wouldPush,
+                wouldLibraryHistory,
+                wouldLibraryCollection,
+                wouldMarkEmby,
+                wouldMarkPlex,
                 unmatched,
                 samples,
                 note);
 
             SetStatus(previewOnly
-                ? $"Preview: import {wouldImport:N0}, already linked {wouldLink:N0}"
-                : $"Synced: imported {pendingEntities.Count:N0}, already linked {wouldLink:N0}");
+                ? $"Preview done: import {wouldImport:N0}, push {wouldPush:N0}, lib hist {wouldLibraryHistory:N0}, lib coll {wouldLibraryCollection:N0}, mark Emby {wouldMarkEmby:N0}, mark Plex {wouldMarkPlex:N0}"
+                : $"Synced: imported {pendingEntities.Count:N0}, push {wouldPush:N0}, lib hist {wouldLibraryHistory:N0}, lib coll {wouldLibraryCollection:N0}, mark Emby {wouldMarkEmby:N0}, mark Plex {wouldMarkPlex:N0}",
+                forceNotify: true);
             return preview;
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Cancelled", forceNotify: true);
+            throw;
         }
         finally
         {
             if (!alreadyLocked)
+            {
+                lock (_statusLock)
+                {
+                    if (ReferenceEquals(_activeRunCts, linked))
+                        _activeRunCts = null;
+                }
+
                 _syncLock.Release();
+            }
         }
     }
 
@@ -558,9 +724,20 @@ public sealed class TraktSyncService(
             WasCompleted: true,
             DurationIsEstimated: true);
 
-    private void SetStatus(string message)
+    private void SetStatus(string message, bool forceNotify = false)
     {
+        Action? raise = null;
         lock (_statusLock)
+        {
             _statusMessage = message;
+            var now = DateTime.UtcNow;
+            if (forceNotify || (now - _lastStatusNotifyUtc).TotalMilliseconds >= 400)
+            {
+                _lastStatusNotifyUtc = now;
+                raise = StatusChanged;
+            }
+        }
+
+        raise?.Invoke();
     }
 }

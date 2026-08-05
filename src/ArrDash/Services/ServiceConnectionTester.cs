@@ -6,7 +6,7 @@ using ArrDash.Services.Clients;
 
 namespace ArrDash.Services;
 
-public sealed record ServiceTestInput(string? Url, string? ApiKeyOrToken);
+public sealed record ServiceTestInput(string? Url, string? ApiKeyOrToken, string? SecondaryCredential = null);
 
 public sealed class ServiceConnectionTester(
     IHttpClientFactory httpClientFactory,
@@ -52,19 +52,17 @@ public sealed class ServiceConnectionTester(
     private async Task<(bool Ok, string Message)> TestTraktAsync(TraktOptions current, ServiceTestInput? input, CancellationToken ct)
     {
         var clientId = FirstNonEmpty(input?.ApiKeyOrToken, current.ClientId);
+        var clientSecret = FirstNonEmpty(input?.SecondaryCredential, current.ClientSecret);
         if (string.IsNullOrWhiteSpace(clientId))
             return (false, "Trakt Client ID required");
-        if (string.IsNullOrWhiteSpace(current.ClientSecret) && string.IsNullOrWhiteSpace(input?.ApiKeyOrToken))
-            return (false, "Save Client ID and Client Secret, then connect an account on the Watch stats tab");
-        if (string.IsNullOrWhiteSpace(current.ClientSecret))
-            return (true, "Client ID present — save Client Secret to finish app setup");
+        if (string.IsNullOrWhiteSpace(clientSecret))
+            return (false, "Trakt Client Secret required — paste both, Test, then Save when it passes");
 
-        // Live probe: validates Client ID + headers without starting a device-code session
-        // (device codes would invalidate an in-progress Connect).
+        // Live probe uses the form values (does not require Save first).
         try
         {
-            await trakt.ProbeApiAsync(ct);
-            return (true, "Trakt API reachable — use Connect on Watch stats to authorize with PIN");
+            await trakt.ProbeApiAsync(clientId, ct);
+            return (true, "Trakt Client ID works — Save to store credentials, then Connect on Watch stats");
         }
         catch (Exception ex)
         {

@@ -6,13 +6,29 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Trakt **library watched → history + collection**: when Push is on, Sync reads Emby IsPlayed / Plex viewCount (including missing-on-disk) and pushes gaps to Trakt (capped 500 history + 500 collection per run; resumes via `TraktLibrarySyncLinks`) ([#70](https://github.com/Unthred/ArrDash/issues/70))
+- Live **Emby/Plex play webhooks** (`POST /api/webhooks/emby|plex?token=…`) scrobble Squiggley’s completed plays to Trakt; token in OpenBao `secret/arrdash/webhook-token`; Settings shows copy-paste URLs ([#70](https://github.com/Unthred/ArrDash/issues/70))
+- Trakt client: collection get/add + scrobble/stop APIs
+
 ### Changed
 
+- Service secrets: production source of truth is **OpenBao** (`secret/arrdash/media-services` via AppRole); Settings Save writes through to the vault; `service-secrets.json` remains the local/dev fallback when `OPENBAO_*` is unset
+- Docker compose / Unraid template: removed plaintext API key env vars; wire `OPENBAO_*` via `openbao.env`
 - Colleague handoff: minimal `docker-compose.example.yml` (Unraid mounts moved to `docker-compose.unraid.example.yml`); README/deployment stress **`main` only**, GHCR pull + build fallback, and **no built-in auth**
 - Unraid template: service URL/key fields optional (configure in Settings on first run); overview notes lack of built-in login
 
 ### Added
 
+- Trakt last Preview/Sync results stay on the account card (counts + samples) so leaving the page does not lose them; app-bar status lingers ~2 minutes
+- Trakt Connect/Reauthorize opens `trakt.tv/activate` (PIN) or `trakt.tv/oauth/applications` (bad Client ID/Secret) in a new tab; jumps to API keys when credentials need fixing
+- Trakt **Test** uses unsaved form Client ID/Secret (no Save required to verify before overwriting vault)
+- `OpenBaoSecretsClient` (VaultSharp) for AppRole read/write of media service credentials
+- Cleanup candidates: search box to narrow by title, year, IMDb id, tags, or watchers (works in Candidates and Deletion queue); search also finds library titles that are not cleanup candidates yet (e.g. recently added)
+- Cleanup candidates: multi-select **Watched by** filter to show everything one or more users have watched (OR across selected users; includes non-candidate library titles)
+- Trakt watched agreement: Plex provider-id enrichment; **Mark Emby/Plex watched from Trakt** (additive, per account + mapped users); Preview/Sync report mark counts; never unmarks
+- Trakt: detect expired sessions on Settings load, show **Needs reauth** + **Reauthorize** PIN flow (keeps account settings); Preview auto-starts reauth on auth failure
 - Now Playing: percentage chip on the progress bar; start / current / length times aligned under the bar ([#66](https://github.com/Unthred/ArrDash/issues/66))
 - Cleanup candidates page: sync Sonarr/Radarr inventory and list never-watched / stale / largest titles (report-only; Keep flags) ([#62](https://github.com/Unthred/ArrDash/issues/62))
 - Cleanup candidates table shows **Watched by** (distinct users from local play history, with Watch Stats aliases) and **Tags** (Sonarr/Radarr labels such as requester tags; empty for most titles) ([#52](https://github.com/Unthred/ArrDash/issues/52))
