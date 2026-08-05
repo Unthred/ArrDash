@@ -111,6 +111,7 @@ public static class SettingsHelpTexts
     public const string WatchStatsUserAliases = "Map usernames across servers for combined rankings. One per line: canonical|source|username (e.g. Mom|plex|Margaret).";
     public const string WatchStatsIncludedLibraries = "Choose which media libraries count toward Activity stats. Checked = included. Unchecked libraries are hidden from Activity and never pushed to Trakt (saved immediately). Plays whose library is not yet known stay visible but are never pushed.";
     public const string TraktPosterMode = "Trakt has no artwork, so posters for Trakt history are resolved elsewhere: matched in your Emby/Jellyfin library, fetched from TMDB (needs a TMDB API key on the API keys tab), or both (library first, TMDB fallback).";
+    public const string TraktWebhooks = "Live scrobble: Emby playback.stop / Plex media.scrobble → ArrDash → Trakt. Emby needs Premiere for outbound webhooks. Token lives in OpenBao (secret/arrdash/webhook-token). Only the mapped Trakt user (Squiggley) is accepted.";
     public const string WatchStatsLiveSources = "Live stats are fetched directly from these services. Configure URL and API key on the API keys tab.";
     public const string WatchStatsTautulliSource = "Plex leaderboards and recently watched — same data as the Tautulli home dashboard.";
     public const string WatchStatsTracearrSource = "Emby and Jellyfin stats — session history and platforms from Tracearr. Generate a Public API token in Tracearr Settings → General.";

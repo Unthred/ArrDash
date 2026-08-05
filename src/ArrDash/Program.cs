@@ -1,5 +1,6 @@
 using ArrDash.Components;
 using ArrDash.Configuration;
+using ArrDash.Data;
 using ArrDash.Hubs;
 using ArrDash.Models;
 using ArrDash.Services;
@@ -7,7 +8,9 @@ using ArrDash.Services.Clients;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,7 +47,7 @@ builder.Services.AddHttpClient<LidarrClient>(c => c.Timeout = TimeSpan.FromSecon
 builder.Services.AddHttpClient<ChaptarrClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<AudiobookShelfClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<PlexClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
-builder.Services.AddHttpClient<PlexHistoryClient>(c => c.Timeout = TimeSpan.FromSeconds(60));
+builder.Services.AddHttpClient<PlexHistoryClient>(c => c.Timeout = TimeSpan.FromSeconds(120));
 builder.Services.AddHttpClient<EmbyClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<JellyfinClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddHttpClient<TautulliClient>(c => c.Timeout = TimeSpan.FromSeconds(30));
@@ -64,12 +67,17 @@ Directory.CreateDirectory(dpKeys);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dpKeys));
 
+builder.Services.AddSingleton<OpenBaoSecretsClient>();
 builder.Services.AddSingleton<ServiceSecretsStore>();
 builder.Services.AddSingleton<MediaServiceOptionsAccessor>();
 builder.Services.AddSingleton<TraktTokenProtector>();
 builder.Services.AddSingleton<TraktAccountService>();
 builder.Services.AddSingleton<TraktSyncService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TraktSyncService>());
+builder.Services.AddSingleton<ServerWatchedMarkService>();
+builder.Services.AddSingleton<LibraryWatchedToTraktService>();
+builder.Services.AddSingleton<WebhookTokenStore>();
+builder.Services.AddSingleton<TraktWebhookService>();
 builder.Services.AddSingleton<PosterProxyService>();
 builder.Services.AddSingleton<MediaPosterResolver>();
 builder.Services.AddSingleton<HostSystemMetricsService>();
@@ -134,6 +142,7 @@ app.Services.GetRequiredService<LogLevelService>().Apply();
 var secrets = app.Services.GetRequiredService<ServiceSecretsStore>();
 await secrets.LoadAsync();
 app.Services.GetRequiredService<MediaServiceOptionsAccessor>().Reload();
+await app.Services.GetRequiredService<WebhookTokenStore>().EnsureLoadedAsync();
 await app.InitializeDatabaseAsync();
 
 if (!app.Environment.IsDevelopment())
@@ -239,11 +248,119 @@ app.MapPost("/api/trakt/accounts/{id}/preview", async (string id, TraktSyncServi
     Results.Json(await sync.PreviewAsync(id, ct)));
 app.MapPost("/api/trakt/accounts/{id}/sync", async (string id, TraktSyncService sync, CancellationToken ct) =>
     Results.Json(await sync.SyncNowAsync(id, ct)));
+app.MapPost("/api/trakt/accounts/{id}/sync-bg", (string id, TraktSyncService sync) =>
+{
+    if (!sync.TryStartSyncInBackground(id, out var message))
+        return Results.Conflict(new { ok = false, message });
+    return Results.Json(new { ok = true, message });
+});
+app.MapGet("/api/trakt/sync-status", (TraktSyncService sync) =>
+    Results.Json(new { busy = sync.IsBusy, status = sync.StatusMessage }));
+/// <summary>Mark Emby/Plex from warehouse Trakt history only (no Trakt API history refetch).</summary>
+app.MapPost("/api/trakt/accounts/{id}/mark", async (
+    string id,
+    IDbContextFactory<ArrDashDbContext> dbFactory,
+    ServerWatchedMarkService mark,
+    CancellationToken ct) =>
+{
+    await using var db = await dbFactory.CreateDbContextAsync(ct);
+    var account = await db.TraktAccounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct);
+    if (account is null)
+        return Results.NotFound(new { ok = false, message = "Account not found" });
+
+    var (emby, plex) = await mark.MarkForAccountAsync(account, previewOnly: false, ct);
+    return Results.Json(new
+    {
+        ok = true,
+        emby = new { emby.WouldMark, emby.Marked, emby.AlreadyLinked, emby.Unmatched, emby.Samples },
+        plex = new { plex.WouldMark, plex.Marked, plex.AlreadyLinked, plex.Unmatched, plex.Samples }
+    });
+});
 app.MapDelete("/api/trakt/accounts/{id}", async (string id, TraktAccountService trakt, CancellationToken ct) =>
 {
     var (ok, message) = await trakt.DisconnectAsync(id, ct);
     return Results.Json(new { ok, message });
 });
+
+app.MapPost("/api/webhooks/emby", async (
+    HttpRequest request,
+    string? token,
+    WebhookTokenStore tokens,
+    TraktWebhookService webhooks,
+    CancellationToken ct) =>
+{
+    var provided = token
+                   ?? request.Headers["X-ArrDash-Token"].FirstOrDefault()
+                   ?? request.Query["token"].FirstOrDefault();
+    if (!tokens.IsValid(provided))
+        return Results.Unauthorized();
+
+    using var doc = await JsonDocument.ParseAsync(request.Body, cancellationToken: ct);
+    var (ok, message) = await webhooks.HandleEmbyAsync(doc.RootElement.Clone(), ct);
+    return ok ? Results.Json(new { ok, message }) : Results.BadRequest(new { ok, message });
+});
+
+app.MapPost("/api/webhooks/plex", async (
+    HttpRequest request,
+    string? token,
+    WebhookTokenStore tokens,
+    TraktWebhookService webhooks,
+    CancellationToken ct) =>
+{
+    var provided = token
+                   ?? request.Headers["X-ArrDash-Token"].FirstOrDefault()
+                   ?? request.Query["token"].FirstOrDefault();
+    if (!tokens.IsValid(provided))
+        return Results.Unauthorized();
+
+    // Plex sends multipart/form-data with a "payload" JSON field.
+    string? payloadJson = null;
+    if (request.HasFormContentType)
+    {
+        var form = await request.ReadFormAsync(ct);
+        payloadJson = form["payload"].ToString();
+    }
+    else
+    {
+        using var reader = new StreamReader(request.Body);
+        payloadJson = await reader.ReadToEndAsync(ct);
+    }
+
+    if (string.IsNullOrWhiteSpace(payloadJson))
+        return Results.BadRequest(new { ok = false, message = "Missing Plex payload" });
+
+    using var doc = JsonDocument.Parse(payloadJson);
+    var (ok, message) = await webhooks.HandlePlexAsync(doc.RootElement.Clone(), ct);
+    return ok ? Results.Json(new { ok, message }) : Results.BadRequest(new { ok, message });
+});
+
+app.MapGet("/api/webhooks/token", async (WebhookTokenStore tokens, CancellationToken ct) =>
+{
+    await tokens.EnsureLoadedAsync(ct);
+    var t = tokens.CurrentToken;
+    if (string.IsNullOrWhiteSpace(t))
+        return Results.NotFound(new { ok = false, message = "Webhook token not available" });
+    return Results.Json(new
+    {
+        ok = true,
+        token = t,
+        embyUrl = $"https://arrdash.yeradonkey.com/api/webhooks/emby?token={t}",
+        plexUrl = $"https://arrdash.yeradonkey.com/api/webhooks/plex?token={t}"
+    });
+});
+
+app.MapPost("/api/webhooks/token/rotate", async (WebhookTokenStore tokens, CancellationToken ct) =>
+{
+    var t = await tokens.RotateAsync(ct);
+    return Results.Json(new
+    {
+        ok = true,
+        embyUrl = $"https://arrdash.yeradonkey.com/api/webhooks/emby?token={t}",
+        plexUrl = $"https://arrdash.yeradonkey.com/api/webhooks/plex?token={t}",
+        token = t
+    });
+});
+
 app.MapGet("/api/services/{serviceKey}/detail", async (string serviceKey, ServiceDetailService details, CancellationToken ct) =>
 {
     var detail = await details.FetchAsync(serviceKey, ct);

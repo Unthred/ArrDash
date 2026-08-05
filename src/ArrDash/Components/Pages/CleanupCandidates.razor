@@ -53,7 +53,8 @@ else
             Movies and TV largest, unwatched, or untouched in a while. Report only — nothing here deletes anything;
             click a title to open it in Radarr or Sonarr, or the IMDb icon to look it up.
             Mark items for deletion to build a planning queue with a reclaimable total; Tags are Sonarr/Radarr
-            requester labels and are empty for most titles.
+            requester labels and are empty for most titles. Use Watched by to list everything one or more people
+            have played (including titles that are not cleanup candidates yet).
         </MudText>
 
         <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
@@ -71,6 +72,37 @@ else
                          OnClick="@(() => SetListView(ListView.DeletionQueue))">
                     Deletion queue (@MarkedCount)
                 </MudChip>
+                <MudSpacer />
+                <MudSelect T="string"
+                           MultiSelection="true"
+                           SelectedValues="_selectedWatchers"
+                           SelectedValuesChanged="OnWatchersChanged"
+                           Label="Watched by"
+                           Placeholder="Any user"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense="true"
+                           Clearable="true"
+                           MultiSelectionTextFunc="@FormatWatcherSelection"
+                           Class="cleanup-watcher-select"
+                           Style="max-width:280px;min-width:180px">
+                    @foreach (var user in _availableWatchers)
+                    {
+                        <MudSelectItem T="string" Value="@user">@user</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField @bind-Value="_searchText"
+                              @bind-Value:after="OnSearchChanged"
+                              Immediate="true"
+                              DebounceInterval="200"
+                              Placeholder="Search library by title, tags, watchers…"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true"
+                              Class="cleanup-search-field"
+                              Style="max-width:280px;min-width:180px" />
             </div>
         </MudPaper>
 
@@ -79,7 +111,7 @@ else
             <MudGrid Class="mb-3" Spacing="2">
                 <MudItem xs="6" sm="3">
                     <MudPaper Class="pa-3 stat-card" Elevation="1">
-                        <MudText Typo="Typo.caption" Class="muted">@(_listView == ListView.DeletionQueue ? "Marked" : "Candidates shown")</MudText>
+                        <MudText Typo="Typo.caption" Class="muted">@(_listView == ListView.DeletionQueue ? "Marked" : IsBrowsingLibrary ? "Matches shown" : "Candidates shown")</MudText>
                         <MudText Typo="Typo.h5">@FilteredCandidates.Count</MudText>
                     </MudPaper>
                 </MudItem>
@@ -172,8 +204,12 @@ else
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
             @(_listView == ListView.DeletionQueue
-                ? "Nothing marked for deletion yet. Use the trash icon on a candidate to add it here."
-                : "No cleanup candidates match the current filters.")
+                ? (IsBrowsingLibrary
+                    ? "No marked items match the current search or users."
+                    : "Nothing marked for deletion yet. Use the trash icon on a candidate to add it here.")
+                : (IsBrowsingLibrary
+                    ? "No titles match the search, users, or filters."
+                    : "No cleanup candidates match the current filters."))
         </MudAlert>
     }
     else
@@ -301,6 +337,12 @@ else
                         {
                             <MudText Typo="Typo.caption" Class="muted">No longer a candidate</MudText>
                         }
+                        else if (context.Reasons.Count == 0 && !context.NeverDelete)
+                        {
+                            <MudTooltip Text="In your library but not flagged yet (too recent / still watched / not in the largest set). Shown because it matches your search.">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default" Class="mr-1">Not a candidate</MudChip>
+                            </MudTooltip>
+                        }
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -317,10 +359,13 @@ else
 
     private List<CleanupCandidateItem> _candidates = [];
     private IReadOnlyList<CleanupCandidateItem> _filtered = [];
+    private IReadOnlyList<string> _availableWatchers = [];
+    private IEnumerable<string> _selectedWatchers = Array.Empty<string>();
     private int _markedCount;
     private readonly HashSet<CleanupReason> _activeFilters = new();
     private MediaTypeFilter _mediaTypeFilter = MediaTypeFilter.All;
     private ListView _listView = ListView.Candidates;
+    private string _searchText = "";
     private bool _showKept;
     private int _thresholdMonths;
     private bool _loading = true;
@@ -328,6 +373,9 @@ else
 
     private int MarkedCount => _markedCount;
     private IReadOnlyList<CleanupCandidateItem> FilteredCandidates => _filtered;
+    private bool HasSearch => !string.IsNullOrWhiteSpace(_searchText);
+    private bool HasWatcherFilter => _selectedWatchers.Any();
+    private bool IsBrowsingLibrary => HasSearch || HasWatcherFilter;
 
     private string StatusText =>
         _status.IsRunning
@@ -372,6 +420,19 @@ else
             ServiceOptions.Options.Radarr.Url,
             ServiceOptions.Options.Sonarr.Url).ToList();
 
+        _availableWatchers = _candidates
+            .SelectMany(c => c.WatchedBy)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // Drop selections that disappeared after a refresh.
+        if (HasWatcherFilter)
+        {
+            var stillValid = new HashSet<string>(_availableWatchers, StringComparer.OrdinalIgnoreCase);
+            _selectedWatchers = _selectedWatchers.Where(stillValid.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
         RebuildFiltered();
         _loading = false;
         StateHasChanged();
@@ -388,7 +449,7 @@ else
 
         if (_listView == ListView.DeletionQueue)
         {
-            _filtered = _candidates.Where(c => c.MarkedForDeletion).ToList();
+            _filtered = ApplyBrowseFilters(_candidates.Where(c => c.MarkedForDeletion)).ToList();
             return;
         }
 
@@ -396,6 +457,11 @@ else
 
         if (!_showKept)
             query = query.Where(c => !c.NeverDelete);
+
+        // Without search/user filters, only show real cleanup flags (or Keep bookmarks).
+        // With those, also surface matching library titles that are not candidates yet.
+        if (!IsBrowsingLibrary)
+            query = query.Where(c => c.Reasons.Count > 0 || c.NeverDelete);
 
         query = _mediaTypeFilter switch
         {
@@ -407,8 +473,62 @@ else
         if (_activeFilters.Count > 0)
             query = query.Where(c => c.Reasons.Any(_activeFilters.Contains));
 
-        _filtered = query.ToList();
+        _filtered = ApplyBrowseFilters(query).ToList();
     }
+
+    private IEnumerable<CleanupCandidateItem> ApplyBrowseFilters(IEnumerable<CleanupCandidateItem> query)
+    {
+        if (HasWatcherFilter)
+        {
+            var selected = _selectedWatchers as HashSet<string>
+                ?? _selectedWatchers.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            query = query.Where(c => c.WatchedBy.Any(selected.Contains));
+        }
+
+        var search = _searchText.Trim();
+        if (search.Length == 0)
+            return query;
+
+        return query.Where(c => MatchesSearch(c, search));
+    }
+
+    private static bool MatchesSearch(CleanupCandidateItem item, string search)
+    {
+        if (item.Title.Contains(search, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (item.Year is { } year && year.ToString().Contains(search, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (item.ImdbId is { } imdb && imdb.Contains(search, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        foreach (var tag in item.Tags)
+        {
+            if (tag.Contains(search, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        foreach (var watcher in item.WatchedBy)
+        {
+            if (watcher.Contains(search, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private void OnSearchChanged() => RebuildFiltered();
+
+    private void OnWatchersChanged(IEnumerable<string> values)
+    {
+        _selectedWatchers = values?.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        RebuildFiltered();
+    }
+
+    private static string FormatWatcherSelection(List<string> selected) =>
+        selected.Count == 0 ? "Any user" : string.Join(", ", selected);
 
     private async Task OnThresholdChanged(int value)
     {

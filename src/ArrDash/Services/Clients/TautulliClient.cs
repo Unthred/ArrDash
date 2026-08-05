@@ -991,6 +991,74 @@ public sealed class TautulliClient(HttpClient http, MediaServiceOptionsAccessor 
         }
     }
 
+    /// <summary>Provider ids from Tautulli get_metadata guids (imdb:// / tmdb:// / tvdb://).</summary>
+    public async Task<(string? ImdbId, int? TmdbId, int? TvdbId, int? Year)> GetProviderIdsForRatingKeyAsync(
+        string ratingKey,
+        CancellationToken ct)
+    {
+        if (!IsConfigured || string.IsNullOrWhiteSpace(ratingKey))
+            return (null, null, null, null);
+
+        try
+        {
+            var doc = await GetApiAsync("get_metadata", ct, ("rating_key", ratingKey));
+            if (doc is null || doc.RootElement.ValueKind != JsonValueKind.Object)
+                return (null, null, null, null);
+
+            string? imdb = null;
+            int? tmdb = null;
+            int? tvdb = null;
+            var year = ReadInt(doc.RootElement, "year");
+
+            if (doc.RootElement.TryGetProperty("guids", out var guids) && guids.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var g in guids.EnumerateArray())
+                {
+                    var raw = g.ValueKind == JsonValueKind.String ? g.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(raw))
+                        continue;
+                    ParseGuid(raw, ref imdb, ref tmdb, ref tvdb);
+                }
+            }
+
+            // Some Tautulli versions expose a single guid string.
+            var single = ReadString(doc.RootElement, "guid");
+            if (!string.IsNullOrWhiteSpace(single))
+                ParseGuid(single, ref imdb, ref tmdb, ref tvdb);
+
+            return (imdb, tmdb, tvdb, year);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "GetProviderIdsForRatingKeyAsync failed for {RatingKey}", ratingKey);
+            return (null, null, null, null);
+        }
+    }
+
+    private static void ParseGuid(string raw, ref string? imdb, ref int? tmdb, ref int? tvdb)
+    {
+        var value = raw.Trim();
+        if (value.StartsWith("imdb://", StringComparison.OrdinalIgnoreCase))
+            imdb ??= value["imdb://".Length..].Trim();
+        else if (value.StartsWith("tmdb://", StringComparison.OrdinalIgnoreCase)
+                 && int.TryParse(value["tmdb://".Length..].Split('?')[0], out var tmdbId))
+            tmdb ??= tmdbId;
+        else if (value.StartsWith("themoviedb://", StringComparison.OrdinalIgnoreCase)
+                 && int.TryParse(value["themoviedb://".Length..].Split('?')[0], out var tmdbAlt))
+            tmdb ??= tmdbAlt;
+        else if (value.StartsWith("tvdb://", StringComparison.OrdinalIgnoreCase)
+                 && int.TryParse(value["tvdb://".Length..].Split('?')[0], out var tvdbId))
+            tvdb ??= tvdbId;
+        else if (value.StartsWith("com.plexapp.agents.imdb://", StringComparison.OrdinalIgnoreCase))
+            imdb ??= value["com.plexapp.agents.imdb://".Length..].Split('?')[0].Trim();
+        else if (value.StartsWith("com.plexapp.agents.themoviedb://", StringComparison.OrdinalIgnoreCase)
+                 && int.TryParse(value["com.plexapp.agents.themoviedb://".Length..].Split('?')[0], out var agentTmdb))
+            tmdb ??= agentTmdb;
+        else if (value.StartsWith("com.plexapp.agents.thetvdb://", StringComparison.OrdinalIgnoreCase)
+                 && int.TryParse(value["com.plexapp.agents.thetvdb://".Length..].Split('?')[0], out var agentTvdb))
+            tvdb ??= agentTvdb;
+    }
+
     private async Task<JsonDocument?> GetApiAsync(string cmd, CancellationToken ct, params (string Key, string Value)[] extra)
     {
         var query = new List<string>

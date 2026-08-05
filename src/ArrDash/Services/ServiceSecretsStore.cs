@@ -3,18 +3,46 @@ using ArrDash.Configuration;
 
 namespace ArrDash.Services;
 
-public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<ServiceSecretsStore> logger)
+public sealed class ServiceSecretsStore(
+    IWebHostEnvironment env,
+    OpenBaoSecretsClient openBao,
+    ILogger<ServiceSecretsStore> logger)
 {
     private readonly string _path = Path.Combine(
         Environment.GetEnvironmentVariable("ARRDASH_CONFIG_PATH") ?? Path.Combine(env.ContentRootPath, "config"),
         "service-secrets.json");
     private readonly object _lock = new();
     private ServiceSecretsFile _secrets = new();
+    private readonly bool _useOpenBao = OpenBaoSecretsClient.IsConfigured;
 
     public event Action? Changed;
 
     public async Task LoadAsync(CancellationToken ct = default)
     {
+        if (_useOpenBao)
+        {
+            try
+            {
+                var loaded = await openBao.ReadMediaServicesAsync(ct);
+                if (loaded is not null)
+                {
+                    lock (_lock)
+                        _secrets = loaded;
+                }
+
+                logger.LogInformation(
+                    "Loaded service secrets from OpenBao ({Path})",
+                    $"{OpenBaoSecretsClient.MountPoint}/{OpenBaoSecretsClient.SecretPath}");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to load service secrets from OpenBao — refusing file fallback");
+                throw;
+            }
+
+            return;
+        }
+
         try
         {
             var dir = Path.GetDirectoryName(_path)!;
@@ -165,12 +193,18 @@ public sealed class ServiceSecretsStore(IWebHostEnvironment env, ILogger<Service
 
     private async Task PersistAsync(CancellationToken ct)
     {
-        var dir = Path.GetDirectoryName(_path)!;
-        Directory.CreateDirectory(dir);
-
         ServiceSecretsFile snapshot;
         lock (_lock)
             snapshot = Clone(_secrets);
+
+        if (_useOpenBao)
+        {
+            await openBao.WriteMediaServicesAsync(snapshot, ct);
+            return;
+        }
+
+        var dir = Path.GetDirectoryName(_path)!;
+        Directory.CreateDirectory(dir);
 
         await using var stream = File.Create(_path);
         await JsonSerializer.SerializeAsync(stream, snapshot, new JsonSerializerOptions { WriteIndented = true }, ct);

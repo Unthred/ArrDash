@@ -51,9 +51,53 @@ public static class DatabaseSchemaUpgrader
         await EnsureTraktTablesAsync(db, ct);
         await EnsureMediaInventoryTableAsync(db, ct);
         await EnsureArrTagsTableAsync(db, ct);
+        await EnsureServerWatchedLinksTableAsync(db, ct);
+        await EnsureTraktLibrarySyncLinksTableAsync(db, ct);
 
         foreach (var (column, sqlType) in MediaInventoryItemColumns)
             await TryAddColumnAsync(db, "MediaInventoryItems", column, sqlType, logger, ct);
+    }
+
+    private static async Task EnsureTraktLibrarySyncLinksTableAsync(ArrDashDbContext db, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "TraktLibrarySyncLinks" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_TraktLibrarySyncLinks" PRIMARY KEY AUTOINCREMENT,
+                "AccountId" TEXT NOT NULL,
+                "Server" TEXT NOT NULL,
+                "ServerItemId" TEXT NOT NULL,
+                "Direction" TEXT NOT NULL,
+                "CanonicalMediaKey" TEXT NOT NULL,
+                "MediaType" TEXT NOT NULL,
+                "LinkedAtUtc" TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_TraktLibrarySyncLinks_Account_Server_Item_Dir"
+                ON "TraktLibrarySyncLinks" ("AccountId", "Server", "ServerItemId", "Direction");
+            """,
+            ct);
+    }
+
+    private static async Task EnsureServerWatchedLinksTableAsync(ArrDashDbContext db, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "ServerWatchedLinks" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_ServerWatchedLinks" PRIMARY KEY AUTOINCREMENT,
+                "AccountId" TEXT NOT NULL,
+                "Server" TEXT NOT NULL,
+                "ServerUserId" TEXT NOT NULL,
+                "ServerItemId" TEXT NOT NULL,
+                "CanonicalMediaKey" TEXT NOT NULL,
+                "MediaType" TEXT NOT NULL,
+                "LinkedAtUtc" TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_ServerWatchedLinks_Account_Server_User_Item"
+                ON "ServerWatchedLinks" ("AccountId", "Server", "ServerUserId", "ServerItemId");
+            CREATE INDEX IF NOT EXISTS "IX_ServerWatchedLinks_Account_Server_Key"
+                ON "ServerWatchedLinks" ("AccountId", "Server", "CanonicalMediaKey");
+            """,
+            ct);
     }
 
     private static async Task EnsureArrTagsTableAsync(ArrDashDbContext db, CancellationToken ct)

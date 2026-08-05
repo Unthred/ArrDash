@@ -1,0 +1,87 @@
+@implements IDisposable
+@inject TraktSyncService TraktSync
+
+@if (Visible)
+{
+    <div class="trakt-work-status @CssClass" role="status" aria-live="polite">
+        @if (Busy)
+        {
+            <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="trakt-work-status-bar" />
+        }
+        <div class="trakt-work-status-row">
+            <MudIcon Icon="@(Busy ? Icons.Material.Filled.Sync : Icons.Material.Filled.CheckCircle)" Size="Size.Small" Class="trakt-work-status-icon" />
+            <span class="trakt-work-status-text">@_message</span>
+            @if (Busy)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Class="trakt-work-status-cancel"
+                           OnClick="CancelAsync" Disabled="_cancelling">
+                    @(_cancelling ? "Cancelling…" : "Cancel")
+                </MudButton>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string CssClass { get; set; } = "";
+
+    /// <summary>Keep showing the last message briefly after work finishes.</summary>
+    [Parameter] public int LingerSeconds { get; set; } = 8;
+
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
+
+    private System.Threading.Timer? _timer;
+    private string _message = "";
+    private DateTime _lastBusyUtc = DateTime.MinValue;
+    private bool _cancelling;
+    private bool _wasBusy;
+
+    private bool Busy => TraktSync.IsBusy;
+    private bool Visible =>
+        Busy
+        || (!string.IsNullOrWhiteSpace(_message)
+            && !string.Equals(_message, "Idle", StringComparison.OrdinalIgnoreCase)
+            && (DateTime.UtcNow - _lastBusyUtc).TotalSeconds < LingerSeconds);
+
+    protected override void OnInitialized()
+    {
+        TraktSync.StatusChanged += OnStatusChanged;
+        _timer = new System.Threading.Timer(_ => _ = InvokeAsync(RefreshFromService), null, TimeSpan.Zero, PollInterval);
+        RefreshFromService();
+    }
+
+    private void OnStatusChanged() => _ = InvokeAsync(RefreshFromService);
+
+    private void RefreshFromService()
+    {
+        var busy = TraktSync.IsBusy;
+        _message = TraktSync.StatusMessage;
+        if (busy)
+        {
+            _lastBusyUtc = DateTime.UtcNow;
+            _wasBusy = true;
+        }
+        else if (_wasBusy)
+        {
+            _cancelling = false;
+            _wasBusy = false;
+            _lastBusyUtc = DateTime.UtcNow;
+        }
+
+        StateHasChanged();
+    }
+
+    private Task CancelAsync()
+    {
+        _cancelling = true;
+        TraktSync.CancelCurrent();
+        _message = TraktSync.StatusMessage;
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        TraktSync.StatusChanged -= OnStatusChanged;
+        _timer?.Dispose();
+    }
+}

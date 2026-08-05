@@ -44,12 +44,19 @@ Enable **Watch stats sync** in Settings and wait for the first backfill. Tautull
 
 **Combined dedupe:** The Combined Activity / Watch Stats view collapses plays for the same user and title (`CanonicalMediaKey`) within **24 hours** into one watch — across Plex, Emby, Jellyfin, and Trakt (and stop/start repeats). Per-source filters still show raw warehouse rows. User aliases (`canonical|source|username`) are applied before matching.
 
-### Trakt (optional history restore)
+### Trakt (optional history restore + watched agreement)
 
 1. Create an app at [trakt.tv/oauth/applications](https://trakt.tv/oauth/applications) and paste **Client ID** + **Client Secret** under Settings → API keys → Trakt.
 2. Settings → Watch stats → **Connect Trakt account**. ArrDash shows an 8-digit PIN — open [trakt.tv/activate](https://trakt.tv/activate), enter the code, and allow access (same flow as other media apps).
-3. Map the Trakt account to your ArrDash/Emby/Plex usernames, choose Movies/Episodes and directions (import / push).
-4. **Preview** then **Sync now**. Sync is additive only — ArrDash never removes Trakt history or unmarks items.
+3. Set **Canonical ArrDash username** and map local users (`emby|Name` / `plex|Name`, optional `emby|Name|userId`).
+4. Choose Movies/Episodes, then directions:
+   - **Import into ArrDash** — pull Trakt history into the warehouse
+   - **Push Emby/Plex plays → Trakt** — additive history add for PlayEvents **and** library Played/viewCount (history + collection; capped ~500 each per Sync)
+   - **Mark Emby watched from Trakt** / **Mark Plex watched from Trakt** — additive Played flags on the media servers (never unmarks)
+5. **Preview** then **Sync now**. Each sync processes a batch of mark-watched / library-push writes; re-run until counts settle.
+6. Optional **live webhooks**: Settings → Trakt play webhooks → paste Emby (`playback.stop`, Premiere required) and Plex (`media.scrobble`) URLs. Token is OpenBao `secret/arrdash/webhook-token`.
+
+Per-account: only that Trakt user’s mapped Emby/Plex names are reconciled. Plex mark-watched uses the configured Plex token’s account. Emby’s native Trakt plugin is optional once ArrDash push is healthy.
 
 Imported Trakt plays appear as source `trakt` (and in Combined). Durations from Trakt runtimes are marked estimated.
 

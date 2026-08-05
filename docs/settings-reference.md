@@ -1,6 +1,6 @@
 # Settings reference
 
-All settings are edited at **/settings**. Changes preview live on the dashboard; **Save** writes to `/config/user-layout.json` and `/config/service-secrets.json`.
+All settings are edited at **/settings**. Changes preview live on the dashboard; **Save** writes layout to `/config/user-layout.json` and service secrets to **OpenBao** (`secret/arrdash/media-services`) when configured, otherwise `/config/service-secrets.json`.
 
 Toolbar: **Save** · **Discard** · **Preview dashboard** · **Show help** (inline hints).
 
@@ -155,7 +155,7 @@ Configure one service at a time:
 4. **Test connection** — uses form values without saving
 5. **Save** (toolbar) persists all pending changes
 
-Secrets are stored in `service-secrets.json` and override environment variables for keys.
+Secrets are stored in OpenBao (production) or `service-secrets.json` (dev fallback) and override environment variables for keys.
 
 ---
 

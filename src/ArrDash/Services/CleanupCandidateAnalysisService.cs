@@ -97,11 +97,9 @@ public static class CleanupCandidateAnalysisService
             if (item.SizeOnDiskBytes >= largestThresholdBytes)
                 reasons.Add(CleanupReason.Largest);
 
-            // Keep marked-for-deletion items on the list even when they no longer match
-            // candidate reasons, so the deletion queue does not silently drop them.
-            if (reasons.Count == 0 && !item.MarkedForDeletion)
-                continue;
-
+            // Include every on-disk title. The Cleanup page hides empty-reason rows unless
+            // the user is searching (so "crim" can still find Criminal Minds even when it is
+            // too new / too small to be a candidate) or the row is Keep/Delete flagged.
             var source = item.MediaType == "movie" ? MediaSource.Radarr : MediaSource.Sonarr;
             var baseUrl = item.MediaType == "movie" ? radarrBaseUrl : sonarrBaseUrl;
 

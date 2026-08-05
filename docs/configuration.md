@@ -3,10 +3,24 @@
 ArrDash configuration comes from three layers (later layers override earlier ones for API keys):
 
 1. `appsettings.json` — defaults and dev URLs
-2. **Environment variables** — Docker / Unraid template
-3. **`/config/service-secrets.json`** — keys saved in Settings UI
+2. **Environment variables** — Docker / Unraid template (URLs and optional bootstrap keys)
+3. **Secrets backend** (highest priority for keys/URLs):
+   - **OpenBao** when `OPENBAO_ADDR`, `OPENBAO_ROLE_ID`, and `OPENBAO_SECRET_ID` are set — KV path `secret/arrdash/media-services`
+   - Otherwise **`/config/service-secrets.json`** (local/dev fallback)
 
 Layout and behaviour live in **`/config/user-layout.json`** (managed entirely through Settings).
+
+## OpenBao (production)
+
+When OpenBao is configured, Settings → Save writes service API keys/tokens and optional service URLs to OpenBao. Startup **fails closed** if the vault cannot be read (no silent fallback to the JSON file).
+
+| Variable | Description |
+|----------|-------------|
+| `OPENBAO_ADDR` | OpenBao base URL (e.g. `https://openbao.yeradonkey.com`) |
+| `OPENBAO_ROLE_ID` | AppRole role id |
+| `OPENBAO_SECRET_ID` | AppRole secret id (keep out of git; prefer `env_file`) |
+
+House deploy uses `/mnt/user/appdata/arrdash/openbao.env` via compose `env_file`. Trakt **user** OAuth tokens remain encrypted in SQLite (`TraktAccounts`); only the Trakt OAuth **client** id/secret live in the vault. Play webhook token lives at `secret/arrdash/webhook-token` (created on first ArrDash start).
 
 ## Config volume
 
@@ -20,7 +34,9 @@ volumes:
 | File | Written by | Contents |
 |------|------------|----------|
 | `user-layout.json` | Settings → Save | Theme, panels, limits, toggles |
-| `service-secrets.json` | Settings → Save | API keys and tokens |
+| `service-secrets.json` | Settings → Save (only when OpenBao is **not** configured) | API keys and tokens |
+| `webhook-token.txt` | Startup (only when OpenBao is **not** configured) | Shared Emby/Plex webhook secret |
+| `openbao.env` | Operator | `OPENBAO_*` AppRole credentials (mode 600; not used as app config JSON) |
 
 Back up this directory before major upgrades.
 
@@ -125,8 +141,8 @@ Shipped defaults use placeholder hostnames. Production should set env vars or us
 
 | Setting | Where stored | Notes |
 |---------|--------------|-------|
-| API keys | `service-secrets.json` | Env vars work until overridden in UI |
-| Service URLs | Env / appsettings | Editable in Settings → API keys |
+| API keys | OpenBao or `service-secrets.json` | Env vars work until overridden in UI / vault |
+| Service URLs | Vault / env / appsettings | Editable in Settings → API keys |
 | Poll interval | `user-layout.json` | `0` = use env default |
 | Theme, panels, kiosk | `user-layout.json` | Live preview before save |
 
@@ -138,13 +154,13 @@ Shipped defaults use placeholder hostnames. Production should set env vars or us
 
 ## Security notes
 
-- Do **not** commit `docker-compose.yml` with real API keys (use `docker-compose.example.yml` as template).
-- `service-secrets.json` contains plaintext keys — restrict filesystem permissions on `/config`.
+- Do **not** commit real API keys or `OPENBAO_SECRET_ID` (use `openbao.env` mode 600 and `docker-compose.example.yml` as template).
+- Prefer OpenBao for production secrets; if using `service-secrets.json`, restrict filesystem permissions on `/config`.
 - ArrDash has no built-in authentication; put it behind your reverse proxy auth or VPN if exposed beyond LAN.
 
 ## Example docker-compose snippet
 
-See [deployment.md](deployment.md) for the full file. Minimal env block:
+See [deployment.md](deployment.md) for the full file. Minimal env block (file-based secrets / no OpenBao):
 
 ```yaml
 environment:
@@ -154,4 +170,15 @@ environment:
   POLL_INTERVAL_SECONDS: 30
 volumes:
   - /path/to/appdata/arrdash:/config
+```
+
+Production with OpenBao:
+
+```yaml
+env_file:
+  - /path/to/openbao.env   # OPENBAO_ADDR, OPENBAO_ROLE_ID, OPENBAO_SECRET_ID
+environment:
+  ARRDASH_CONFIG_PATH: /config
+  SONARR_URL: https://sonarr.example.com
+  POLL_INTERVAL_SECONDS: 30
 ```

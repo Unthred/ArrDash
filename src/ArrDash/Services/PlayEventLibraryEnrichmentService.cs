@@ -24,10 +24,11 @@ public sealed class PlayEventLibraryEnrichmentService(
     IOptions<WatchStatsOptions> watchStatsOptions,
     ILogger<PlayEventLibraryEnrichmentService> logger)
 {
-    private const int PlexLookupsPerRun = 150;
+    private const int PlexLookupsPerRun = 200;
     private const int MediaServerItemsPerRun = 400;
     private const int MediaServerBatchSize = 50;
-    private const int ProviderIdItemsPerRun = 400;
+    private const int ProviderIdItemsPerRun = 800;
+    private const int PlexProviderIdItemsPerRun = 200;
     private const int SeriesEpisodeLookupsPerRun = 40;
 
     private readonly WatchStatsOptions _options = watchStatsOptions.Value;
@@ -42,6 +43,7 @@ public sealed class PlayEventLibraryEnrichmentService(
             await EnrichMediaServerAsync(WatchStatsSources.Emby, emby, ct);
             await EnrichMediaServerAsync(WatchStatsSources.Jellyfin, jellyfin, ct);
             await EnrichPlexAsync(ct);
+            await EnrichPlexProviderIdsAsync(ct);
             await EnrichProviderIdsAsync(WatchStatsSources.Emby, emby, ct);
             await EnrichProviderIdsAsync(WatchStatsSources.Jellyfin, jellyfin, ct);
             // Tracearr already has S/E for nearly all Emby episodes; patch warehouse rows that
@@ -404,6 +406,54 @@ public sealed class PlayEventLibraryEnrichmentService(
 
         if (updated > 0)
             logger.LogInformation("Library enrichment: tagged {Count} plex play events", updated);
+    }
+
+    private async Task EnrichPlexProviderIdsAsync(CancellationToken ct)
+    {
+        if (!tautulli.IsConfigured)
+            return;
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var ratingKeys = await db.PlayEvents.AsNoTracking()
+            .Where(e => e.Source == WatchStatsSources.Plex
+                        && e.ExternalItemId != null && e.ExternalItemId != ""
+                        && (e.ImdbId == null || e.ImdbId == "")
+                        && e.TmdbId == null
+                        && e.TvdbId == null)
+            .Select(e => e.ExternalItemId!)
+            .Distinct()
+            .ToListAsync(ct);
+
+        ratingKeys = ratingKeys
+            .Where(k => !_unresolvableProviders.Contains($"plex:{k}"))
+            .Take(PlexProviderIdItemsPerRun)
+            .ToList();
+        if (ratingKeys.Count == 0)
+            return;
+
+        var updated = 0;
+        foreach (var ratingKey in ratingKeys)
+        {
+            var (imdb, tmdb, tvdb, year) = await tautulli.GetProviderIdsForRatingKeyAsync(ratingKey, ct);
+            if (string.IsNullOrWhiteSpace(imdb) && tmdb is null && tvdb is null)
+            {
+                _unresolvableProviders.Add($"plex:{ratingKey}");
+                continue;
+            }
+
+            updated += await db.PlayEvents
+                .Where(e => e.Source == WatchStatsSources.Plex && e.ExternalItemId == ratingKey)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(e => e.ImdbId, e => e.ImdbId == null || e.ImdbId == "" ? imdb : e.ImdbId)
+                    .SetProperty(e => e.TmdbId, e => e.TmdbId == null ? tmdb : e.TmdbId)
+                    .SetProperty(e => e.TvdbId, e => e.TvdbId == null ? tvdb : e.TvdbId)
+                    .SetProperty(e => e.Year, e => e.Year == null ? year : e.Year), ct);
+
+            await RebuildCanonicalKeysAsync(db, WatchStatsSources.Plex, ratingKey, ct);
+        }
+
+        if (updated > 0)
+            logger.LogInformation("Provider-id enrichment: tagged {Count} plex play events", updated);
     }
 
     private static async Task<List<string>> PendingItemIdsAsync(ArrDashDbContext db, string source, CancellationToken ct) =>

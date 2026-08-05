@@ -12,6 +12,8 @@ public sealed class ArrDashDbContext(DbContextOptions<ArrDashDbContext> options)
     public DbSet<MediaIdentityEntity> MediaIdentities => Set<MediaIdentityEntity>();
     public DbSet<MediaInventoryItemEntity> MediaInventoryItems => Set<MediaInventoryItemEntity>();
     public DbSet<ArrTagEntity> ArrTags => Set<ArrTagEntity>();
+    public DbSet<ServerWatchedLinkEntity> ServerWatchedLinks => Set<ServerWatchedLinkEntity>();
+    public DbSet<TraktLibrarySyncLinkEntity> TraktLibrarySyncLinks => Set<TraktLibrarySyncLinkEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -84,6 +86,29 @@ public sealed class ArrDashDbContext(DbContextOptions<ArrDashDbContext> options)
             entity.HasIndex(e => new { e.Source, e.TagId }).IsUnique();
             entity.Property(e => e.Source).HasMaxLength(32);
             entity.Property(e => e.Label).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<ServerWatchedLinkEntity>(entity =>
+        {
+            entity.HasIndex(e => new { e.AccountId, e.Server, e.ServerUserId, e.ServerItemId }).IsUnique();
+            entity.HasIndex(e => new { e.AccountId, e.Server, e.CanonicalMediaKey });
+            entity.Property(e => e.AccountId).HasMaxLength(64);
+            entity.Property(e => e.Server).HasMaxLength(32);
+            entity.Property(e => e.ServerUserId).HasMaxLength(128);
+            entity.Property(e => e.ServerItemId).HasMaxLength(128);
+            entity.Property(e => e.CanonicalMediaKey).HasMaxLength(512);
+            entity.Property(e => e.MediaType).HasMaxLength(32);
+        });
+
+        modelBuilder.Entity<TraktLibrarySyncLinkEntity>(entity =>
+        {
+            entity.HasIndex(e => new { e.AccountId, e.Server, e.ServerItemId, e.Direction }).IsUnique();
+            entity.Property(e => e.AccountId).HasMaxLength(64);
+            entity.Property(e => e.Server).HasMaxLength(32);
+            entity.Property(e => e.ServerItemId).HasMaxLength(128);
+            entity.Property(e => e.Direction).HasMaxLength(16);
+            entity.Property(e => e.CanonicalMediaKey).HasMaxLength(512);
+            entity.Property(e => e.MediaType).HasMaxLength(32);
         });
     }
 }

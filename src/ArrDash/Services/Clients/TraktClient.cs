@@ -23,6 +23,9 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
     /// <summary>Official PIN page used by media-center apps (trakt.tv/activate).</summary>
     public const string ActivateUrl = "https://trakt.tv/activate";
 
+    /// <summary>Where to create or recover Trakt OAuth Client ID/Secret.</summary>
+    public const string ApplicationsUrl = "https://trakt.tv/oauth/applications";
+
     public async Task<TraktDeviceCodeResponse?> RequestDeviceCodeAsync(CancellationToken ct)
     {
         EnsureAppConfigured();
@@ -31,6 +34,13 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(ct);
+            if (body.Contains("invalid_client", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Trakt Client ID/Secret are invalid or the OAuth app was deleted. "
+                    + $"Copy a valid pair from {ApplicationsUrl}, paste under Settings → API keys, Save, then try Connect again.");
+            }
+
             throw new InvalidOperationException(
                 $"Trakt device code failed ({(int)response.StatusCode}): {Truncate(body, 240)}");
         }
@@ -87,10 +97,15 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
     }
 
     /// <summary>Lightweight credential check that does not start a device-code session.</summary>
-    public async Task ProbeApiAsync(CancellationToken ct)
+    public Task ProbeApiAsync(CancellationToken ct) => ProbeApiAsync(ClientId, ct);
+
+    /// <summary>Probe with an explicit Client ID (e.g. unsaved Settings form values).</summary>
+    public async Task ProbeApiAsync(string clientId, CancellationToken ct)
     {
-        EnsureAppConfigured();
-        using var response = await SendUnauthAsync(HttpMethod.Get, "/movies/trending?limit=1", null, ct);
+        if (string.IsNullOrWhiteSpace(clientId))
+            throw new InvalidOperationException("Trakt Client ID is required.");
+
+        using var response = await SendUnauthAsync(HttpMethod.Get, "/movies/trending?limit=1", null, ct, clientId);
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(ct);
@@ -104,6 +119,10 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
         CancellationToken ct)
     {
         EnsureAppConfigured();
+        if (string.IsNullOrWhiteSpace(refreshToken))
+            throw new InvalidOperationException(
+                "Trakt refresh token is missing. Disconnect and reconnect the Trakt account in Settings.");
+
         using var content = JsonContent(new
         {
             refresh_token = refreshToken,
@@ -112,7 +131,15 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
             grant_type = "refresh_token"
         });
         using var response = await SendUnauthAsync(HttpMethod.Post, "/oauth/token", content, ct);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException(
+                $"Trakt token refresh failed ({(int)response.StatusCode}). "
+                + "Disconnect and reconnect the Trakt account in Settings. "
+                + Truncate(body, 200));
+        }
+
         return await ReadJsonAsync<TraktTokenResponse>(response, ct);
     }
 
@@ -134,7 +161,8 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
         string accessToken,
         string type,
         DateTimeOffset? startAt,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action<int, int, int>? onPage = null)
     {
         var results = new List<TraktHistoryItem>();
         var page = 1;
@@ -142,6 +170,7 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
 
         while (true)
         {
+            ct.ThrowIfCancellationRequested();
             var query = new StringBuilder($"/sync/history/{type}?page={page}&limit={limit}&extended=full");
             if (startAt is not null)
                 query.Append($"&start_at={Uri.EscapeDataString(startAt.Value.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ssZ"))}");
@@ -151,10 +180,13 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
             var batch = await ReadJsonAsync<List<TraktHistoryItem>>(response, ct) ?? [];
             results.AddRange(batch);
 
-            if (!response.Headers.TryGetValues("X-Pagination-Page-Count", out var pageCounts)
-                || !int.TryParse(pageCounts.FirstOrDefault(), out var pageCount)
-                || page >= pageCount
-                || batch.Count == 0)
+            var pageCount = 0;
+            if (response.Headers.TryGetValues("X-Pagination-Page-Count", out var pageCounts))
+                _ = int.TryParse(pageCounts.FirstOrDefault(), out pageCount);
+
+            onPage?.Invoke(page, pageCount, results.Count);
+
+            if (pageCount <= 0 || page >= pageCount || batch.Count == 0)
                 break;
 
             page++;
@@ -170,8 +202,102 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
     {
         using var content = JsonContent(body);
         using var response = await SendAuthAsync(HttpMethod.Post, "/sync/history", accessToken, content, ct);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            logger.LogWarning("Trakt history add failed ({Status}): {Body}", (int)response.StatusCode, Truncate(err, 240));
+            return null;
+        }
+
         return await ReadJsonAsync<TraktHistoryAddResult>(response, ct);
+    }
+
+    /// <summary>GET /sync/collection/movies or /sync/collection/shows (paged).</summary>
+    public async Task<IReadOnlyList<TraktCollectionItem>> GetCollectionAsync(
+        string accessToken,
+        string type,
+        CancellationToken ct,
+        Action<int, int, int>? onPage = null)
+    {
+        var results = new List<TraktCollectionItem>();
+        var page = 1;
+        const int limit = 100;
+        var pathType = type.Trim().ToLowerInvariant() switch
+        {
+            "show" or "shows" => "shows",
+            _ => "movies"
+        };
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var path = $"/sync/collection/{pathType}?page={page}&limit={limit}";
+            using var response = await SendAuthAsync(HttpMethod.Get, path, accessToken, null, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                var err = await response.Content.ReadAsStringAsync(ct);
+                logger.LogWarning("Trakt collection get failed ({Status}): {Body}", (int)response.StatusCode, Truncate(err, 240));
+                break;
+            }
+
+            var batch = await ReadJsonAsync<List<TraktCollectionItem>>(response, ct) ?? [];
+            results.AddRange(batch);
+
+            var pageCount = 0;
+            if (response.Headers.TryGetValues("X-Pagination-Page-Count", out var pageCounts))
+                _ = int.TryParse(pageCounts.FirstOrDefault(), out pageCount);
+
+            onPage?.Invoke(page, pageCount, results.Count);
+
+            if (pageCount <= 0 || page >= pageCount || batch.Count == 0)
+                break;
+
+            page++;
+        }
+
+        return results;
+    }
+
+    public async Task<TraktCollectionAddResult?> AddToCollectionAsync(
+        string accessToken,
+        object body,
+        CancellationToken ct)
+    {
+        using var content = JsonContent(body);
+        using var response = await SendAuthAsync(HttpMethod.Post, "/sync/collection", accessToken, content, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            logger.LogWarning("Trakt collection add failed ({Status}): {Body}", (int)response.StatusCode, Truncate(err, 240));
+            return null;
+        }
+
+        return await ReadJsonAsync<TraktCollectionAddResult>(response, ct);
+    }
+
+    /// <summary>POST /scrobble/stop — progress 0–100. Prefer ≥80 for completed plays.</summary>
+    public async Task<TraktScrobbleResult?> ScrobbleStopAsync(
+        string accessToken,
+        object body,
+        CancellationToken ct)
+    {
+        using var content = JsonContent(body);
+        using var response = await SendAuthAsync(HttpMethod.Post, "/scrobble/stop", accessToken, content, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            // 409 = already scrobbled recently — treat as soft success for webhook idempotency.
+            if ((int)response.StatusCode == 409)
+            {
+                logger.LogDebug("Trakt scrobble stop conflict (already recorded): {Body}", Truncate(err, 200));
+                return new TraktScrobbleResult { Action = "conflict" };
+            }
+
+            logger.LogWarning("Trakt scrobble stop failed ({Status}): {Body}", (int)response.StatusCode, Truncate(err, 240));
+            return null;
+        }
+
+        return await ReadJsonAsync<TraktScrobbleResult>(response, ct);
     }
 
     private void EnsureAppConfigured()
@@ -184,10 +310,11 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
         HttpMethod method,
         string path,
         HttpContent? content,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? apiKeyOverride = null)
     {
         var request = new HttpRequestMessage(method, "https://api.trakt.tv" + path) { Content = content };
-        ApplyCommonHeaders(request);
+        ApplyCommonHeaders(request, apiKeyOverride);
         return await http.SendAsync(request, ct);
     }
 
@@ -218,12 +345,12 @@ public sealed class TraktClient(HttpClient http, MediaServiceOptionsAccessor opt
         return response;
     }
 
-    private void ApplyCommonHeaders(HttpRequestMessage request)
+    private void ApplyCommonHeaders(HttpRequestMessage request, string? apiKeyOverride = null)
     {
         // Cloudflare blocks Trakt API calls without an identifying User-Agent.
         request.Headers.TryAddWithoutValidation("User-Agent", "ArrDash/1.0");
         request.Headers.TryAddWithoutValidation("trakt-api-version", "2");
-        request.Headers.TryAddWithoutValidation("trakt-api-key", ClientId);
+        request.Headers.TryAddWithoutValidation("trakt-api-key", apiKeyOverride ?? ClientId);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 
@@ -346,4 +473,44 @@ public sealed class TraktHistoryNotFound
 {
     [JsonPropertyName("movies")] public List<JsonElement>? Movies { get; set; }
     [JsonPropertyName("episodes")] public List<JsonElement>? Episodes { get; set; }
+    [JsonPropertyName("shows")] public List<JsonElement>? Shows { get; set; }
+}
+
+public sealed class TraktCollectionItem
+{
+    [JsonPropertyName("collected_at")] public DateTimeOffset? CollectedAt { get; set; }
+    [JsonPropertyName("movie")] public TraktMovie? Movie { get; set; }
+    [JsonPropertyName("show")] public TraktShow? Show { get; set; }
+    [JsonPropertyName("episodes")] public List<TraktCollectedEpisode>? Episodes { get; set; }
+}
+
+public sealed class TraktCollectedEpisode
+{
+    [JsonPropertyName("number")] public int Number { get; set; }
+    [JsonPropertyName("collected_at")] public DateTimeOffset? CollectedAt { get; set; }
+    [JsonPropertyName("ids")] public TraktIds? Ids { get; set; }
+}
+
+public sealed class TraktCollectionAddResult
+{
+    [JsonPropertyName("added")] public TraktCollectionCounts? Added { get; set; }
+    [JsonPropertyName("existing")] public TraktCollectionCounts? Existing { get; set; }
+    [JsonPropertyName("not_found")] public TraktHistoryNotFound? NotFound { get; set; }
+}
+
+public sealed class TraktCollectionCounts
+{
+    [JsonPropertyName("movies")] public int Movies { get; set; }
+    [JsonPropertyName("episodes")] public int Episodes { get; set; }
+    [JsonPropertyName("shows")] public int? Shows { get; set; }
+}
+
+public sealed class TraktScrobbleResult
+{
+    [JsonPropertyName("id")] public long? Id { get; set; }
+    [JsonPropertyName("action")] public string? Action { get; set; }
+    [JsonPropertyName("progress")] public double? Progress { get; set; }
+    [JsonPropertyName("movie")] public TraktMovie? Movie { get; set; }
+    [JsonPropertyName("episode")] public TraktEpisode? Episode { get; set; }
+    [JsonPropertyName("show")] public TraktShow? Show { get; set; }
 }

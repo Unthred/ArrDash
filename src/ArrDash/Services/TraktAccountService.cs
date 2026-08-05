@@ -21,6 +21,10 @@ public sealed record TraktSyncPreview(
     int WouldImport,
     int WouldLinkExisting,
     int WouldPush,
+    int WouldLibraryHistory,
+    int WouldLibraryCollection,
+    int WouldMarkEmby,
+    int WouldMarkPlex,
     int Unmatched,
     IReadOnlyList<string> SampleTitles,
     string? Note);
@@ -87,6 +91,44 @@ public sealed class TraktAccountService(
         return (true, "Disconnected");
     }
 
+    /// <summary>True when the account cannot call Trakt until the user reauthorizes (PIN flow).</summary>
+    public static bool NeedsReauthorization(TraktAccountEntity account) =>
+        account.TokenExpiresAtUtc <= DateTimeOffset.UtcNow
+        || IsAuthError(account.LastError);
+
+    public static bool IsAuthError(string? error) =>
+        !string.IsNullOrWhiteSpace(error)
+        && (error.Contains("token refresh", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("reconnect", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("reauthorize", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("invalid_grant", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("refresh token is missing", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("unauthorized", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Proactively refresh expired tokens. Failed refreshes set <see cref="TraktAccountEntity.LastError"/>
+    /// so Settings can lead the user through PIN reauth.
+    /// </summary>
+    public async Task ValidateAllAccountTokensAsync(CancellationToken ct = default)
+    {
+        var accounts = await ListAccountsAsync(ct);
+        foreach (var account in accounts)
+        {
+            if (account.TokenExpiresAtUtc > DateTimeOffset.UtcNow.AddMinutes(2)
+                && !IsAuthError(account.LastError))
+                continue;
+
+            try
+            {
+                await GetValidAccessTokenAsync(account.Id, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogInformation(ex, "Trakt account {Username} needs reauthorization", account.TraktUsername);
+            }
+        }
+    }
+
     public async Task<(bool Ok, string Message)> UpdateAccountAsync(TraktAccountEntity updates, CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -122,15 +164,25 @@ public sealed class TraktAccountService(
         if (account.TokenExpiresAtUtc > DateTimeOffset.UtcNow.AddMinutes(2))
             return (access, account);
 
-        var refresh = protector.Unprotect(account.EncryptedRefreshToken);
-        var renewed = await trakt.RefreshTokenAsync(refresh, ct)
-            ?? throw new InvalidOperationException("Trakt token refresh failed");
+        try
+        {
+            var refresh = protector.Unprotect(account.EncryptedRefreshToken);
+            var renewed = await trakt.RefreshTokenAsync(refresh, ct)
+                ?? throw new InvalidOperationException("Trakt token refresh failed");
 
-        account.EncryptedAccessToken = protector.Protect(renewed.AccessToken);
-        account.EncryptedRefreshToken = protector.Protect(renewed.RefreshToken);
-        account.TokenExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(renewed.ExpiresIn);
-        await db.SaveChangesAsync(ct);
-        return (renewed.AccessToken, account);
+            account.EncryptedAccessToken = protector.Protect(renewed.AccessToken);
+            account.EncryptedRefreshToken = protector.Protect(renewed.RefreshToken);
+            account.TokenExpiresAtUtc = DateTimeOffset.UtcNow.AddSeconds(renewed.ExpiresIn);
+            account.LastError = null;
+            await db.SaveChangesAsync(ct);
+            return (renewed.AccessToken, account);
+        }
+        catch (Exception ex)
+        {
+            account.LastError = ex.Message.Length > 500 ? ex.Message[..500] : ex.Message;
+            await db.SaveChangesAsync(ct);
+            throw;
+        }
     }
 
     private async Task PollUntilAuthorizedAsync(TraktDeviceCodeResponse device, CancellationToken ct)
