@@ -2,11 +2,28 @@
    (needs to style MudBlazor / MainLayout nodes outside CSS isolation). */
 
 .stat-card {
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    min-height: 88px;
+    box-sizing: border-box;
 }
 
-.stat-card:hover {
-    transform: translateY(-2px);
+.cleanup-stat-caption {
+    min-height: 1.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cleanup-stat-value {
+    font-variant-numeric: tabular-nums;
+    min-height: 1.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cleanup-queue-chip {
+    min-width: 11.5rem;
+    justify-content: center;
 }
 
 .cleanup-chip-row {
@@ -51,10 +68,11 @@
     padding-bottom: 4px !important;
 }
 
-.cleanup-search-field {
-    flex: 1 1 180px;
-}
-
-.cleanup-watcher-select {
-    flex: 1 1 180px;
+/* Fixed slot: MudSelect content cannot change toolbar flex sizing. */
+.cleanup-filter-slot {
+    flex: 0 0 240px;
+    width: 240px;
+    min-width: 240px;
+    max-width: 240px;
+    box-sizing: border-box;
 }
