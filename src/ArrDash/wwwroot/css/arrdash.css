@@ -578,6 +578,7 @@ html {
     flex-direction: column;
 }
 
+/* Sticky header without Virtualize — paging keeps row count small and scroll stable. */
 .cleanup-table-shell .mud-table-container {
     flex: 1 1 auto;
     min-height: 0;
@@ -586,13 +587,60 @@ html {
     max-height: none !important;
 }
 
-/* Sticky header without virtualize — avoids MudBlazor Virtualize flicker on scroll. */
 .cleanup-table-shell .mud-table thead tr th,
 .cleanup-table-shell .mud-table .mud-table-head {
     position: sticky;
     top: 0;
     z-index: 2;
     background: var(--mud-palette-surface);
+}
+
+/* Keep pager visible under the scroll body. */
+.cleanup-table-shell .mud-table .mud-table-pagination {
+    flex: 0 0 auto;
+}
+
+/* Stable column widths when filtering/sorting reshuffles row content. */
+.cleanup-table-shell .mud-table table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+/* Force Genre / Watched by / search to fill their fixed 240px slots. */
+.cleanup-page .cleanup-filter-slot {
+    flex: 0 0 240px !important;
+    width: 240px !important;
+    min-width: 240px !important;
+    max-width: 240px !important;
+    box-sizing: border-box;
+}
+
+.cleanup-page .cleanup-filter-slot > .mud-input-control,
+.cleanup-page .cleanup-filter-slot .mud-input-control.mud-select,
+.cleanup-page .cleanup-filter-slot .mud-input-control.mud-textfield {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+    display: flex !important;
+}
+
+.cleanup-page .cleanup-filter-slot .mud-input-control-input-container,
+.cleanup-page .cleanup-filter-slot .mud-input,
+.cleanup-page .cleanup-filter-slot .mud-input-root {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+.cleanup-page .cleanup-filter-slot .mud-input-slot,
+.cleanup-page .cleanup-filter-slot .mud-select-input,
+.cleanup-page .cleanup-filter-slot input.mud-select-input,
+.cleanup-page .cleanup-filter-slot input {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
 }
 
 .dashboard-shell {

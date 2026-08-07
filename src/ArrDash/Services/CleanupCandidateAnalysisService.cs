@@ -86,6 +86,7 @@ public static class CleanupCandidateAnalysisService
             };
 
             var tags = ResolveTagLabels(item.TagsJson, item.Source, tagLabels);
+            var genres = ParseGenreLabels(item.GenresJson);
 
             var reasons = new List<CleanupReason>();
 
@@ -115,6 +116,7 @@ public static class CleanupCandidateAnalysisService
                 lastWatched,
                 watchedBy,
                 tags,
+                genres,
                 reasons,
                 ServiceDeepLinkBuilder.BuildItemUrl(source, baseUrl, item.TitleSlug),
                 item.ImdbId,
@@ -127,6 +129,29 @@ public static class CleanupCandidateAnalysisService
         return results
             .OrderByDescending(r => r.SizeBytes)
             .ToList();
+    }
+
+    public static IReadOnlyList<string> ParseGenreLabels(string? genresJson)
+    {
+        if (string.IsNullOrWhiteSpace(genresJson) || genresJson == "[]")
+            return [];
+
+        try
+        {
+            var list = JsonSerializer.Deserialize<List<string>>(genresJson);
+            if (list is null || list.Count == 0)
+                return [];
+
+            return list
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     /// <summary>Top-10%-by-size threshold, so "Largest" stays a meaningful cut regardless of library size.</summary>

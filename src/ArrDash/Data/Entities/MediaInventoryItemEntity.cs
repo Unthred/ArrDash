@@ -25,6 +25,8 @@ public sealed class MediaInventoryItemEntity
     /// <summary>Theatrical/digital/physical release (movies) or first aired (series).</summary>
     public DateTimeOffset? ReleasedUtc { get; set; }
     public string TagsJson { get; set; } = "[]";
+    /// <summary>JSON array of genre labels from Sonarr/Radarr.</summary>
+    public string GenresJson { get; set; } = "[]";
     public DateTimeOffset LastSeenUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
 }
