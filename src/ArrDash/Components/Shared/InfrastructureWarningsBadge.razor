@@ -1,0 +1,51 @@
+@implements IDisposable
+@inject InfrastructureEventsService Events
+
+@if (_count > 0)
+{
+    <MudTooltip Text="@Tooltip">
+        <MudBadge Content="@_count" Color="Color.Warning" Overlap="true" Class="infra-warn-badge-wrap">
+            <MudIconButton Icon="@Icons.Material.Filled.WarningAmber"
+                           Color="Color.Warning"
+                           Href="/warnings"
+                           Class="header-icon-btn" />
+        </MudBadge>
+    </MudTooltip>
+}
+else
+{
+    <MudTooltip Text="Infrastructure warnings">
+        <MudIconButton Icon="@Icons.Material.Filled.WarningAmber"
+                       Color="Color.Default"
+                       Href="/warnings"
+                       Class="header-icon-btn" />
+    </MudTooltip>
+}
+
+@code {
+    private int _count;
+    private string Tooltip = "No active infrastructure warnings";
+    private System.Threading.Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        RefreshFromService();
+        _timer = new System.Threading.Timer(_ => _ = InvokeAsync(() =>
+        {
+            RefreshFromService();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private void RefreshFromService()
+    {
+        Events.Refresh();
+        var snap = Events.Current;
+        _count = snap.Active.Count;
+        Tooltip = _count > 0
+            ? $"{_count} active warning{(_count == 1 ? "" : "s")} — open details"
+            : "No active infrastructure warnings";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

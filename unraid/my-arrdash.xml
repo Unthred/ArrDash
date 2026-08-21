@@ -18,7 +18,9 @@
   <DonateText/>
   <DonateLink/>
   <Config Name="WebUI Port" Target="8080" Default="7979" Mode="tcp" Description="ArrDash web UI" Type="Port" Display="always" Required="true" Mask="false">7979</Config>
-  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/arrdash" Mode="rw" Description="Layout preferences" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/arrdash</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/arrdash" Mode="rw" Description="Layout preferences and SQLite DB" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/arrdash</Config>
+  <Config Name="Tower events log" Target="/mnt/cache/logs" Default="/mnt/cache/logs" Mode="ro" Description="Infrastructure events JSONL from tower-monitor and backup scripts (read-only)" Type="Path" Display="always" Required="false" Mask="false">/mnt/cache/logs</Config>
+  <Config Name="ARRDASH_INFRA_EVENTS_PATH" Target="ARRDASH_INFRA_EVENTS_PATH" Default="/mnt/cache/logs/server-events.jsonl" Mode="" Description="Path to infrastructure events JSONL inside the container" Type="Variable" Display="always" Required="false" Mask="false">/mnt/cache/logs/server-events.jsonl</Config>
   <Config Name="TZ" Target="TZ" Default="Europe/London" Mode="" Description="Timezone" Type="Variable" Display="always" Required="true" Mask="false">Europe/London</Config>
   <Config Name="SONARR_URL" Target="SONARR_URL" Default="" Mode="" Description="Sonarr base URL (optional — or set in Settings)" Type="Variable" Display="always" Required="false" Mask="false"/>
   <Config Name="SONARR_API_KEY" Target="SONARR_API_KEY" Default="" Mode="" Description="Sonarr API key (optional)" Type="Variable" Display="always" Required="false" Mask="true"/>

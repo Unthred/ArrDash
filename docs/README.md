@@ -13,6 +13,7 @@ Always install from **`main`** (or the GHCR image built from `main`).
 ## Using ArrDash
 
 - [Settings reference](settings-reference.md) — every tab and toggle in the Settings UI
+- [Infrastructure events](infrastructure-events.md) — JSONL schema for tower warnings (ArrDash `/warnings`)
 - [API](api.md) — health check, dashboard JSON, poster proxy routes
 
 ## Development

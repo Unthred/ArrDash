@@ -86,6 +86,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<CpuHistoryService>
 builder.Services.AddSingleton<HostNetworkSamplerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HostNetworkSamplerService>());
 builder.Services.AddSingleton<UnraidActivityService>();
+builder.Services.AddSingleton<InfrastructureEventsService>();
 builder.Services.AddSingleton<ContainerNetworkSamplerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ContainerNetworkSamplerService>());
 builder.Services.AddSingleton<NetworkBandwidthService>();
@@ -158,6 +159,11 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapHub<DashboardHub>("/hubs/dashboard");
+app.MapGet("/api/infrastructure/events", (InfrastructureEventsService events) =>
+{
+    events.Refresh();
+    return Results.Json(events.Current);
+});
 app.MapGet("/health", () => Results.Ok(new { status = "ok", app = "arrdash" }));
 app.MapGet("/api/dashboard", (DashboardState state) => Results.Json(state.Current));
 app.MapGet("/api/watch-stats", async (

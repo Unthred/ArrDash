@@ -1,0 +1,156 @@
+@page "/warnings"
+@inject InfrastructureEventsService Events
+@implements IDisposable
+
+<PageTitle>Infrastructure warnings — ArrDash</PageTitle>
+
+<section class="panel-card warnings-page">
+    <div class="panel-head">
+        <div>
+            <h2 class="panel-title">Infrastructure warnings</h2>
+            <p class="panel-sub muted">Active conditions use explicit raised/cleared lifecycle events. Informational items (e.g. turbo peaks) appear in history only.</p>
+        </div>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RefreshNow">
+            Refresh
+        </MudButton>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_snapshot.ReadError))
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3" Dense="true">
+            Could not read events file: @_snapshot.ReadError
+        </MudAlert>
+    }
+
+    <h3 class="section-label">Active (@_snapshot.Active.Count)</h3>
+    @if (_snapshot.Active.Count == 0)
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+            No active Warning or Critical conditions.
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_snapshot.Active" Dense="true" Hover="true" Class="mb-6">
+            <HeaderContent>
+                <MudTh>Severity</MudTh>
+                <MudTh>Source</MudTh>
+                <MudTh>First seen</MudTh>
+                <MudTh>Last seen</MudTh>
+                <MudTh>Count</MudTh>
+                <MudTh>Message</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="@SeverityColor(context.Severity)">@context.Severity</MudChip></MudTd>
+                <MudTd>@context.Source</MudTd>
+                <MudTd>@FormatWhen(context.FirstSeen)</MudTd>
+                <MudTd>@FormatWhen(context.LastSeen)</MudTd>
+                <MudTd>@context.OccurrenceCount</MudTd>
+                <MudTd>
+                    <strong>@context.Title</strong>
+                    <div>@context.Message</div>
+                    @if (!string.IsNullOrWhiteSpace(context.Detail))
+                    {
+                        <div class="muted" style="font-size:0.85rem">@context.Detail</div>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <h3 class="section-label">Recently cleared (@_snapshot.RecentlyCleared.Count)</h3>
+    @if (_snapshot.RecentlyCleared.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="muted mb-4">No warnings cleared in the last 24 hours.</MudText>
+    }
+    else
+    {
+        <MudTable Items="_snapshot.RecentlyCleared" Dense="true" Hover="true" Class="mb-6">
+            <HeaderContent>
+                <MudTh>Severity</MudTh>
+                <MudTh>Source</MudTh>
+                <MudTh>Cleared</MudTh>
+                <MudTh>Duration</MudTh>
+                <MudTh>Message</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd><MudChip T="string" Size="Size.Small" Color="@SeverityColor(context.Severity)">@context.Severity</MudChip></MudTd>
+                <MudTd>@context.Source</MudTd>
+                <MudTd>@FormatWhen(context.ClearedAt ?? context.LastSeen)</MudTd>
+                <MudTd>@FormatDuration(context.FirstSeen, context.ClearedAt ?? context.LastSeen)</MudTd>
+                <MudTd>@context.Message</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <h3 class="section-label">Informational history</h3>
+    @if (_snapshot.InformationalHistory.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="muted">No recent informational events.</MudText>
+    }
+    else
+    {
+        <MudTable Items="_snapshot.InformationalHistory" Dense="true" Hover="true">
+            <HeaderContent>
+                <MudTh>When</MudTh>
+                <MudTh>Code</MudTh>
+                <MudTh>Message</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@FormatWhen(context.At)</MudTd>
+                <MudTd><code>@context.Code</code></MudTd>
+                <MudTd>@context.Message</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+
+    <MudText Typo="Typo.caption" Class="muted mt-3">Last read @_snapshot.ReadAt.ToLocalTime().ToString("g")</MudText>
+</section>
+
+@code {
+    private InfrastructureEventsSnapshot _snapshot = new([], [], [], DateTimeOffset.MinValue, null);
+    private System.Threading.Timer? _timer;
+
+    protected override void OnInitialized()
+    {
+        RefreshNow();
+        _timer = new System.Threading.Timer(_ => _ = InvokeAsync(() =>
+        {
+            RefreshNow();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private void RefreshNow()
+    {
+        Events.Refresh();
+        _snapshot = Events.Current;
+    }
+
+    private static Color SeverityColor(InfrastructureEventSeverity severity) => severity switch
+    {
+        InfrastructureEventSeverity.Alert or InfrastructureEventSeverity.Critical => Color.Error,
+        InfrastructureEventSeverity.Warning => Color.Warning,
+        _ => Color.Default
+    };
+
+    private static string FormatWhen(DateTimeOffset at)
+    {
+        var delta = DateTimeOffset.Now - at;
+        if (delta.TotalMinutes < 90)
+            return $"{(int)delta.TotalMinutes}m ago";
+        return at.ToLocalTime().ToString("dd MMM HH:mm");
+    }
+
+    private static string FormatDuration(DateTimeOffset first, DateTimeOffset last)
+    {
+        var span = last - first;
+        if (span.TotalMinutes < 1)
+            return "<1m";
+        if (span.TotalHours < 1)
+            return $"{(int)span.TotalMinutes}m";
+        return $"{(int)span.TotalHours}h {(int)span.Minutes}m";
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}
