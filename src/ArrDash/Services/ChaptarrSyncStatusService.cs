@@ -13,9 +13,13 @@ public sealed record ChaptarrSyncStatus(
     IReadOnlyList<ChaptarrSyncConflictItem> Conflicts,
     int CollectionsCreated,
     int CollectionsAddedTo,
-    int CollectionsLikelyDuplicate)
+    int CollectionsLikelyDuplicate,
+    int CollectionsRemoved,
+    int CollectionsVerifiedComplete,
+    int CollectionsAmbiguous,
+    int ReconciliationAudited)
 {
-    public static readonly ChaptarrSyncStatus Empty = new(null, 0, 0, [], 0, 0, 0);
+    public static readonly ChaptarrSyncStatus Empty = new(null, 0, 0, [], 0, 0, 0, 0, 0, 0, 0);
 
     private static readonly TimeSpan StaleAfter = TimeSpan.FromMinutes(90);
 
@@ -44,6 +48,15 @@ public sealed record ChaptarrSyncStatus(
             if (CollectionsCreated > 0)
                 parts.Add($"{CollectionsCreated} new collection{(CollectionsCreated == 1 ? "" : "s")}");
 
+            if (CollectionsRemoved > 0)
+                parts.Add($"{CollectionsRemoved} collection{(CollectionsRemoved == 1 ? "" : "s")} removed (incomplete)");
+
+            if (CollectionsVerifiedComplete > 0)
+                parts.Add($"{CollectionsVerifiedComplete} verified complete");
+
+            if (CollectionsAmbiguous > 0)
+                parts.Add($"{CollectionsAmbiguous} ambiguous");
+
             var text = string.Join(", ", parts);
             return char.ToUpperInvariant(text[0]) + text[1..] + ".";
         }
@@ -62,6 +75,7 @@ public sealed class ChaptarrSyncStatusService(ILogger<ChaptarrSyncStatusService>
     private const string BaseDir = "/mnt/user/src/scripts/chaptarr-abs-sync";
     private static readonly string SyncReportPath = Path.Combine(BaseDir, "last-apply-report.json");
     private static readonly string CollectionsReportPath = Path.Combine(BaseDir, "collections-report.json");
+    private static readonly string ReconciliationReportPath = Path.Combine(BaseDir, "reconciliation-report.json");
 
     private readonly object _lock = new();
     private ChaptarrSyncStatus _cached = ChaptarrSyncStatus.Empty;
@@ -144,6 +158,10 @@ public sealed class ChaptarrSyncStatusService(ILogger<ChaptarrSyncStatusService>
         var created = 0;
         var addedTo = 0;
         var likelyDuplicate = 0;
+        var removed = 0;
+        var verifiedComplete = 0;
+        var ambiguous = 0;
+        var audited = 0;
 
         if (collectionsMtime != default)
         {
@@ -155,6 +173,18 @@ public sealed class ChaptarrSyncStatusService(ILogger<ChaptarrSyncStatusService>
                 if (root.TryGetProperty("created", out var c)) created = c.GetArrayLength();
                 if (root.TryGetProperty("addedTo", out var a)) addedTo = a.GetArrayLength();
                 if (root.TryGetProperty("likelyDuplicate", out var d)) likelyDuplicate = d.GetArrayLength();
+                if (root.TryGetProperty("removed", out var r)) removed = r.GetArrayLength();
+                if (root.TryGetProperty("summary", out var summary))
+                {
+                    if (summary.TryGetProperty("keep", out var k)) verifiedComplete = k.GetInt32();
+                    if (summary.TryGetProperty("ambiguous", out var amb)) ambiguous = amb.GetInt32();
+                    if (summary.TryGetProperty("audited", out var aud)) audited = aud.GetInt32();
+                }
+                if (root.TryGetProperty("applied", out var applied))
+                {
+                    if (applied.TryGetProperty("removed", out var ar)) removed = Math.Max(removed, ar.GetArrayLength());
+                    if (applied.TryGetProperty("created", out var ac)) created = Math.Max(created, ac.GetArrayLength());
+                }
 
                 var collectionsRunAt = new DateTimeOffset(collectionsMtime, TimeSpan.Zero);
                 if (lastRun is null || collectionsRunAt > lastRun)
@@ -166,6 +196,21 @@ public sealed class ChaptarrSyncStatusService(ILogger<ChaptarrSyncStatusService>
             }
         }
 
-        return new ChaptarrSyncStatus(lastRun, filled, conflicts.Count, conflicts, created, addedTo, likelyDuplicate);
+        if (audited == 0 && File.Exists(ReconciliationReportPath))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(ReconciliationReportPath));
+                if (doc.RootElement.TryGetProperty("summary", out var summary))
+                {
+                    if (summary.TryGetProperty("audited", out var aud)) audited = aud.GetInt32();
+                    if (summary.TryGetProperty("ambiguous", out var amb)) ambiguous = amb.GetInt32();
+                    if (summary.TryGetProperty("keep", out var k)) verifiedComplete = k.GetInt32();
+                }
+            }
+            catch { /* optional file */ }
+        }
+
+        return new ChaptarrSyncStatus(lastRun, filled, conflicts.Count, conflicts, created, addedTo, likelyDuplicate, removed, verifiedComplete, ambiguous, audited);
     }
 }

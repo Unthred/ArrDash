@@ -39,10 +39,19 @@
                 <span class="library-row-headline">@_status.Summary</span>
             </div>
 
+            @if (_status.ReconciliationAudited > 0)
+            {
+                <div class="library-row">
+                    <span class="library-row-label">Collections</span>
+                    <span class="library-row-headline">@_status.CollectionsVerifiedComplete verified · @_status.CollectionsAmbiguous ambiguous</span>
+                    <span class="library-row-detail">@_status.ReconciliationAudited series audited · @_status.CollectionsRemoved removed (incomplete)</span>
+                </div>
+            }
+
             <div class="library-row">
                 <span class="library-row-label">This run</span>
                 <span class="library-row-headline">@_status.FilledCount filled</span>
-                <span class="library-row-detail">@_status.CollectionsCreated new collections · @_status.CollectionsAddedTo updated</span>
+                <span class="library-row-detail">@_status.CollectionsCreated new · @_status.CollectionsAddedTo updated · @_status.CollectionsRemoved removed</span>
             </div>
 
             @if (_status.ConflictCount > 0)
