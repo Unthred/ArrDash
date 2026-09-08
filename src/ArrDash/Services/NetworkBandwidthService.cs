@@ -4,9 +4,8 @@ using ArrDash.Models;
 namespace ArrDash.Services;
 
 public sealed class NetworkBandwidthService(
+    INetworkTrafficProvider trafficProvider,
     UnraidActivityService unraidActivity,
-    ContainerNetworkSamplerService containerSampler,
-    HostNetworkSamplerService hostNetworkSampler,
     MediaServiceOptionsAccessor options)
 {
     public async Task<NetworkBandwidthDetail> FetchDetailAsync(
@@ -14,33 +13,51 @@ public sealed class NetworkBandwidthService(
         IReadOnlyList<ActiveSession> sessions,
         CancellationToken ct)
     {
-        // Both rates come from their own background-sampled caches, not a live read -- reading
-        // the host interface counter on demand raced with every other caller (ambient metrics
-        // poll, status-bar pill poll) over a single shared "previous sample" baseline, so
-        // whichever one fired right after another measured a near-instant, noise-dominated
-        // window instead of a real rate (this is how the total could read ~0 B/s while the
-        // per-container rows below summed to several MB/s). Container rates were already fixed
-        // this way earlier -- this host runs 70+ containers and a live sample takes 60-140+ seconds.
-        var total = hostNetworkSampler.GetLatest();
-        var (containerRates, note, _) = containerSampler.GetLatest();
+        // Router WAN counters are the total. Its live PF states map public flows back to
+        // container addresses, so Docker's LAN/container traffic is never included here.
+        var traffic = trafficProvider.GetLatest();
+        var total = traffic.Total;
+        var containerRates = traffic.Rates;
         var totalBytesPerSecond = direction == NetworkBandwidthDirection.Download
             ? total?.RxBytesPerSecond ?? 0
             : total?.TxBytesPerSecond ?? 0;
 
-        // Reuses UnraidActivityService's own 20s cache (the same data behind the Top CPU tile)
-        // rather than sampling docker stats again here.
+        var adjustedRates = containerRates
+            .Where(rate => !ContainerNetworkMapper.Map(rate.ContainerName).Key.Equals("plex", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        // Plex runs in Docker host mode here, so PF cannot identify it by container address.
+        // For a remote session, Plex's reported streaming bandwidth is a more precise source
+        // than the aggregate host PF state and avoids assigning that state to Download.
+        if (direction == NetworkBandwidthDirection.Upload)
+        {
+            var plexBytesPerSecond = sessions
+                .Where(session => session.Server == StreamingServer.Plex && session.IsLocal != true)
+                .Sum(session => (long)(session.BandwidthKbps ?? session.BitrateKbps ?? 0) * 125L);
+            if (plexBytesPerSecond > 0)
+                adjustedRates.Add(new ContainerNetworkRate("PlexMediaServer", 0, plexBytesPerSecond));
+        }
+
+        // Reuse the activity service's short-lived Docker stats cache. This keeps the
+        // bandwidth legend useful without adding another expensive docker stats pass.
+        // Router-only LAN devices and the unattributed remainder deliberately have no CPU
+        // value because they cannot be associated with a container.
         var topContainers = await unraidActivity.GetTopContainersAsync(ct);
-        var cpuByContainerName = topContainers.ToDictionary(c => c.Name, c => c.CpuPercent, StringComparer.Ordinal);
+        var cpuByContainerName = topContainers.ToDictionary(
+            container => container.Name,
+            container => container.CpuPercent,
+            StringComparer.OrdinalIgnoreCase);
 
         return NetworkBandwidthBuilder.Build(
             direction,
             totalBytesPerSecond,
             DateTimeOffset.UtcNow,
-            sessions,
-            containerRates,
+            adjustedRates,
             BuildServiceUrls(),
-            note,
-            cpuByContainerName);
+            traffic.Note,
+            cpuByContainerName,
+            provider: traffic.Provider,
+            attribution: traffic.Attribution);
     }
 
     private IReadOnlyDictionary<string, string?> BuildServiceUrls()

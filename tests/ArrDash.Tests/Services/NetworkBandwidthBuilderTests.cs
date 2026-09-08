@@ -22,26 +22,8 @@ public sealed class NetworkBandwidthBuilderTests
     }
 
     [Fact]
-    public void Build_Upload_PrefersStreamingSessionsOverDockerPlex()
+    public void Build_Upload_UsesOnlyObservedInternetTraffic()
     {
-        var sessions = new List<ActiveSession>
-        {
-            new(
-                "1",
-                StreamingServer.Plex,
-                "User",
-                "Movie Title",
-                null,
-                "movie",
-                50,
-                null,
-                null,
-                null,
-                IsLocal: false,
-                BitrateKbps: 8000,
-                BandwidthKbps: 8000)
-        };
-
         var containers = new List<ContainerNetworkRate>
         {
             new("plex", 1000, 5000),
@@ -52,15 +34,33 @@ public sealed class NetworkBandwidthBuilderTests
             NetworkBandwidthDirection.Upload,
             totalBytesPerSecond: 2_000_000,
             DateTimeOffset.UtcNow,
-            sessions,
             containers,
             new Dictionary<string, string?>(),
             null);
 
-        Assert.Contains(detail.Rows, r => r.Key == "plex" && r.Source == "session");
-        Assert.DoesNotContain(detail.Rows, r => r.Key == "plex" && r.Source == "container");
+        Assert.Contains(detail.Rows, r => r.Key == "plex" && r.Source == "container" && r.BytesPerSecond == 5000);
         Assert.Contains(detail.Rows, r => r.Key == "slskd");
         Assert.Contains(detail.Rows, r => r.Key == "unattributed");
+    }
+
+    [Fact]
+    public void Build_AssignsContainerCpu_WhenContainerIsKnown()
+    {
+        var detail = NetworkBandwidthBuilder.Build(
+            NetworkBandwidthDirection.Download,
+            totalBytesPerSecond: 1_000,
+            DateTimeOffset.UtcNow,
+            [new ContainerNetworkRate("binhex-qbittorrent", 1_000, 0)],
+            new Dictionary<string, string?>(),
+            null,
+            new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["binhex-qbittorrent"] = 12.5
+            });
+
+        var row = Assert.Single(detail.Rows);
+        Assert.Equal("qbittorrent", row.Key);
+        Assert.Equal(12.5, row.CpuPercent);
     }
 
     [Fact]

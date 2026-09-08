@@ -260,7 +260,11 @@ public sealed record DashboardSnapshot(
     IReadOnlyList<ActiveSession> ActiveSessions,
     IReadOnlyList<ServiceHealth> Services,
     DateTimeOffset UpdatedAt,
-    ServerMetrics? Host = null);
+    ServerMetrics? Host = null,
+    DownloadSummary? DownloadSummary = null);
+
+public sealed record DownloadSummary(int WindowHours, IReadOnlyList<DownloadSummaryItem> Services);
+public sealed record DownloadSummaryItem(MediaSource Source, string Label, int ImportedCount, int GrabbedCount);
 
 public sealed class PanelDefinition
 {
@@ -286,6 +290,7 @@ public sealed class UserLayoutPreferences
         "now-playing",
         "watch-stats",
         "libraries",
+        "download-summary",
         "recent-tv",
         "recent-movies",
         "recent-audiobooks",
@@ -305,6 +310,7 @@ public sealed class UserLayoutPreferences
         ["recent-music"] = "#bc93e1"
     };
     public Dictionary<string, int> RecentLimits { get; set; } = new();
+    public int DownloadSummaryHours { get; set; } = 24;
     public LayoutDensity Density { get; set; } = LayoutDensity.Comfortable;
     public bool HideHeroStrip { get; set; }
     public StatusBarMode StatusBarMode { get; set; } = StatusBarMode.All;
@@ -421,4 +427,6 @@ public sealed record NetworkBandwidthDetail(
     long UnattributedBytesPerSecond,
     DateTimeOffset SampledAt,
     IReadOnlyList<NetworkBandwidthRow> Rows,
-    string? Note);
+    string? Note,
+    string Provider = "docker",
+    string Attribution = "Container traffic (may include LAN)");

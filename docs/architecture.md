@@ -127,13 +127,17 @@ Reads Linux `/proc/stat` and `/proc/meminfo` (configurable via `ARRDASH_PROC_ROO
 
 Optional, Unraid-specific. Parses `/var/local/emhttp/var.ini` (path override: `ARRDASH_UNRAID_VAR_INI`) for parity-check progress (`mdResync*`) and mover state (`shareMoverActive`), and queries the Docker API over `/var/run/docker.sock` (path override: `ARRDASH_DOCKER_SOCKET`) for containers in a `restarting`/`created` state as a proxy for "currently updating." Both inputs are independently optional — if the file or socket isn't mounted, that part of the feature silently returns nothing rather than failing. Surfaced in `ServerMetricsBar.razor` next to the CPU graph.
 
+### OpnsenseTrafficSamplerService
+
+The network breakdown is sampled from the router every five seconds because Docker macvlan traffic bypasses the Unraid host's conntrack table. WAN interface counters provide the total, while the 500 most-active inbound PF state rows are matched to current Docker container addresses. Plex's host-network stream port is also attributed to Plex; `ARRDASH_HOST_LAN_IP` supplies the shared host address when automatic discovery is unavailable. Only flows with a public peer are attributed; LAN and container-to-container traffic is excluded. The router connection details are read from OpenBao at `secret/arrdash/opnsense`. Any WAN traffic outside the observed active flows remains **Unattributed / other**.
+
 ## UI structure
 
 ### Dashboard (`Home.razor`)
 
 - Hero strip (optional): title, last refresh, manual refresh button
 - Server metrics bar (optional): CPU/memory/disk, plus Unraid activity note (parity check / mover / container updates) when available
-- Panels in user-defined order: Now Playing, Libraries, Recent TV/Movies/Audiobooks/Music
+- Panels in user-defined order: Now Playing, Libraries, Downloads summary, Recent TV/Movies/Audiobooks/Music
 - Service status bar (optional)
 
 Connects to SignalR on first render; falls back to HTTP refresh if hub fails.

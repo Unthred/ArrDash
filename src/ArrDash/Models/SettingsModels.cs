@@ -147,6 +147,7 @@ public static class PanelCatalog
         ("now-playing", "Now Playing", "#818cf8"),
         ("watch-stats", "Watch Stats", "#a855f7"),
         ("libraries", "Libraries", "#22c55e"),
+        ("download-summary", "Download Summary", "#fb923c"),
         ("recent-tv", "Recent TV", "#35c5f4"),
         ("recent-movies", "Recent Movies", "#f5c518"),
         ("recent-audiobooks", "Recent Audiobooks", "#00d2be"),

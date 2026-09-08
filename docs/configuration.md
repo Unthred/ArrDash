@@ -14,6 +14,25 @@ Layout and behaviour live in **`/config/user-layout.json`** (managed entirely th
 
 When OpenBao is configured, Settings → Save writes service API keys/tokens and optional service URLs to OpenBao. Startup **fails closed** if the vault cannot be read (no silent fallback to the JSON file).
 
+## Network telemetry
+
+ArrDash uses Docker and host-interface counters by default. This works without router access, but
+can include LAN and container-to-container traffic. Set `ARRDASH_NETWORK_PROVIDER=opnsense` to
+use optional OPNsense WAN counters and PF-flow attribution instead.
+
+| Variable | Purpose |
+|---|---|
+| `ARRDASH_NETWORK_PROVIDER` | Omit or set to `docker` for the portable default; set `opnsense` for optional router telemetry. |
+| `ARRDASH_OPNSENSE_URL` | OPNsense base URL, reachable from the ArrDash container. |
+| `ARRDASH_OPNSENSE_API_KEY` / `ARRDASH_OPNSENSE_API_SECRET` | Read-only OPNsense API credentials. |
+| `ARRDASH_OPNSENSE_WAN_INTERFACE` | WAN interface name, e.g. `wan` or `pppoe0`. |
+| `ARRDASH_OPNSENSE_CONNECT_ADDRESS` | Optional IP to connect to while retaining the URL hostname for TLS. |
+| `ARRDASH_NETWORK_ADDRESS_MAP` | Optional comma-separated `app=ip` mappings for host-networked or externally managed apps, e.g. `qbittorrent=192.168.1.20,custom-app=192.168.1.21`. Docker attachments are discovered automatically and this overrides them only when needed. |
+
+OPNsense credentials may alternatively live at `secret/arrdash/opnsense` in OpenBao. Do not
+expose a firewall management interface to the public internet for ArrDash; use a restricted,
+read-only API account and a network path reachable only by the container.
+
 | Variable | Description |
 |----------|-------------|
 | `OPENBAO_ADDR` | OpenBao base URL (e.g. `https://openbao.yeradonkey.com`) |

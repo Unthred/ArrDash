@@ -78,6 +78,14 @@ public static class BitrateDisplayHelper
         kbps >= 1000
             ? $"{kbps / 1000d:0.#} Mbps"
             : $"{kbps} Kbps";
+
+    public static string FormatBytesPerSecond(long bytesPerSecond)
+    {
+        var kbps = Math.Max(0, bytesPerSecond) * 8d / 1000d;
+        return kbps >= 1000
+            ? $"{kbps / 1000d:0.#} Mbps"
+            : $"{kbps:0} Kbps";
+    }
 }
 
 public static class CountDisplayHelper

@@ -31,11 +31,14 @@
         else
         {
             <div @ondblclick:stopPropagation="true">
-                <MudToggleGroup T="PanelViewMode" Value="@ViewMode" ValueChanged="OnViewModeChanged" Color="Color.Default" Rounded="true" SelectedClass="segmented-toggle-selected" Class="arrdash-segmented-toggle view-toggle" FixedContent>
-                    <MudToggleItem Value="PanelViewMode.Cards" Text="Cards" />
-                    <MudToggleItem Value="PanelViewMode.Compact" Text="List" />
-                    <MudToggleItem Value="PanelViewMode.Table" Text="Table" />
-                </MudToggleGroup>
+                <div class="d-flex align-center gap-2">
+                    <MudToggleGroup T="PanelViewMode" Value="@ViewMode" ValueChanged="OnViewModeChanged" Color="Color.Default" Rounded="true" SelectedClass="segmented-toggle-selected" Class="arrdash-segmented-toggle view-toggle" FixedContent>
+                        <MudToggleItem Value="PanelViewMode.Cards" Text="Cards" />
+                        <MudToggleItem Value="PanelViewMode.Compact" Text="List" />
+                        <MudToggleItem Value="PanelViewMode.Table" Text="Table" />
+                    </MudToggleGroup>
+                    <MudNumericField T="int" Value="ItemLimit" ValueChanged="OnItemLimitChanged" Label="Items" Variant="Variant.Outlined" Margin="Margin.Dense" Min="5" Max="100" Style="width: 5.5rem" />
+                </div>
             </div>
         }
     </div>
@@ -164,6 +167,7 @@
     [Parameter] public RenderFragment? DragHandle { get; set; }
     [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
     [Parameter] public PanelViewMode ViewMode { get; set; } = PanelViewMode.Cards;
+    [Parameter] public int ItemLimit { get; set; } = 20;
     [Parameter] public TimeDisplayFormat TimeFormat { get; set; } = TimeDisplayFormat.Relative;
     [Parameter] public bool ShowQuality { get; set; } = true;
     [Parameter] public bool ShowEpisodeBadges { get; set; } = true;
@@ -176,6 +180,7 @@
     [Parameter] public string? ServiceUrl { get; set; }
     [Parameter] public string? NotConfiguredMessage { get; set; }
     [Parameter] public EventCallback<PanelViewMode> ViewModeChanged { get; set; }
+    [Parameter] public EventCallback<int> ItemLimitChanged { get; set; }
     [Inject] private ExternalLinkService Links { get; set; } = default!;
     [Inject] private LayoutPreferencesService Prefs { get; set; } = default!;
 
@@ -199,6 +204,10 @@
 
     private Task OnViewModeChanged(PanelViewMode mode) => ViewModeChanged.HasDelegate
         ? ViewModeChanged.InvokeAsync(mode)
+        : Task.CompletedTask;
+
+    private Task OnItemLimitChanged(int limit) => ItemLimitChanged.HasDelegate
+        ? ItemLimitChanged.InvokeAsync(Math.Clamp(limit, 5, 100))
         : Task.CompletedTask;
 
     private string FormatTime(DateTimeOffset ts) => TimeDisplayHelper.Format(ts, TimeFormat);

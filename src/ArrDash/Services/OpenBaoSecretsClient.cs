@@ -72,6 +72,36 @@ public sealed class OpenBaoSecretsClient(ILogger<OpenBaoSecretsClient> logger)
     }
 
     public const string WebhookTokenPath = "arrdash/webhook-token";
+    public const string OpnsensePath = "arrdash/opnsense";
+
+    public async Task<OpnsenseCredentials?> ReadOpnsenseAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var environment = new OpnsenseCredentials(
+            Environment.GetEnvironmentVariable("ARRDASH_OPNSENSE_URL"),
+            Environment.GetEnvironmentVariable("ARRDASH_OPNSENSE_API_KEY"),
+            Environment.GetEnvironmentVariable("ARRDASH_OPNSENSE_API_SECRET"),
+            Environment.GetEnvironmentVariable("ARRDASH_OPNSENSE_WAN_INTERFACE") ?? "wan",
+            Environment.GetEnvironmentVariable("ARRDASH_OPNSENSE_CONNECT_ADDRESS"));
+        if (environment.IsComplete)
+            return environment;
+
+        if (!IsConfigured)
+            return null;
+        try
+        {
+            var secret = await CreateClient().V1.Secrets.KeyValue.V2.ReadSecretAsync(path: OpnsensePath, mountPoint: MountPoint);
+            var data = secret.Data?.Data;
+            if (data is null) return null;
+            data.TryGetValue("url", out var url);
+            data.TryGetValue("apiKey", out var apiKey);
+            data.TryGetValue("apiSecret", out var apiSecret);
+            data.TryGetValue("wanInterface", out var wanInterface);
+            data.TryGetValue("connectAddress", out var connectAddress);
+            return new OpnsenseCredentials(url?.ToString(), apiKey?.ToString(), apiSecret?.ToString(), wanInterface?.ToString() ?? "pppoe0", connectAddress?.ToString());
+        }
+        catch (Exception ex) when (IsNotFound(ex)) { return null; }
+    }
 
     public async Task<string?> ReadWebhookTokenAsync(CancellationToken ct = default)
     {
@@ -128,4 +158,9 @@ public sealed class OpenBaoSecretsClient(ILogger<OpenBaoSecretsClient> logger)
         return msg.Contains("404", StringComparison.OrdinalIgnoreCase)
                || msg.Contains("not found", StringComparison.OrdinalIgnoreCase);
     }
+}
+
+public sealed record OpnsenseCredentials(string? Url, string? ApiKey, string? ApiSecret, string WanInterface, string? ConnectAddress)
+{
+    public bool IsComplete => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(ApiSecret);
 }
