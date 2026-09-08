@@ -77,6 +77,7 @@ Per-panel accent used for headings and panel chrome:
 | Setting | Description |
 |---------|-------------|
 | Recent window | **Item count** or **Last N days** |
+| Downloads summary period | Time window used by the Downloads summary card (6 hours, 24 hours, 3 days, or 7 days) |
 | Recent days | Day window when in days mode |
 | Default recent limit | Max items per panel (count mode) |
 | Per-panel limits | Override limit per recent panel |

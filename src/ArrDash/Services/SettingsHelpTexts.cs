@@ -44,6 +44,7 @@ public static class SettingsHelpTexts
     public const string TimeFormat = "How timestamps appear — relative (\"2h ago\"), clock only, or full date and time.";
     public const string RecentDays = "When using days mode, only items from this many past days are shown.";
     public const string DefaultRecentLimit = "Default maximum items per recent panel when using item count mode.";
+    public const string DownloadSummaryHours = "How far back the Downloads summary counts imports and grabs for each *arr service.";
     public const string AudiobookSource = "Which services feed the audiobook panel — both merged, or one only.";
 
     public const string ShowPlexSessions = "Shows who is watching what on Plex in the Now Playing panel.";

@@ -8,10 +8,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Network bandwidth now uses a portable Docker/host-counter provider by default; OPNsense WAN PF-flow attribution is opt-in through `ARRDASH_NETWORK_PROVIDER=opnsense` and can use standard environment configuration or OpenBao ([#81](https://github.com/Unthred/ArrDash/issues/81))
+
 - Cleanup: removed **Cards** layout (Compact / Posters only); turned off MudTable virtualize to stop scroll flicker ([#73](https://github.com/Unthred/ArrDash/issues/73))
 
 ### Added
 
+- Dashboard: per-panel item limit next to the Cards/List/Table control, plus a configurable Downloads summary card for Sonarr, Radarr, Chaptarr, and Lidarr imports/grabs ([#82](https://github.com/Unthred/ArrDash/issues/82))
 - Cleanup: **Released** column (Radarr digital/physical/cinema; Sonarr first aired); layout modes **Compact / Posters** ([#73](https://github.com/Unthred/ArrDash/issues/73))
 
 ### Changed
@@ -60,6 +63,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Settings → Diagnostics: configurable log level (Trace through Critical, or "Server default"), takes effect immediately with no restart ([#47](https://github.com/Unthred/ArrDash/issues/47))
 
 ### Fixed
+
+- Network bandwidth breakdown now uses router WAN counters and live public PF flows, so macvlan, LAN, and container-to-container traffic cannot make its rows exceed the WAN headline; unassigned WAN traffic remains **Unattributed / other** ([#81](https://github.com/Unthred/ArrDash/issues/81))
 
 - Activity **Plays over time** and **Media mix** were empty after the warehouse switch: plays lacked Plex/Emby/Jellyfin/Trakt series tags the stacked chart expects, and media mix pie rows ignored category labels (treating the "Hours" series name as a slice and dividing by 3600 twice) ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Trakt **Push new plays**: Emby/Jellyfin history is enriched with IMDb/TMDB/TVDB from the media server so ArrDash can push watches to Trakt without Emby's built-in Trakt plugin; push also accepts TMDB/TVDB and show+season+episode payloads; push history links no longer collide on `TraktHistoryId = 0` ([#50](https://github.com/Unthred/ArrDash/issues/50))

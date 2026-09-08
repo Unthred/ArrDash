@@ -85,10 +85,14 @@ builder.Services.AddSingleton<CpuHistoryService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<CpuHistoryService>());
 builder.Services.AddSingleton<HostNetworkSamplerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HostNetworkSamplerService>());
-builder.Services.AddSingleton<UnraidActivityService>();
-builder.Services.AddSingleton<InfrastructureEventsService>();
 builder.Services.AddSingleton<ContainerNetworkSamplerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ContainerNetworkSamplerService>());
+builder.Services.AddSingleton<UnraidActivityService>();
+builder.Services.AddSingleton<InfrastructureEventsService>();
+builder.Services.AddSingleton<OpnsenseTrafficSamplerService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<OpnsenseTrafficSamplerService>());
+builder.Services.AddSingleton<DockerTrafficProvider>();
+builder.Services.AddSingleton<INetworkTrafficProvider, NetworkTrafficProviderSelector>();
 builder.Services.AddSingleton<NetworkBandwidthService>();
 builder.Services.AddSingleton<AudiobookShelfActivityTracker>();
 builder.Services.AddHostedService<AudiobookShelfActivityHostedService>();
@@ -375,13 +379,13 @@ app.MapGet("/api/services/{serviceKey}/detail", async (string serviceKey, Servic
 app.MapGet("/api/network/detail", async (
     string direction,
     NetworkBandwidthService bandwidth,
-    DashboardState state,
+    DashboardState dashboardState,
     CancellationToken ct) =>
 {
     if (!Enum.TryParse<NetworkBandwidthDirection>(direction, ignoreCase: true, out var parsed))
         return Results.BadRequest(new { error = "direction must be upload or download" });
 
-    var detail = await bandwidth.FetchDetailAsync(parsed, state.Current.ActiveSessions, ct);
+    var detail = await bandwidth.FetchDetailAsync(parsed, dashboardState.Current.ActiveSessions, ct);
     return Results.Json(detail);
 });
 app.MapGet("/api/poster/sonarr/{seriesId:int}", (int seriesId, PosterProxyService proxy, CancellationToken ct) =>

@@ -1,0 +1,41 @@
+@using ArrDash.Models
+
+<MudPaper Class="panel-shell" Elevation="0">
+    <div class="panel-header" style="--accent:@Accent">
+        <div class="panel-title-wrap">
+            @if (DragHandle is not null) { @DragHandle }
+            <MudIcon Icon="@Icons.Material.Filled.Summarize" Class="panel-icon" />
+            <div><div class="panel-title">Downloads summary</div><div class="panel-sub">Last @WindowLabel</div></div>
+        </div>
+        <div @ondblclick:stopPropagation="true">
+            <MudSelect T="int" Value="WindowHours" ValueChanged="OnWindowHoursChanged" Label="Period" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 7rem">
+                <MudSelectItem Value="6">6 hours</MudSelectItem><MudSelectItem Value="24">24 hours</MudSelectItem>
+                <MudSelectItem Value="72">3 days</MudSelectItem><MudSelectItem Value="168">7 days</MudSelectItem>
+            </MudSelect>
+        </div>
+    </div>
+    <div class="p-4">
+        @if (Summary is null || Summary.Services.All(service => service.ImportedCount == 0 && service.GrabbedCount == 0))
+        { <div class="empty-state">No downloads in this period</div> }
+        else
+        {
+            <div class="ws-metric-grid">
+                @foreach (var service in Summary.Services)
+                {
+                    <div class="ws-metric-tile"><span class="ws-metric-value">@service.ImportedCount</span><span class="ws-metric-label">@service.Label imported</span>
+                    @if (service.GrabbedCount > 0) { <span class="muted">@service.GrabbedCount grabbed</span> }</div>
+                }
+            </div>
+        }
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter] public string Accent { get; set; } = "#fb923c";
+    [Parameter] public DownloadSummary? Summary { get; set; }
+    [Parameter] public int WindowHours { get; set; } = 24;
+    [Parameter] public EventCallback<int> WindowHoursChanged { get; set; }
+    [Parameter] public RenderFragment? DragHandle { get; set; }
+    private string WindowLabel => WindowHours switch { 1 => "hour", < 24 => $"{WindowHours} hours", _ when WindowHours % 24 == 0 => $"{WindowHours / 24} day{(WindowHours == 24 ? "" : "s")}", _ => $"{WindowHours} hours" };
+    private Task OnWindowHoursChanged(int hours) => WindowHoursChanged.HasDelegate ? WindowHoursChanged.InvokeAsync(hours) : Task.CompletedTask;
+}

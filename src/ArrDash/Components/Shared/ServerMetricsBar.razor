@@ -449,10 +449,12 @@
                 <NetworkBandwidthDetailPanel @key="NetworkBandwidthDirection.Download"
                                              Direction="NetworkBandwidthDirection.Download"
                                              Sessions="Sessions"
+                                             RefreshAt="SampledAt"
                                              OnClose="CloseNetworkDetail" />
                 <NetworkBandwidthDetailPanel @key="NetworkBandwidthDirection.Upload"
                                              Direction="NetworkBandwidthDirection.Upload"
                                              Sessions="Sessions"
+                                             RefreshAt="SampledAt"
                                              OnClose="CloseNetworkDetail" />
             </div>
         }

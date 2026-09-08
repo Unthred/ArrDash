@@ -329,6 +329,14 @@
                     <SettingField Text="@SettingsHelpTexts.DefaultRecentLimit">
                         <MudNumericField @bind-Value="_defaultRecentLimit" @bind-Value:after="ScheduleLivePreviewNow" Label="Default list size" Variant="Variant.Outlined" Min="5" Max="100" />
                     </SettingField>
+                    <SettingField Text="@SettingsHelpTexts.DownloadSummaryHours">
+                        <MudSelect T="int" @bind-Value="_downloadSummaryHours" @bind-Value:after="ScheduleLivePreviewNow" Label="Downloads summary period" Variant="Variant.Outlined">
+                            <MudSelectItem Value="6">6 hours</MudSelectItem>
+                            <MudSelectItem Value="24">24 hours</MudSelectItem>
+                            <MudSelectItem Value="72">3 days</MudSelectItem>
+                            <MudSelectItem Value="168">7 days</MudSelectItem>
+                        </MudSelect>
+                    </SettingField>
                     <SettingField Text="@SettingsHelpTexts.AudiobookSource" Span2="true">
                         <MudSelect T="AudiobookSourceMode" @bind-Value="_audiobookSource" @bind-Value:after="ScheduleLivePreviewNow" Label="Audiobook source" Variant="Variant.Outlined">
                             <MudSelectItem Value="AudiobookSourceMode.Merge">Merge Chaptarr + ABS</MudSelectItem>
@@ -882,6 +890,7 @@
     private bool _showMissingEpisodes = true;
     private bool _showSyncNotes = true;
     private int _defaultRecentLimit = 20;
+    private int _downloadSummaryHours = 24;
     private RecentWindowMode _recentWindowMode = RecentWindowMode.ItemCount;
     private int _recentDays = 30;
     private AudiobookSourceMode _audiobookSource = AudiobookSourceMode.Merge;
@@ -1093,6 +1102,7 @@
         _showMissingEpisodes = prefs.ShowMissingEpisodes;
         _showSyncNotes = prefs.ShowSyncNotes;
         _defaultRecentLimit = prefs.DefaultRecentLimit;
+        _downloadSummaryHours = prefs.DownloadSummaryHours;
         _recentWindowMode = prefs.RecentWindowMode;
         _recentDays = prefs.RecentDays;
         _audiobookSource = prefs.AudiobookSource;
@@ -1418,6 +1428,7 @@
         p.ShowMissingEpisodes = _showMissingEpisodes;
         p.ShowSyncNotes = _showSyncNotes;
         p.DefaultRecentLimit = Math.Clamp(_defaultRecentLimit, 5, 100);
+        p.DownloadSummaryHours = Math.Clamp(_downloadSummaryHours, 1, 24 * 31);
         p.RecentWindowMode = _recentWindowMode;
         p.RecentDays = Math.Clamp(_recentDays, 1, 365);
         p.AudiobookSource = _audiobookSource;

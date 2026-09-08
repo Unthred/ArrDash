@@ -112,6 +112,14 @@
                     <DragHandle>@BuildDragHandle(panelId)</DragHandle>
                 </LibrariesPanel>
                 break;
+            case "download-summary":
+                <DownloadSummaryPanel Accent="@Prefs.GetPanelAccent(panelId, "#fb923c")"
+                                      Summary="_snapshot.DownloadSummary"
+                                      WindowHours="@Prefs.Current.DownloadSummaryHours"
+                                      WindowHoursChanged="OnDownloadSummaryHoursChanged">
+                    <DragHandle>@BuildDragHandle(panelId)</DragHandle>
+                </DownloadSummaryPanel>
+                break;
             case "chaptarr-abs-sync":
                 <ChaptarrSyncPanel PanelId="chaptarr-abs-sync"
                                     Accent="@Prefs.GetPanelAccent(panelId, "#f97316")">
@@ -121,6 +129,7 @@
             case "recent-tv":
                 <DownloadPanel PanelId="recent-tv" Title="Recent TV" Icon="@Icons.Material.Filled.LiveTv"
                                Accent="@Prefs.GetPanelAccent(panelId, "#35c5f4")" Items="_snapshot.RecentTv" ViewMode="@GetViewMode(panelId)"
+                               ItemLimit="@Prefs.GetRecentLimit(panelId)"
                                TimeFormat="@Prefs.Current.TimeFormat" ShowQuality="@Prefs.Current.ShowQuality"
                                ShowEpisodeBadges="@Prefs.Current.ShowEpisodeBadges" ShowMissingEpisodes="@Prefs.Current.ShowMissingEpisodes" ShowSyncNotes="@Prefs.Current.ShowSyncNotes"
                                EnableClickThrough="@Prefs.Current.EnableClickThrough"
@@ -128,13 +137,15 @@
                                ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
                                FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
                                ServiceUrl="@OptionsAccessor.Options.Sonarr.Url"
-                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))">
+                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))"
+                               ItemLimitChanged="@(limit => OnItemLimitChanged(panelId, limit))">
                     <DragHandle>@BuildDragHandle(panelId)</DragHandle>
                 </DownloadPanel>
                 break;
             case "recent-movies":
                 <DownloadPanel PanelId="recent-movies" Title="Recent Movies" Icon="@Icons.Material.Filled.Movie"
                                Accent="@Prefs.GetPanelAccent(panelId, "#f5c518")" Items="_snapshot.RecentMovies" ViewMode="@GetViewMode(panelId)"
+                               ItemLimit="@Prefs.GetRecentLimit(panelId)"
                                TimeFormat="@Prefs.Current.TimeFormat" ShowQuality="@Prefs.Current.ShowQuality"
                                ShowEpisodeBadges="@Prefs.Current.ShowEpisodeBadges" ShowMissingEpisodes="@Prefs.Current.ShowMissingEpisodes" ShowSyncNotes="@Prefs.Current.ShowSyncNotes"
                                EnableClickThrough="@Prefs.Current.EnableClickThrough"
@@ -142,13 +153,15 @@
                                ExternalLinkTarget="@Prefs.Current.ExternalLinkTarget"
                                FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
                                ServiceUrl="@OptionsAccessor.Options.Radarr.Url"
-                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))">
+                               ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))"
+                               ItemLimitChanged="@(limit => OnItemLimitChanged(panelId, limit))">
                     <DragHandle>@BuildDragHandle(panelId)</DragHandle>
                 </DownloadPanel>
                 break;
             case "recent-audiobooks":
                 <DownloadPanel PanelId="recent-audiobooks" Title="Recent Audiobooks" Icon="@Icons.Material.Filled.Headphones"
                                Accent="@Prefs.GetPanelAccent(panelId, "#00d2be")" Items="_snapshot.RecentAudiobooks" ViewMode="@GetViewMode(panelId)"
+                               ItemLimit="@Prefs.GetRecentLimit(panelId)"
                                TimeFormat="@Prefs.Current.TimeFormat" ShowQuality="@Prefs.Current.ShowQuality"
                                ShowEpisodeBadges="@Prefs.Current.ShowEpisodeBadges" ShowMissingEpisodes="@Prefs.Current.ShowMissingEpisodes" ShowSyncNotes="@Prefs.Current.ShowSyncNotes"
                                EnableClickThrough="@Prefs.Current.EnableClickThrough"
@@ -157,6 +170,7 @@
                                FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
                                ServiceUrl="@OptionsAccessor.Options.Chaptarr.Url"
                                ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))"
+                               ItemLimitChanged="@(limit => OnItemLimitChanged(panelId, limit))"
                                NotConfiguredMessage="@AudiobookPanelMessage()">
                     <DragHandle>@BuildDragHandle(panelId)</DragHandle>
                 </DownloadPanel>
@@ -164,6 +178,7 @@
             case "recent-music":
                 <DownloadPanel PanelId="recent-music" Title="Recent Music" Icon="@Icons.Material.Filled.MusicNote"
                                Accent="@Prefs.GetPanelAccent(panelId, "#bc93e1")" Items="_snapshot.RecentMusic" ViewMode="@GetViewMode(panelId)"
+                               ItemLimit="@Prefs.GetRecentLimit(panelId)"
                                TimeFormat="@Prefs.Current.TimeFormat" ShowQuality="@Prefs.Current.ShowQuality"
                                ShowEpisodeBadges="@Prefs.Current.ShowEpisodeBadges" ShowMissingEpisodes="@Prefs.Current.ShowMissingEpisodes" ShowSyncNotes="@Prefs.Current.ShowSyncNotes"
                                EnableClickThrough="@Prefs.Current.EnableClickThrough"
@@ -172,6 +187,7 @@
                                FriendlyQualityLabels="@Prefs.Current.FriendlyQualityLabels"
                                ServiceUrl="@OptionsAccessor.Options.Lidarr.Url"
                                ViewModeChanged="@(mode => OnViewModeChanged(panelId, mode))"
+                               ItemLimitChanged="@(limit => OnItemLimitChanged(panelId, limit))"
                                NotConfiguredMessage="@MusicNotConfiguredMessage()">
                     <DragHandle>@BuildDragHandle(panelId)</DragHandle>
                 </DownloadPanel>
@@ -198,10 +214,12 @@
                 <NetworkBandwidthDetailPanel @key="NetworkBandwidthDirection.Download"
                                              Direction="NetworkBandwidthDirection.Download"
                                              Sessions="_snapshot.ActiveSessions"
+                                             RefreshAt="_snapshot.UpdatedAt"
                                              OnClose="CloseNetworkDetail" />
                 <NetworkBandwidthDetailPanel @key="NetworkBandwidthDirection.Upload"
                                              Direction="NetworkBandwidthDirection.Upload"
                                              Sessions="_snapshot.ActiveSessions"
+                                             RefreshAt="_snapshot.UpdatedAt"
                                              OnClose="CloseNetworkDetail" />
             </div>
         }
@@ -437,6 +455,7 @@
             "watch-stats" => o.Tautulli.IsConfigured || o.Tracearr.IsConfigured || o.Emby.IsConfigured || o.Jellyfin.IsConfigured,
             "libraries" => o.Sonarr.IsConfigured || o.Radarr.IsConfigured || o.Lidarr.IsConfigured
                 || o.Chaptarr.IsConfigured || o.AudiobookShelf.IsConfigured,
+            "download-summary" => o.Sonarr.IsConfigured || o.Radarr.IsConfigured || o.Lidarr.IsConfigured || o.Chaptarr.IsConfigured,
             "chaptarr-abs-sync" => o.Chaptarr.IsConfigured,
             "recent-tv" => o.Sonarr.IsConfigured,
             "recent-movies" => o.Radarr.IsConfigured,
@@ -534,6 +553,18 @@
     {
         await Prefs.UpdatePanelViewModeAsync(panelId, mode);
         StateHasChanged();
+    }
+
+    private async Task OnItemLimitChanged(string panelId, int limit)
+    {
+        await Prefs.UpdateRecentLimitAsync(panelId, limit);
+        await RefreshNow();
+    }
+
+    private async Task OnDownloadSummaryHoursChanged(int hours)
+    {
+        await Prefs.UpdateAsync(p => p.DownloadSummaryHours = hours);
+        await RefreshNow();
     }
 
     private void OnPanelDragStart(string panelId) => _draggingPanel = panelId;

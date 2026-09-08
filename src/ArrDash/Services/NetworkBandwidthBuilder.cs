@@ -9,25 +9,18 @@ public static class NetworkBandwidthBuilder
             ? rate.RxBytesPerSecond
             : rate.TxBytesPerSecond;
 
-    public static long SessionBytesPerSecond(int? bandwidthKbps) =>
-        bandwidthKbps is int kb and > 0 ? (long)(kb * 1000.0 / 8.0) : 0;
-
     public static NetworkBandwidthDetail Build(
         NetworkBandwidthDirection direction,
         long totalBytesPerSecond,
         DateTimeOffset sampledAt,
-        IReadOnlyList<ActiveSession> sessions,
         IReadOnlyList<ContainerNetworkRate> containerRates,
         IReadOnlyDictionary<string, string?> serviceUrls,
         string? note,
-        IReadOnlyDictionary<string, double>? cpuByContainerName = null)
+        IReadOnlyDictionary<string, double>? cpuByContainerName = null,
+        string provider = "docker",
+        string attribution = "Container traffic (may include LAN)")
     {
         var rows = new Dictionary<string, MutableRow>(StringComparer.OrdinalIgnoreCase);
-        var claimedStreamingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        if (direction == NetworkBandwidthDirection.Upload)
-            AddStreamingRows(rows, sessions, serviceUrls, claimedStreamingKeys);
-
         foreach (var rate in containerRates)
         {
             var bps = BytesPerSecondForDirection(rate, direction);
@@ -35,9 +28,6 @@ public static class NetworkBandwidthBuilder
                 continue;
 
             var (key, label) = ContainerNetworkMapper.Map(rate.ContainerName);
-            if (claimedStreamingKeys.Contains(key))
-                continue;
-
             var cpu = cpuByContainerName?.GetValueOrDefault(rate.ContainerName);
 
             if (!rows.TryGetValue(key, out var row))
@@ -48,7 +38,7 @@ public static class NetworkBandwidthBuilder
                     bps,
                     "container",
                     serviceUrls.GetValueOrDefault(key),
-                    [new NetworkBandwidthDetailItem(rate.ContainerName, "Container I/O")])
+                    [new NetworkBandwidthDetailItem(rate.ContainerName, "Container traffic")])
                 {
                     CpuPercent = cpu
                 };
@@ -57,7 +47,7 @@ public static class NetworkBandwidthBuilder
 
             row.BytesPerSecond += bps;
             row.CpuPercent = (row.CpuPercent ?? 0) + (cpu ?? 0);
-            row.DetailItems.Add(new NetworkBandwidthDetailItem(rate.ContainerName, "Container I/O"));
+            row.DetailItems.Add(new NetworkBandwidthDetailItem(rate.ContainerName, "Container traffic"));
         }
 
         var ordered = rows.Values
@@ -99,7 +89,9 @@ public static class NetworkBandwidthBuilder
             unattributed,
             sampledAt,
             resultRows,
-            note);
+            note,
+            provider,
+            attribution);
     }
 
     public static long ComputeRate(long currentBytes, long previousBytes, double elapsedSeconds)
@@ -110,56 +102,6 @@ public static class NetworkBandwidthBuilder
         var delta = currentBytes - previousBytes;
         return delta < 0 ? 0 : (long)(delta / elapsedSeconds);
     }
-
-    private static void AddStreamingRows(
-        Dictionary<string, MutableRow> rows,
-        IReadOnlyList<ActiveSession> sessions,
-        IReadOnlyDictionary<string, string?> serviceUrls,
-        HashSet<string> claimedStreamingKeys)
-    {
-        foreach (var group in sessions
-                     .Where(s => SessionBytesPerSecond(s.BandwidthKbps ?? s.BitrateKbps) > 0)
-                     .GroupBy(SessionServerKey))
-        {
-            var key = group.Key;
-            if (string.IsNullOrWhiteSpace(key))
-                continue;
-
-            var label = group.First().Server.ToString();
-            var bytesPerSecond = group.Sum(s => SessionBytesPerSecond(s.BandwidthKbps ?? s.BitrateKbps));
-            if (bytesPerSecond <= 0)
-                continue;
-
-            claimedStreamingKeys.Add(key);
-            rows[key] = new MutableRow(
-                key,
-                label,
-                bytesPerSecond,
-                "session",
-                serviceUrls.GetValueOrDefault(key),
-                group.Select(s => new NetworkBandwidthDetailItem(
-                    s.Title,
-                    BuildSessionSubtitle(s))).ToList());
-        }
-    }
-
-    private static string? BuildSessionSubtitle(ActiveSession session)
-    {
-        var parts = new List<string>();
-        if (session.IsLocal is bool local)
-            parts.Add(local ? "LAN" : "WAN");
-        if (session.BandwidthKbps is int bw)
-            parts.Add(BitrateDisplayHelper.Format(bw));
-        return parts.Count > 0 ? string.Join(" · ", parts) : session.User;
-    }
-
-    private static string SessionServerKey(ActiveSession session) => session.Server switch
-    {
-        StreamingServer.Plex => "plex",
-        StreamingServer.Emby => "emby",
-        StreamingServer.Jellyfin => "jellyfin",
-        _ => string.Empty
-    };
 
     private sealed class MutableRow(
         string key,

@@ -20,7 +20,12 @@ public sealed class DashboardCollector(
 {
     public async Task<DashboardSnapshot> CollectAsync(CancellationToken ct)
     {
-        var fetchLimit = Math.Clamp(prefs.Current.DefaultRecentLimit * 3, 20, 150);
+        var preferences = prefs.Current;
+        var maxPanelLimit = PanelCatalog.Recent
+            .Select(panel => RecentItemFilter.ResolveLimit(preferences, panel.Id))
+            .Append(preferences.DefaultRecentLimit)
+            .Max();
+        var fetchLimit = Math.Clamp(maxPanelLimit * 3, 20, 300);
 
         var sonarrTask = FetchIfEnabled("sonarr", sonarr.FetchRecentAsync(fetchLimit, ct));
         var radarrTask = FetchIfEnabled("radarr", radarr.FetchRecentAsync(fetchLimit, ct));
@@ -42,7 +47,7 @@ public sealed class DashboardCollector(
         var (embySessions, embyHealth) = await embyTask;
         var (jellyfinSessions, jellyfinHealth) = await jellyfinTask;
 
-        var p = prefs.Current;
+        var p = preferences;
         var tv = RecentItemFilter.Apply(tvRaw, p, "recent-tv");
         var movies = RecentItemFilter.Apply(moviesRaw, p, "recent-movies");
         var music = RecentItemFilter.Apply(musicRaw, p, "recent-music");
@@ -72,7 +77,8 @@ public sealed class DashboardCollector(
             sessions,
             services,
             DateTimeOffset.UtcNow,
-            prefs.Current.ShowServerMetrics ? hostMetrics.Read() : null);
+            p.ShowServerMetrics ? hostMetrics.Read() : null,
+            DownloadSummaryBuilder.Build(p.DownloadSummaryHours, tvRaw, moviesRaw, chaptarrDownloads, musicRaw));
     }
 
     private static IReadOnlyList<DownloadItem> ApplyAudiobookSource(

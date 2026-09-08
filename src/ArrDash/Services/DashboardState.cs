@@ -293,6 +293,13 @@ public sealed class LayoutPreferencesService(IWebHostEnvironment env, ILogger<La
         await SaveAsync(current, ct);
     }
 
+    public async Task UpdateRecentLimitAsync(string panelId, int limit, CancellationToken ct = default)
+    {
+        var current = Current;
+        current.RecentLimits[panelId] = Math.Clamp(limit, 5, 100);
+        await SaveAsync(current, ct);
+    }
+
     // JSON round-trip so newly added preference fields can never be silently dropped:
     // the old field-by-field copy omitted every WatchStats* field, which reset them to
     // defaults on each read through Current/GetFormPreferences (#38).

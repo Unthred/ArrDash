@@ -2,7 +2,7 @@
 @using ArrDash.Services
 @using MudBlazor
 @implements IDisposable
-@inject UnraidActivityService UnraidActivityService
+@inject INetworkTrafficProvider NetworkTrafficProvider
 
 <div class="service-status-wrap">
     @if (FilteredServices.Count > 0 || ShowNetworkPills)
@@ -114,16 +114,11 @@
 
     private async Task PollNetworkAsync()
     {
-        var activity = await UnraidActivityService.ReadAsync(CancellationToken.None);
-        if (activity?.Network is not { } net)
-            return;
-
-        _latest = net;
-
+        _latest = NetworkTrafficProvider.GetLatest().Total;
         await InvokeAsync(StateHasChanged);
     }
 
-    private static string FormatThroughput(long bytesPerSecond) => $"{ByteDisplayHelper.Format(bytesPerSecond)}/s";
+    private static string FormatThroughput(long bytesPerSecond) => BitrateDisplayHelper.FormatBytesPerSecond(bytesPerSecond);
 
     private string BarClass => Alignment switch
     {

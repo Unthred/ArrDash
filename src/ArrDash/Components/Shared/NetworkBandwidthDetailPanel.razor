@@ -17,6 +17,9 @@
                 {
                     <MudText Typo="Typo.body2">@FormatRate(_detail.TotalBytesPerSecond)</MudText>
                     <MudText Typo="Typo.caption" Class="muted">
+                        @(_detail.Provider == "opnsense" ? "OPNsense WAN" : "Docker / host") · @_detail.Attribution
+                    </MudText>
+                    <MudText Typo="Typo.caption" Class="muted">
                         Checked @TimeDisplayHelper.FormatRefreshRelative(_detail.SampledAt)
                     </MudText>
                 }
@@ -179,6 +182,9 @@
 @code {
     [Parameter] public NetworkBandwidthDirection Direction { get; set; }
     [Parameter] public IReadOnlyList<ActiveSession> Sessions { get; set; } = [];
+    // The parent dashboard's polling timestamp. A traffic breakdown must be rebuilt whenever
+    // the headline is refreshed, even if the active-session list itself has not changed.
+    [Parameter] public DateTimeOffset RefreshAt { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
 
     private const int MaxCategoricalSlices = 8;
@@ -193,6 +199,7 @@
     private IReadOnlyList<ChartSlice> _slices = [];
     private NetworkBandwidthDirection? _loadedDirection;
     private IReadOnlyList<ActiveSession>? _loadedSessions;
+    private DateTimeOffset _loadedRefreshAt;
 
     private enum SortColumn { Name, Percent, Rate, Cpu }
     private SortColumn _sortColumn = SortColumn.Percent;
@@ -262,11 +269,12 @@
         // ServerMetricsBar, which re-renders on every mousemove over the CPU graph's hover area.
         // Without this guard, moving the mouse near the graph reloaded (and visibly flickered)
         // the totally unrelated bandwidth panel dozens of times a second.
-        if (_loadedDirection == Direction && ReferenceEquals(_loadedSessions, Sessions))
+        if (_loadedDirection == Direction && ReferenceEquals(_loadedSessions, Sessions) && _loadedRefreshAt == RefreshAt)
             return;
 
         _loadedDirection = Direction;
         _loadedSessions = Sessions;
+        _loadedRefreshAt = RefreshAt;
         await LoadAsync();
     }
 
@@ -283,7 +291,7 @@
         // that changes a totally unrelated preference elsewhere on the dashboard, since that
         // triggers a full RefreshNow() that gives Sessions a new list reference. Blanking the
         // chart on every one of those meant a display-only setting (pie size, legend fields)
-        // could get stuck showing "Sampling containers..." indefinitely if another reload
+        // could get stuck showing "Sampling internet traffic..." indefinitely if another reload
         // preempted it before finishing, making the setting look like it wasn't taking effect.
         // Keeping the previous data visible means those settings apply on the very next render
         // regardless of the fetch's timing, and the actual data is still numerically fresh.
@@ -326,7 +334,7 @@
         await OnClose.InvokeAsync();
     }
 
-    private static string FormatRate(long bytesPerSecond) => $"{ByteDisplayHelper.Format(bytesPerSecond)}/s";
+    private static string FormatRate(long bytesPerSecond) => BitrateDisplayHelper.FormatBytesPerSecond(bytesPerSecond);
 
     // Folds the tail past MaxCategoricalSlices into "Other" (8 is the categorical palette's
     // full token ceiling) and keeps "unattributed" as its own always-muted slice rather than
