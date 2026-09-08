@@ -78,7 +78,7 @@ public sealed class DashboardCollector(
             services,
             DateTimeOffset.UtcNow,
             p.ShowServerMetrics ? hostMetrics.Read() : null,
-            DownloadSummaryBuilder.Build(p.DownloadSummaryHours, tvRaw, moviesRaw, chaptarrDownloads, musicRaw));
+            DownloadSummaryBuilder.Build(p.DownloadSummaryHours, tvRaw, moviesRaw, chaptarrDownloads, libraryAudiobooks, musicRaw));
     }
 
     private static IReadOnlyList<DownloadItem> ApplyAudiobookSource(

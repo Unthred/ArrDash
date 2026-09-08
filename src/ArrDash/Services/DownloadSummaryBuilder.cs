@@ -8,7 +8,8 @@ public static class DownloadSummaryBuilder
         int windowHours,
         IReadOnlyList<DownloadItem> tv,
         IReadOnlyList<DownloadItem> movies,
-        IReadOnlyList<DownloadItem> audiobooks,
+        IReadOnlyList<DownloadItem> chaptarr,
+        IReadOnlyList<DownloadItem> audiobookShelf,
         IReadOnlyList<DownloadItem> music,
         DateTimeOffset? now = null)
     {
@@ -18,7 +19,8 @@ public static class DownloadSummaryBuilder
         [
             Count(MediaSource.Sonarr, "Sonarr", tv, cutoff),
             Count(MediaSource.Radarr, "Radarr", movies, cutoff),
-            Count(MediaSource.Chaptarr, "Chaptarr", audiobooks, cutoff),
+            Count(MediaSource.Chaptarr, "Chaptarr", chaptarr, cutoff),
+            Count(MediaSource.AudiobookShelf, "AudiobookShelf", audiobookShelf, cutoff),
             Count(MediaSource.Lidarr, "Lidarr", music, cutoff)
         ]);
     }
