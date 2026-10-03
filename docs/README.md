@@ -15,6 +15,10 @@ Always install from **`main`** (or the GHCR image built from `main`).
 - [Settings reference](settings-reference.md) — every tab and toggle in the Settings UI
 - [Infrastructure events](infrastructure-events.md) — JSONL schema for tower warnings (ArrDash `/warnings`)
 - [API](api.md) — health check, dashboard JSON, poster proxy routes
+- [Navigation and activity design](navigation-and-activity-design.md) — operator tasks and the
+  route/state migration plan
+- [Audiobook collection authority](audiobook-collection-authority.md) — upstream source
+  precedence and the #98/#99 reporting boundary
 
 ## Development
 

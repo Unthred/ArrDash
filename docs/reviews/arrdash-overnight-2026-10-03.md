@@ -11,6 +11,8 @@
   `dotnet test tests/ArrDash.Tests/ArrDash.Tests.csproj` successfully (exit 0).
   Restore also reported the pre-existing NU1510 reference warning and NU1903 advisory for
   `SQLitePCLRaw.lib.e_sqlite3` 2.1.10.
+- Documentation hygiene: corrected the stale .NET 8 SDK/runtime examples in
+  `docs/development.md` to .NET 10 and indexed the new design/authority documents.
 
 ## Issue ledger
 
