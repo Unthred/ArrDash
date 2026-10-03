@@ -61,6 +61,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Main dashboard and activity artwork now fall back to an intentional initials/icon treatment if
+  a same-origin poster/thumbnail request fails; the storage-blocked detail now explains the
+  condition, the monitoring signals, and safe next steps ([#87](https://github.com/Unthred/ArrDash/issues/87),
+  [#94](https://github.com/Unthred/ArrDash/issues/94), [#95](https://github.com/Unthred/ArrDash/issues/95)).
+- Dashboard refresh requests now coalesce into one service-controlled collection; the dashboard
+  shows when an update is in progress and retains the timestamp of the last successful result
+  ([#84](https://github.com/Unthred/ArrDash/issues/84)).
+- A connected service that returns a sanitized authentication failure now has a distinct,
+  accessible reauthentication state and a direct Settings route; recoverable component failures
+  now offer an explicit bounded retry instead of only a terminal refresh instruction
+  ([#85](https://github.com/Unthred/ArrDash/issues/85), [#86](https://github.com/Unthred/ArrDash/issues/86)).
+- Cleanup Candidates now reads one library-scoped analysis snapshot, keeps the previous list when
+  a refresh fails, and offers an explicit retry instead of letting an ordinary data failure tear
+  down the page ([#96](https://github.com/Unthred/ArrDash/issues/96)).
 - Activity **Plays over time** and **Media mix** were empty after the warehouse switch: plays lacked Plex/Emby/Jellyfin/Trakt series tags the stacked chart expects, and media mix pie rows ignored category labels (treating the "Hours" series name as a slice and dividing by 3600 twice) ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Trakt **Push new plays**: Emby/Jellyfin history is enriched with IMDb/TMDB/TVDB from the media server so ArrDash can push watches to Trakt without Emby's built-in Trakt plugin; push also accepts TMDB/TVDB and show+season+episode payloads; push history links no longer collide on `TraktHistoryId = 0` ([#50](https://github.com/Unthred/ArrDash/issues/50))
 - Every catch block across the service/client layer now logs instead of failing silently — makes real problems (a stalled sync, a failed HTTP call, a parse error) visible via `docker logs` instead of requiring a database query to diagnose ([#47](https://github.com/Unthred/ArrDash/issues/47))

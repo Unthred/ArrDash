@@ -33,7 +33,7 @@ Without local SDK:
 
 ```bash
 docker run --rm -v "$PWD:/src" -w /src/tests/ArrDash.Tests \
-  mcr.microsoft.com/dotnet/sdk:8.0 dotnet test
+  mcr.microsoft.com/dotnet/sdk:10.0 dotnet test
 ```
 
 ### Test coverage areas
@@ -66,7 +66,7 @@ docker compose build
 docker build -t arrdash:latest .
 ```
 
-Publish output is a framework-dependent deployment on `mcr.microsoft.com/dotnet/aspnet:8.0`.
+Publish output is a framework-dependent deployment on `mcr.microsoft.com/dotnet/aspnet:10.0`.
 
 ## Coding conventions
 

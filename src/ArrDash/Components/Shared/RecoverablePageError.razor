@@ -1,0 +1,26 @@
+@inject NavigationManager Navigation
+
+<MudPaper Class="pa-6 ma-6" Elevation="1" role="alert">
+    <MudText Typo="Typo.h5">This part of ArrDash could not load</MudText>
+    <MudText Typo="Typo.body2" Class="mt-2">
+        Your browser can retry without treating the problem as a successful refresh. No action was performed.
+    </MudText>
+    <div class="d-flex gap-2 mt-4 flex-wrap">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="RetryAsync">
+            Try again
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Href="/" StartIcon="@Icons.Material.Filled.Dashboard">Dashboard</MudButton>
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter] public EventCallback Retry { get; set; }
+
+    private async Task RetryAsync()
+    {
+        if (Retry.HasDelegate)
+            await Retry.InvokeAsync();
+        else
+            Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+    }
+}

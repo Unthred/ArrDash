@@ -167,6 +167,13 @@
                         @if (_selectedDetail == "stuck")
                         {
                             <div class="metrics-detail-hint">@StuckDetailIntro()</div>
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-2">
+                                <strong>What to watch:</strong> the number of blocked processes, the per-disk I/O
+                                percentage in <em>Array disks</em>, and whether parity or mover is active. A falling
+                                count means storage is recovering. <strong>Next step:</strong> wait for active array
+                                work to settle; for a blocked container, use the Unraid Docker page only after it is
+                                safe to stop it. ArrDash does not kill processes or change storage.
+                            </MudAlert>
                         }
                         @if (_unraidActivity is null)
                         {

@@ -166,7 +166,11 @@
                                      @onclick="() => OpenNestedPlayAsync(play)">
                                     @if (!string.IsNullOrWhiteSpace(play.ThumbUrl))
                                     {
-                                        <img class="activity-detail-play-thumb" src="@play.ThumbUrl" alt="" loading="lazy" />
+                                        <img class="activity-detail-play-thumb" src="@play.ThumbUrl" alt="" loading="lazy"
+                                             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                                        <span class="activity-detail-play-thumb activity-detail-play-thumb-fallback" style="display:none">
+                                            <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" />
+                                        </span>
                                     }
                                     else
                                     {

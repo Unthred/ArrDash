@@ -7,6 +7,7 @@ public sealed class DashboardState
 {
     private readonly object _lock = new();
     private DashboardSnapshot _snapshot = Empty();
+    private bool _isRefreshing;
 
     public event Action<DashboardSnapshot>? Changed;
 
@@ -15,6 +16,16 @@ public sealed class DashboardState
     // (Libraries, Chaptarr sync) must only force-bypass that cache on this event, not on Changed,
     // or they end up re-fetching from *arr/ABS every poll tick instead of respecting their cache.
     public event Action? ManualRefreshRequested;
+    public event Action<bool>? RefreshingChanged;
+
+    public bool IsRefreshing
+    {
+        get
+        {
+            lock (_lock)
+                return _isRefreshing;
+        }
+    }
 
     public DashboardSnapshot Current
     {
@@ -38,6 +49,20 @@ public sealed class DashboardState
     }
 
     public void NotifyManualRefresh() => ManualRefreshRequested?.Invoke();
+
+    internal void SetRefreshing(bool value)
+    {
+        Action<bool>? handlers;
+        lock (_lock)
+        {
+            if (_isRefreshing == value)
+                return;
+            _isRefreshing = value;
+            handlers = RefreshingChanged;
+        }
+
+        handlers?.Invoke(value);
+    }
 
     public static DashboardSnapshot Empty() => new(
         [],

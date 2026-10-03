@@ -153,12 +153,37 @@ public interface IDashboardRefresher
 public sealed class DashboardRefreshService(
     DashboardCollector collector,
     DashboardState state,
-    IHubContext<DashboardHub> hub) : IDashboardRefresher
+    IHubContext<DashboardHub> hub,
+    IHostApplicationLifetime lifetime) : IDashboardRefresher
 {
+    private readonly object _refreshLock = new();
+    private Task? _inFlight;
+
     public async Task RefreshAsync(CancellationToken ct)
     {
-        var snapshot = await collector.CollectAsync(ct);
-        state.Update(snapshot);
-        await hub.Clients.All.SendAsync("DashboardUpdated", snapshot, ct);
+        Task refresh;
+        lock (_refreshLock)
+            refresh = _inFlight ??= RefreshCoreAsync();
+
+        // A browser disconnect or a stale-check timer cancellation must only stop that caller
+        // waiting. It must not cancel the shared collection for every connected dashboard.
+        await refresh.WaitAsync(ct);
+    }
+
+    private async Task RefreshCoreAsync()
+    {
+        state.SetRefreshing(true);
+        try
+        {
+            var snapshot = await collector.CollectAsync(lifetime.ApplicationStopping);
+            state.Update(snapshot);
+            await hub.Clients.All.SendAsync("DashboardUpdated", snapshot, lifetime.ApplicationStopping);
+        }
+        finally
+        {
+            state.SetRefreshing(false);
+            lock (_refreshLock)
+                _inFlight = null;
+        }
     }
 }

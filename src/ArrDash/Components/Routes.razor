@@ -1,5 +1,18 @@
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+        <ErrorBoundary @ref="_boundary">
+            <ChildContent>
+                <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+            </ChildContent>
+            <ErrorContent>
+                <RecoverablePageError Retry="Recover" />
+            </ErrorContent>
+        </ErrorBoundary>
     </Found>
 </Router>
+
+@code {
+    private ErrorBoundary? _boundary;
+
+    private void Recover() => _boundary?.Recover();
+}

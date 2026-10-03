@@ -117,7 +117,9 @@
                             <div class="poster-frame">
                                 @if (!string.IsNullOrWhiteSpace(item.PosterUrl))
                                 {
-                                    <img src="@item.PosterUrl" alt="@item.Title" loading="lazy" />
+                                    <img src="@item.PosterUrl" alt="@item.Title" loading="lazy"
+                                         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                                    <div class="poster-fallback" style="display:none">@Initials(item.Title)</div>
                                 }
                                 else
                                 {

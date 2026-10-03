@@ -21,7 +21,11 @@
                     {
                         @if (!string.IsNullOrWhiteSpace(row.ThumbUrl))
                         {
-                            <img class="activity-leaderboard-avatar" src="@row.ThumbUrl" alt="" loading="lazy" />
+                            <img class="activity-leaderboard-avatar" src="@row.ThumbUrl" alt="" loading="lazy"
+                                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                            <span class="activity-leaderboard-avatar activity-leaderboard-avatar-fallback" style="display:none">
+                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" />
+                            </span>
                         }
                         else
                         {
@@ -34,7 +38,11 @@
                     {
                         @if (!string.IsNullOrWhiteSpace(row.ThumbUrl))
                         {
-                            <img class="activity-leaderboard-thumb" src="@row.ThumbUrl" alt="" loading="lazy" />
+                            <img class="activity-leaderboard-thumb" src="@row.ThumbUrl" alt="" loading="lazy"
+                                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                            <span class="activity-leaderboard-thumb activity-leaderboard-thumb-fallback" style="display:none">
+                                <MudIcon Icon="@(row.DrilldownKind == ActivityDrilldownKind.Genre ? Icons.Material.Filled.Category : Icons.Material.Filled.Movie)" Size="Size.Small" />
+                            </span>
                         }
                         else
                         {
