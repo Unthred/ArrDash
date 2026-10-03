@@ -33,4 +33,19 @@ public class DashboardStateTests
         Assert.Equal(0, changedCount);
         Assert.Equal(1, manualCount);
     }
+
+    [Fact]
+    public void SetRefreshing_only_notifies_on_a_real_state_transition()
+    {
+        var state = new DashboardState();
+        var values = new List<bool>();
+        state.RefreshingChanged += values.Add;
+
+        state.SetRefreshing(true);
+        state.SetRefreshing(true);
+        state.SetRefreshing(false);
+
+        Assert.False(state.IsRefreshing);
+        Assert.Equal([true, false], values);
+    }
 }

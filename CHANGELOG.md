@@ -61,6 +61,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Dashboard refresh requests now coalesce into one service-controlled collection; the dashboard
+  shows when an update is in progress and retains the timestamp of the last successful result
+  ([#84](https://github.com/Unthred/ArrDash/issues/84)).
 - A connected service that returns a sanitized authentication failure now has a distinct,
   accessible reauthentication state and a direct Settings route; recoverable component failures
   now offer an explicit bounded retry instead of only a terminal refresh instruction

@@ -16,7 +16,7 @@
 
 | Issue | Started | Ended | Disposition | Notes |
 | --- | --- | --- | --- | --- |
-| #84 | — | — | pending | Dashboard freshness and bounded refresh. |
+| #84 | 2026-10-03T22:54:00+01:00 | 2026-10-03T22:58:00+01:00 | implemented and verified | Single-flight dashboard refresh and honest last-success/update-in-progress state. |
 | #85 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Explicit upstream credential-expiry state. Browser/app-session expiry is not implementable because ArrDash has no app authentication. |
 | #86 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Component failures receive a bounded retry surface; #96 handles Cleanup’s request failure path. |
 | #87 | — | — | pending | Storage-blocked triage, building on #7. |
@@ -29,6 +29,8 @@
 | #94 | — | — | pending | Implemented once with duplicate #95. |
 | #95 | — | — | duplicate | Exact duplicate of #94; remains open for review. |
 | #96 | 2026-10-03T22:44:00+01:00 | 2026-10-03T22:48:00+01:00 | implemented and verified | One bounded library-scoped snapshot; page-level failure is recoverable with retained prior data and an explicit retry. Related PR #76 remains separate. |
+| #98 | — | — | pending | Added to the run; implementation follows #99 investigation. |
+| #99 | 2026-10-03T22:58:00+01:00 | — | in progress | Authoritative collection-membership/completion investigation before #98. |
 
 ## Review order
 
@@ -64,6 +66,15 @@
 - Added an `ErrorBoundary` recovery surface and a reusable error page with one user-triggered
   retry (no retry loop) and a dashboard route. The raw exception is not shown to the user.
 - Verified: focused classifier tests and the isolated full .NET 10 unit suite passed.
+
+### #84 — dashboard freshness
+
+- The background loop, reconnect path, stale timer, and manual control can all request a refresh.
+  They now coalesce around one service-controlled operation; a cancelled caller stops waiting but
+  cannot abort the collection shared by other dashboards.
+- The hero announces “Updating” and retains the last successful timestamp while work is active.
+  The manual button is disabled during that one operation, avoiding overlapping expensive work.
+- Verified: `DashboardState` transition coverage plus isolated full .NET 10 unit suite passed.
 
 ## Deployment
 

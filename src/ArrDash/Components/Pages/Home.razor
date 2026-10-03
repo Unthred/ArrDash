@@ -33,9 +33,9 @@
             </div>
             <div class="hero-meta">
                 <MudText Typo="Typo.caption" Class="muted">Last refresh</MudText>
-                <MudText Typo="Typo.body2">@FormatUpdated(_snapshot.UpdatedAt)</MudText>
-                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" OnClick="@(() => RefreshNow(manual: true))" Class="mt-2">
-                    Refresh now
+                <MudText Typo="Typo.body2" aria-live="polite">@RefreshStateText</MudText>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh" Disabled="State.IsRefreshing" OnClick="@(() => RefreshNow(manual: true))" Class="mt-2">
+                    @(State.IsRefreshing ? "Refreshing…" : "Refresh now")
                 </MudButton>
             </div>
         </section>
@@ -230,6 +230,9 @@
 
     private IReadOnlyList<string> VisiblePanels => Prefs.GetVisiblePanelOrder();
     private bool ShowHero => !Prefs.Current.HideHeroStrip && !(Kiosk && Prefs.Current.KioskHideHero);
+    private string RefreshStateText => State.IsRefreshing
+        ? $"Updating — last successful {FormatUpdated(_snapshot.UpdatedAt)}"
+        : FormatUpdated(_snapshot.UpdatedAt);
 
     private string DashboardShellClass =>
         $"dashboard-shell poster-size-{Prefs.Current.PosterSize.ToString().ToLowerInvariant()} poster-placement-{Prefs.Current.PosterPlacement.ToString().ToLowerInvariant()}";
@@ -239,6 +242,7 @@
         _snapshot = State.Current;
         _display = Prefs.GetDisplaySettings();
         State.Changed += OnDashboardStateChanged;
+        State.RefreshingChanged += OnRefreshingChanged;
         CircuitNotifier.CircuitConnected += OnCircuitConnected;
         Prefs.Changed += OnPrefsChanged;
         ConfigureRefreshLabelTimer();
@@ -294,6 +298,8 @@
         UpdateScreensaverState();
         RequestRender();
     }
+
+    private void OnRefreshingChanged(bool _) => RequestRender();
 
     private void OnCircuitConnected()
     {
@@ -592,6 +598,7 @@
     public void Dispose()
     {
         State.Changed -= OnDashboardStateChanged;
+        State.RefreshingChanged -= OnRefreshingChanged;
         CircuitNotifier.CircuitConnected -= OnCircuitConnected;
         Prefs.Changed -= OnPrefsChanged;
         _rotateTimer?.Dispose();
