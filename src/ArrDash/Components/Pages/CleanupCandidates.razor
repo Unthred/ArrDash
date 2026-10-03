@@ -53,8 +53,8 @@ else
             Movies and TV largest, unwatched, or untouched in a while. Report only — nothing here deletes anything;
             click a title to open it in Radarr or Sonarr, or the IMDb icon to look it up.
             Mark items for deletion to build a planning queue with a reclaimable total; Tags are Sonarr/Radarr
-            requester labels and are empty for most titles. Use Watched by to list everything one or more people
-            have played (including titles that are not cleanup candidates yet).
+            requester labels and are empty for most titles. Use Genre or Watched by to browse the library
+            (including titles that are not cleanup candidates yet).
         </MudText>
 
         <MudPaper Class="pa-3 mb-3" Elevation="0" Outlined="true">
@@ -66,7 +66,8 @@ else
                          OnClick="@(() => SetListView(ListView.Candidates))">
                     Candidates
                 </MudChip>
-                <MudChip T="string" Variant="@(_listView == ListView.DeletionQueue ? Variant.Filled : Variant.Outlined)"
+                <MudChip T="string" Class="cleanup-queue-chip"
+                         Variant="@(_listView == ListView.DeletionQueue ? Variant.Filled : Variant.Outlined)"
                          Color="@(_listView == ListView.DeletionQueue ? Color.Error : Color.Default)"
                          Icon="@Icons.Material.Filled.DeleteSweep"
                          OnClick="@(() => SetListView(ListView.DeletionQueue))">
@@ -84,64 +85,88 @@ else
                     Posters
                 </MudChip>
                 <MudSpacer />
-                <MudSelect T="string"
-                           MultiSelection="true"
-                           SelectedValues="_selectedWatchers"
-                           SelectedValuesChanged="OnWatchersChanged"
-                           Label="Watched by"
-                           Placeholder="Any user"
-                           Variant="Variant.Outlined"
-                           Margin="Margin.Dense"
-                           Dense="true"
-                           Clearable="true"
-                           MultiSelectionTextFunc="@FormatWatcherSelection"
-                           Class="cleanup-watcher-select"
-                           Style="max-width:280px;min-width:180px">
-                    @foreach (var user in _availableWatchers)
-                    {
-                        <MudSelectItem T="string" Value="@user">@user</MudSelectItem>
-                    }
-                </MudSelect>
-                <MudTextField @bind-Value="_searchText"
-                              @bind-Value:after="OnSearchChanged"
-                              Immediate="true"
-                              DebounceInterval="200"
-                              Placeholder="Search library by title, tags, watchers…"
-                              Variant="Variant.Outlined"
-                              Margin="Margin.Dense"
-                              Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Search"
-                              Clearable="true"
-                              Class="cleanup-search-field"
-                              Style="max-width:280px;min-width:180px" />
+                <div class="cleanup-filter-slot">
+                    <MudSelect T="string"
+                               MultiSelection="true"
+                               SelectedValues="_selectedGenres"
+                               SelectedValuesChanged="OnGenresChanged"
+                               Label="Genre"
+                               Placeholder="Any genre"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense="true"
+                               Clearable="true"
+                               FullWidth="true"
+                               MultiSelectionTextFunc="@FormatGenreSelection"
+                               Class="cleanup-genre-select">
+                        @foreach (var genre in _availableGenres)
+                        {
+                            <MudSelectItem T="string" Value="@genre">@genre</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div class="cleanup-filter-slot">
+                    <MudSelect T="string"
+                               MultiSelection="true"
+                               SelectedValues="_selectedWatchers"
+                               SelectedValuesChanged="OnWatchersChanged"
+                               Label="Watched by"
+                               Placeholder="Any user"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense="true"
+                               Clearable="true"
+                               FullWidth="true"
+                               MultiSelectionTextFunc="@FormatWatcherSelection"
+                               Class="cleanup-watcher-select">
+                        @foreach (var user in _availableWatchers)
+                        {
+                            <MudSelectItem T="string" Value="@user">@user</MudSelectItem>
+                        }
+                    </MudSelect>
+                </div>
+                <div class="cleanup-filter-slot">
+                    <MudTextField @bind-Value="_searchText"
+                                  @bind-Value:after="OnSearchChanged"
+                                  Immediate="true"
+                                  DebounceInterval="200"
+                                  Placeholder="Search library by title, genres, tags, watchers…"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Clearable="true"
+                                  FullWidth="true"
+                                  Class="cleanup-search-field" />
+                </div>
             </div>
         </MudPaper>
 
         @if (!_loading)
         {
-            <MudGrid Class="mb-3" Spacing="2">
+            <MudGrid Class="mb-3 cleanup-stats" Spacing="2">
                 <MudItem xs="6" sm="3">
                     <MudPaper Class="pa-3 stat-card" Elevation="1">
-                        <MudText Typo="Typo.caption" Class="muted">@(_listView == ListView.DeletionQueue ? "Marked" : IsBrowsingLibrary ? "Matches shown" : "Candidates shown")</MudText>
-                        <MudText Typo="Typo.h5">@FilteredCandidates.Count</MudText>
+                        <MudText Typo="Typo.caption" Class="muted cleanup-stat-caption">Shown</MudText>
+                        <MudText Typo="Typo.h5" Class="cleanup-stat-value">@_filteredCount</MudText>
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="6" sm="3">
                     <MudPaper Class="pa-3 stat-card" Elevation="1">
-                        <MudText Typo="Typo.caption" Class="muted">@(_listView == ListView.DeletionQueue ? "Would free" : "Reclaimable")</MudText>
-                        <MudText Typo="Typo.h5">@ByteDisplayHelper.Format(FilteredCandidates.Sum(c => c.SizeBytes))</MudText>
+                        <MudText Typo="Typo.caption" Class="muted cleanup-stat-caption">@(_listView == ListView.DeletionQueue ? "Would free" : "Reclaimable")</MudText>
+                        <MudText Typo="Typo.h5" Class="cleanup-stat-value">@ByteDisplayHelper.Format(_filteredBytes)</MudText>
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="6" sm="3">
                     <MudPaper Class="pa-3 stat-card" Elevation="1">
-                        <MudText Typo="Typo.caption" Class="muted">Movies</MudText>
-                        <MudText Typo="Typo.h5">@FilteredCandidates.Count(c => c.MediaType == "movie")</MudText>
+                        <MudText Typo="Typo.caption" Class="muted cleanup-stat-caption">Movies</MudText>
+                        <MudText Typo="Typo.h5" Class="cleanup-stat-value">@_filteredMovies</MudText>
                     </MudPaper>
                 </MudItem>
                 <MudItem xs="6" sm="3">
                     <MudPaper Class="pa-3 stat-card" Elevation="1">
-                        <MudText Typo="Typo.caption" Class="muted">Series</MudText>
-                        <MudText Typo="Typo.h5">@FilteredCandidates.Count(c => c.MediaType == "series")</MudText>
+                        <MudText Typo="Typo.caption" Class="muted cleanup-stat-caption">Series</MudText>
+                        <MudText Typo="Typo.h5" Class="cleanup-stat-value">@_filteredSeries</MudText>
                     </MudPaper>
                 </MudItem>
             </MudGrid>
@@ -211,7 +236,7 @@ else
     {
         <MudProgressLinear Indeterminate="true" />
     }
-    else if (FilteredCandidates.Count == 0)
+    else if (_filteredCount == 0)
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
             @(_listView == ListView.DeletionQueue
@@ -227,28 +252,29 @@ else
     {
         <TableScrollShell Class="cleanup-table-fill">
             <MudPaper Elevation="1" Class="cleanup-table-shell">
-            @* Virtualize off: MudBlazor virtualize + flex height overrides caused scroll flicker
-               (worse downward). Dense rows of a few thousand stay acceptable without it. *@
             <MudTable Items="FilteredCandidates" Hover="true" Dense="true" Striped="true" SortLabel="Sort by"
+                      AllowUnsorted="false"
+                      @bind-RowsPerPage="_rowsPerPage"
+                      @bind-CurrentPage="_tablePage"
                       Class="@(_displayMode == CleanupDisplayMode.Posters ? "cleanup-table--posters" : "cleanup-table--compact")"
                       RowClassFunc="@RowClassFor">
                 <HeaderContent>
-                    <MudTh Style="width:48px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.NeverDelete)">Keep</MudTableSortLabel></MudTh>
-                    <MudTh Style="width:48px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.MarkedForDeletion)">Delete</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:48px"><MudTableSortLabel SortBy="SortByNeverDelete">Keep</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:48px"><MudTableSortLabel SortBy="SortByMarkedForDeletion">Delete</MudTableSortLabel></MudTh>
                     @if (_displayMode == CleanupDisplayMode.Posters)
                     {
                         <MudTh Style="width:48px">Art</MudTh>
                     }
-                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.Title)">Title</MudTableSortLabel></MudTh>
-                    <MudTh Style="width:56px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.MediaType)">Type</MudTableSortLabel></MudTh>
-                    <MudTh Style="width:72px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => (object?)x.Rating ?? -1d)">Rating</MudTableSortLabel></MudTh>
-                    <MudTh Style="width:88px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.SizeBytes)" InitialDirection="SortDirection.Descending">Size</MudTableSortLabel></MudTh>
-                    <MudTh Style="width:100px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => (object?)x.ReleasedUtc ?? DateTimeOffset.MinValue)">Released</MudTableSortLabel></MudTh>
-                    <MudTh Style="width:100px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => (object?)x.AddedUtc ?? DateTimeOffset.MinValue)">Added</MudTableSortLabel></MudTh>
-                    <MudTh Style="width:100px"><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => (object?)x.LastWatchedUtc ?? DateTimeOffset.MinValue)">Last watched</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.WatchedBy.Count)">Watched by</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.Tags.Count)">Tags</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<CleanupCandidateItem, object>(x => x.Reasons.Count)">Reasons</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="SortByTitle">Title</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:56px"><MudTableSortLabel SortBy="SortByMediaType">Type</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:72px"><MudTableSortLabel SortBy="SortByRating">Rating</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:88px"><MudTableSortLabel SortBy="SortBySizeBytes" InitialDirection="SortDirection.Descending">Size</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:100px"><MudTableSortLabel SortBy="SortByReleasedUtc">Released</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:100px"><MudTableSortLabel SortBy="SortByAddedUtc">Added</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:100px"><MudTableSortLabel SortBy="SortByLastWatchedUtc">Last watched</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="SortByWatchedByCount">Watched by</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="SortByTagsCount">Tags</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="SortByReasonsCount">Reasons</MudTableSortLabel></MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Keep">
@@ -376,6 +402,9 @@ else
                         </div>
                     </MudTd>
                 </RowTemplate>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 25, 50, 100, 200 }" />
+                </PagerContent>
             </MudTable>
             </MudPaper>
         </TableScrollShell>
@@ -388,11 +417,30 @@ else
     private enum MediaTypeFilter { All, Movie, Series }
     private enum ListView { Candidates, DeletionQueue }
 
+    private static readonly Func<CleanupCandidateItem, object> SortByNeverDelete = x => x.NeverDelete;
+    private static readonly Func<CleanupCandidateItem, object> SortByMarkedForDeletion = x => x.MarkedForDeletion;
+    private static readonly Func<CleanupCandidateItem, object> SortByTitle = x => x.Title;
+    private static readonly Func<CleanupCandidateItem, object> SortByMediaType = x => x.MediaType;
+    private static readonly Func<CleanupCandidateItem, object> SortByRating = x => (object?)x.Rating ?? -1d;
+    private static readonly Func<CleanupCandidateItem, object> SortBySizeBytes = x => x.SizeBytes;
+    private static readonly Func<CleanupCandidateItem, object> SortByReleasedUtc = x => (object?)x.ReleasedUtc ?? DateTimeOffset.MinValue;
+    private static readonly Func<CleanupCandidateItem, object> SortByAddedUtc = x => (object?)x.AddedUtc ?? DateTimeOffset.MinValue;
+    private static readonly Func<CleanupCandidateItem, object> SortByLastWatchedUtc = x => (object?)x.LastWatchedUtc ?? DateTimeOffset.MinValue;
+    private static readonly Func<CleanupCandidateItem, object> SortByWatchedByCount = x => x.WatchedBy.Count;
+    private static readonly Func<CleanupCandidateItem, object> SortByTagsCount = x => x.Tags.Count;
+    private static readonly Func<CleanupCandidateItem, object> SortByReasonsCount = x => x.Reasons.Count;
+
     private List<CleanupCandidateItem> _candidates = [];
     private IReadOnlyList<CleanupCandidateItem> _filtered = [];
     private IReadOnlyList<string> _availableWatchers = [];
+    private IReadOnlyList<string> _availableGenres = [];
     private IEnumerable<string> _selectedWatchers = Array.Empty<string>();
+    private IEnumerable<string> _selectedGenres = Array.Empty<string>();
     private int _markedCount;
+    private int _filteredCount;
+    private long _filteredBytes;
+    private int _filteredMovies;
+    private int _filteredSeries;
     private readonly HashSet<CleanupReason> _activeFilters = new();
     private MediaTypeFilter _mediaTypeFilter = MediaTypeFilter.All;
     private ListView _listView = ListView.Candidates;
@@ -402,12 +450,15 @@ else
     private int _thresholdMonths;
     private bool _loading = true;
     private MediaInventorySyncStatus _status = new(false, "", null);
+    private int _tablePage;
+    private int _rowsPerPage = 50;
 
     private int MarkedCount => _markedCount;
     private IReadOnlyList<CleanupCandidateItem> FilteredCandidates => _filtered;
     private bool HasSearch => !string.IsNullOrWhiteSpace(_searchText);
     private bool HasWatcherFilter => _selectedWatchers.Any();
-    private bool IsBrowsingLibrary => HasSearch || HasWatcherFilter;
+    private bool HasGenreFilter => _selectedGenres.Any();
+    private bool IsBrowsingLibrary => HasSearch || HasWatcherFilter || HasGenreFilter;
 
     private string StatusText =>
         _status.IsRunning
@@ -463,6 +514,12 @@ else
             .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        _availableGenres = _candidates
+            .SelectMany(c => c.Genres)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         // Drop selections that disappeared after a refresh.
         if (HasWatcherFilter)
         {
@@ -470,12 +527,18 @@ else
             _selectedWatchers = _selectedWatchers.Where(stillValid.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
 
-        RebuildFiltered();
+        if (HasGenreFilter)
+        {
+            var stillValid = new HashSet<string>(_availableGenres, StringComparer.OrdinalIgnoreCase);
+            _selectedGenres = _selectedGenres.Where(stillValid.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        RebuildFiltered(resetPage: true);
         _loading = false;
         StateHasChanged();
     }
 
-    private void RebuildFiltered()
+    private void RebuildFiltered(bool resetPage = false)
     {
         _markedCount = 0;
         foreach (var c in _candidates)
@@ -487,6 +550,9 @@ else
         if (_listView == ListView.DeletionQueue)
         {
             _filtered = ApplyBrowseFilters(_candidates.Where(c => c.MarkedForDeletion)).ToList();
+            CacheFilteredStats();
+            if (resetPage)
+                _tablePage = 0;
             return;
         }
 
@@ -511,6 +577,31 @@ else
             query = query.Where(c => c.Reasons.Any(_activeFilters.Contains));
 
         _filtered = ApplyBrowseFilters(query).ToList();
+        CacheFilteredStats();
+        if (resetPage)
+            _tablePage = 0;
+    }
+
+    private void CacheFilteredStats()
+    {
+        var count = 0;
+        long bytes = 0;
+        var movies = 0;
+        var series = 0;
+        foreach (var c in _filtered)
+        {
+            count++;
+            bytes += c.SizeBytes;
+            if (c.MediaType == "movie")
+                movies++;
+            else if (c.MediaType == "series")
+                series++;
+        }
+
+        _filteredCount = count;
+        _filteredBytes = bytes;
+        _filteredMovies = movies;
+        _filteredSeries = series;
     }
 
     private IEnumerable<CleanupCandidateItem> ApplyBrowseFilters(IEnumerable<CleanupCandidateItem> query)
@@ -520,6 +611,13 @@ else
             var selected = _selectedWatchers as HashSet<string>
                 ?? _selectedWatchers.ToHashSet(StringComparer.OrdinalIgnoreCase);
             query = query.Where(c => c.WatchedBy.Any(selected.Contains));
+        }
+
+        if (HasGenreFilter)
+        {
+            var selected = _selectedGenres as HashSet<string>
+                ?? _selectedGenres.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            query = query.Where(c => c.Genres.Any(selected.Contains));
         }
 
         var search = _searchText.Trim();
@@ -546,6 +644,12 @@ else
                 return true;
         }
 
+        foreach (var genre in item.Genres)
+        {
+            if (genre.Contains(search, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
         foreach (var watcher in item.WatchedBy)
         {
             if (watcher.Contains(search, StringComparison.OrdinalIgnoreCase))
@@ -555,17 +659,36 @@ else
         return false;
     }
 
-    private void OnSearchChanged() => RebuildFiltered();
+    private void OnSearchChanged() => RebuildFiltered(resetPage: true);
 
     private void OnWatchersChanged(IEnumerable<string> values)
     {
         _selectedWatchers = values?.ToHashSet(StringComparer.OrdinalIgnoreCase)
             ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        RebuildFiltered();
+        RebuildFiltered(resetPage: true);
+    }
+
+    private void OnGenresChanged(IEnumerable<string> values)
+    {
+        _selectedGenres = values?.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        RebuildFiltered(resetPage: true);
     }
 
     private static string FormatWatcherSelection(List<string> selected) =>
-        selected.Count == 0 ? "Any user" : string.Join(", ", selected);
+        FormatMultiSelection(selected, "Any user", "users");
+
+    private static string FormatGenreSelection(List<string> selected) =>
+        FormatMultiSelection(selected, "Any genre", "genres");
+
+    private static string FormatMultiSelection(List<string> selected, string emptyLabel, string pluralNoun)
+    {
+        if (selected.Count == 0)
+            return emptyLabel;
+        if (selected.Count == 1)
+            return selected[0];
+        return $"{selected.Count} {pluralNoun}";
+    }
 
     private async Task OnThresholdChanged(int value)
     {
@@ -576,26 +699,26 @@ else
     private void SetMediaTypeFilter(MediaTypeFilter filter)
     {
         _mediaTypeFilter = filter;
-        RebuildFiltered();
+        RebuildFiltered(resetPage: true);
     }
 
     private void SetListView(ListView view)
     {
         _listView = view;
-        RebuildFiltered();
+        RebuildFiltered(resetPage: true);
     }
 
     private void OnShowKeptChanged(bool value)
     {
         _showKept = value;
-        RebuildFiltered();
+        RebuildFiltered(resetPage: true);
     }
 
     private void ToggleFilter(CleanupReason reason)
     {
         if (!_activeFilters.Remove(reason))
             _activeFilters.Add(reason);
-        RebuildFiltered();
+        RebuildFiltered(resetPage: true);
     }
 
     private async Task RefreshNowAsync()

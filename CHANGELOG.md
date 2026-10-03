@@ -6,9 +6,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Cleanup: filter/sort lag — re-enabled MudTable virtualize without CSS height overrides fighting it; cached header stats and static sort keys
+- Cleanup: column sort no longer cycles through a no-op “unsorted” third click (`AllowUnsorted=false`)
+- Cleanup: replace Virtualize with paging (25–200 rows) to stop scroll flicker while keeping filter/sort snappy
+
+### Added
+
+- Cleanup: **Genre** multi-select filter (like Watched by) from Sonarr/Radarr inventory; also searchable; filled on inventory sync
+- Cleanup: keep Genre/Watched by/search inline; lock their width and shorten multi-select labels so selection does not resize controls
+
 ### Changed
 
-- Cleanup: removed **Cards** layout (Compact / Posters only); turned off MudTable virtualize to stop scroll flicker ([#73](https://github.com/Unthred/ArrDash/issues/73))
+- Cleanup: removed **Cards** layout (Compact / Posters only) ([#73](https://github.com/Unthred/ArrDash/issues/73))
 
 ### Added
 

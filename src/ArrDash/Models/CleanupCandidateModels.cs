@@ -13,7 +13,8 @@ public sealed record MovieInventoryDto(
     DateTimeOffset? AddedUtc,
     DateTimeOffset? ReleasedUtc,
     IReadOnlyList<int> TagIds,
-    double? Rating);
+    double? Rating,
+    IReadOnlyList<string> Genres);
 
 public sealed record SeriesInventoryDto(
     int Id,
@@ -30,7 +31,8 @@ public sealed record SeriesInventoryDto(
     DateTimeOffset? ReleasedUtc,
     IReadOnlyList<int> TagIds,
     double? Rating,
-    string? SeriesStatus);
+    string? SeriesStatus,
+    IReadOnlyList<string> Genres);
 
 public sealed record ArrTagDto(int Id, string Label);
 
@@ -58,6 +60,7 @@ public sealed record CleanupCandidateItem(
     DateTimeOffset? LastWatchedUtc,
     IReadOnlyList<string> WatchedBy,
     IReadOnlyList<string> Tags,
+    IReadOnlyList<string> Genres,
     IReadOnlyList<CleanupReason> Reasons,
     string? ExternalUrl,
     string? ImdbId,

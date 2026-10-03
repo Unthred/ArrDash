@@ -53,6 +53,21 @@ public abstract class ArrClientBase
         return null;
     }
 
+    /// <summary>Radarr/Sonarr <c>genres</c> string array.</summary>
+    protected static IReadOnlyList<string> ParseGenres(JsonElement item)
+    {
+        if (!item.TryGetProperty("genres", out var genres) || genres.ValueKind != JsonValueKind.Array)
+            return [];
+
+        return genres.EnumerateArray()
+            .Select(g => g.GetString())
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
     public virtual async Task<(IReadOnlyList<DownloadItem> Items, ServiceHealth Health)> FetchRecentAsync(
         int limit,
         CancellationToken ct)
@@ -736,9 +751,10 @@ public sealed class SonarrClient(HttpClient http, MediaServiceOptionsAccessor op
                 && ratingValueEl.ValueKind is JsonValueKind.Number
                     ? ratingValueEl.GetDouble()
                     : null;
+            var genres = ParseGenres(item);
 
             items.Add(new SeriesInventoryDto(
-                idEl.GetInt32(), title, year, slug, imdbId, tvdbId, sizeOnDisk, episodeFileCount, monitored, hasFile, added, released, tagIds, rating, seriesStatus));
+                idEl.GetInt32(), title, year, slug, imdbId, tvdbId, sizeOnDisk, episodeFileCount, monitored, hasFile, added, released, tagIds, rating, seriesStatus, genres));
         }
 
         return items;
@@ -1164,9 +1180,10 @@ public sealed class RadarrClient(HttpClient http, MediaServiceOptionsAccessor op
                 && ratingValueEl.ValueKind is JsonValueKind.Number
                     ? ratingValueEl.GetDouble()
                     : null;
+            var genres = ParseGenres(item);
 
             items.Add(new MovieInventoryDto(
-                idEl.GetInt32(), title, year, slug, imdbId, tmdbId, sizeOnDisk, monitored, hasFile, added, released, tagIds, rating));
+                idEl.GetInt32(), title, year, slug, imdbId, tmdbId, sizeOnDisk, monitored, hasFile, added, released, tagIds, rating, genres));
         }
 
         return items;

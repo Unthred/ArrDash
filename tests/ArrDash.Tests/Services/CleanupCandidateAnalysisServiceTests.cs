@@ -7,6 +7,14 @@ namespace ArrDash.Tests.Services;
 public class CleanupCandidateAnalysisServiceTests
 {
     [Fact]
+    public void ParseGenreLabels_orders_and_dedupes()
+    {
+        Assert.Equal(["Action", "Drama"], CleanupCandidateAnalysisService.ParseGenreLabels("""["Drama","Action","drama"]"""));
+        Assert.Empty(CleanupCandidateAnalysisService.ParseGenreLabels("[]"));
+        Assert.Empty(CleanupCandidateAnalysisService.ParseGenreLabels("not-json"));
+    }
+
+    [Fact]
     public void NormalizeSeriesTitle_strips_disambiguating_year_suffix()
     {
         Assert.Equal("BATTLESTAR GALACTICA", CleanupCandidateAnalysisService.NormalizeSeriesTitle("Battlestar Galactica (2003)"));
@@ -56,6 +64,7 @@ public class CleanupCandidateAnalysisServiceTests
                 HasFile = true,
                 AddedUtc = added,
                 TagsJson = "[1]",
+                GenresJson = """["Sci-Fi","Action"]""",
                 TitleSlug = "old-film"
             },
             new()
@@ -69,6 +78,7 @@ public class CleanupCandidateAnalysisServiceTests
                 HasFile = true,
                 AddedUtc = added,
                 TagsJson = "[]",
+                GenresJson = "[]",
                 TitleSlug = "quiet-show",
                 SeriesStatus = "ended"
             }
@@ -105,11 +115,13 @@ public class CleanupCandidateAnalysisServiceTests
         var movie = Assert.Single(results, r => r.MediaType == "movie");
         Assert.Equal(["Mom", "Squiggley"], movie.WatchedBy);
         Assert.Equal(["stevoid4-gmail-com"], movie.Tags);
+        Assert.Equal(["Action", "Sci-Fi"], movie.Genres);
         Assert.Contains(CleanupReason.WatchedLongAgo, movie.Reasons);
 
         var series = Assert.Single(results, r => r.MediaType == "series");
         Assert.Empty(series.WatchedBy);
         Assert.Empty(series.Tags);
+        Assert.Empty(series.Genres);
         Assert.Contains(CleanupReason.NeverWatched, series.Reasons);
         Assert.Equal("ended", series.SeriesStatus);
         Assert.False(movie.MarkedForDeletion);

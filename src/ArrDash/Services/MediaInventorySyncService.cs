@@ -103,6 +103,7 @@ public sealed class MediaInventorySyncService(
                 existing.AddedUtc = movie.AddedUtc;
                 existing.ReleasedUtc = movie.ReleasedUtc;
                 existing.TagsJson = System.Text.Json.JsonSerializer.Serialize(movie.TagIds);
+                existing.GenresJson = System.Text.Json.JsonSerializer.Serialize(movie.Genres);
                 existing.LastSeenUtc = syncStartedUtc;
                 existing.UpdatedAtUtc = syncStartedUtc;
             }
@@ -155,6 +156,7 @@ public sealed class MediaInventorySyncService(
                 existing.AddedUtc = show.AddedUtc;
                 existing.ReleasedUtc = show.ReleasedUtc;
                 existing.TagsJson = System.Text.Json.JsonSerializer.Serialize(show.TagIds);
+                existing.GenresJson = System.Text.Json.JsonSerializer.Serialize(show.Genres);
                 existing.LastSeenUtc = syncStartedUtc;
                 existing.UpdatedAtUtc = syncStartedUtc;
             }
