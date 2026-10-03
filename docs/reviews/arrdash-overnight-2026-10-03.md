@@ -20,17 +20,17 @@
 | #85 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Explicit upstream credential-expiry state. Browser/app-session expiry is not implementable because ArrDash has no app authentication. |
 | #86 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Component failures receive a bounded retry surface; #96 handles Cleanup’s request failure path. |
 | #87 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | implemented and verified | Existing D-state detail now states impact, signals to watch, and safe next action. |
-| #88 | — | — | pending | Activity-card usefulness and states. |
-| #89 | — | — | pending | Implemented once with duplicate #90. |
-| #90 | — | — | duplicate | Exact duplicate of #89; remains open for review. |
-| #91 | — | — | pending | Implemented once with duplicate #92. |
-| #92 | — | — | duplicate | Exact duplicate of #91; remains open for review. |
-| #93 | — | — | pending | User-focused activity drill-down. |
+| #88 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | already resolved / review needed | Existing #45 activity-card overhaul covers current work, recency, empty states and drill-down; proposed next card model is documented. |
+| #89 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | partial | Shared shell/navigation migration designed; current page needs visual implementation in follow-up. |
+| #90 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | duplicate | Exact duplicate of #89; implemented/planned once and remains open for review. |
+| #91 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | partial | Operator tasks, IA, deep-link/state migration, and acceptance checks documented. |
+| #92 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | duplicate | Exact duplicate of #91; remains open for review. |
+| #93 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | partial | Existing drawer/user page is functional; documented deep-linkable range/source/user return model awaits route migration. |
 | #94 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | implemented and verified | Broken dashboard/activity image requests receive intentional fallback UI. |
 | #95 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | duplicate | Exact duplicate of #94; implemented once and remains open for review. |
 | #96 | 2026-10-03T22:44:00+01:00 | 2026-10-03T22:48:00+01:00 | implemented and verified | One bounded library-scoped snapshot; page-level failure is recoverable with retained prior data and an explicit retry. Related PR #76 remains separate. |
-| #98 | — | — | pending | Added to the run; implementation follows #99 investigation. |
-| #99 | 2026-10-03T22:58:00+01:00 | — | in progress | Authoritative collection-membership/completion investigation before #98. |
+| #98 | 2026-10-03T23:00:00+01:00 | 2026-10-03T23:11:00+01:00 | blocked | Depends on #99’s canonical authoritative completion report; no row can be shown honestly yet. |
+| #99 | 2026-10-03T22:58:00+01:00 | 2026-10-03T23:11:00+01:00 | blocked | External canonical script/report needs a ServerMaintenance correction; ArrDash read-only authority contract documented. |
 
 ## Review order
 
@@ -90,6 +90,34 @@
   initials/icon fallback. No URL, credential, or upstream response is surfaced.
 - This proves client-side source-unavailable handling. Live source-selection/cache diagnosis and
   browser evidence remain unverified because production upstream services were not queried.
+
+### Navigation, warnings, and activity (#88–#93)
+
+- `docs/navigation-and-activity-design.md` records the operator tasks, chosen primary/secondary
+  navigation model, route-state migration, deep-link/back-navigation safeguards, and acceptance
+  checks. It also confirms #89/#90 and #91/#92 are duplicate pairs.
+- Existing #45 already provides activity-card stat tiles, coarse progress, empty states, and
+  drill-down. The requested larger navigation and warnings visual migration is deliberately
+  marked partial: it needs browser/device review rather than untested broad markup churn.
+
+### Audiobook collections (#98 / #99)
+
+- Read-only inspection found the scheduled external wrapper and report files are current. The
+  script is not tracked in a usable ServerMaintenance worktree on this host and includes a
+  heuristic completion path that conflicts with the clarified authority contract.
+- `docs/audiobook-collection-authority.md` defines source precedence, current ArrDash read-only
+  boundary, missing report fields, and rollback. #98 remains blocked because displaying its
+  requested completed-series row would otherwise invent completion/recency.
+
+## Remaining blockers and manual review checklist
+
+1. Create/correct the canonical ServerMaintenance script/report contract for #99, then expose a
+   versioned authoritative completion feed before implementing #98.
+2. Review the navigation/activity design on desktop, tablet, and phone; then implement the route
+   migration in small visual PRs.
+3. Exercise the changed pages in a browser with safe test service data: Cleanup loading/error/retry,
+   dashboard updating/stale state, upstream 401 state, storage detail, and image failure fallback.
+4. No deployment occurred. The live ArrDash container and its configuration were not altered.
 
 ## Deployment
 
