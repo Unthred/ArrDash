@@ -5,7 +5,10 @@
 - Started: 2026-10-03T22:43:07+01:00
 - Base: `242189d06a581467d0b02e8e06d797c18443c4dd` (`origin/main`)
 - Working branch: `feature/issues-84-96-overnight-2026-10-03`
-- Scope: issues #84–#96, with duplicate pairs implemented once and kept open for review.
+- Scope: issues #84–#96 plus #98/#99, with duplicate pairs implemented once and kept open for review.
+- Ended: 2026-10-03T22:57:16+01:00
+- Pull request: [#100](https://github.com/Unthred/ArrDash/pull/100) (open, clean, GitGuardian
+  security check successful at final inspection).
 - Baseline: `.NET 10` is required by both project files. The host has no SDK; the isolated
   `mcr.microsoft.com/dotnet/sdk:10.0` test container completed
   `dotnet test tests/ArrDash.Tests/ArrDash.Tests.csproj` successfully (exit 0).
@@ -18,21 +21,21 @@
 
 | Issue | Started | Ended | Disposition | Notes |
 | --- | --- | --- | --- | --- |
-| #84 | 2026-10-03T22:54:00+01:00 | 2026-10-03T22:58:00+01:00 | implemented and verified | Single-flight dashboard refresh and honest last-success/update-in-progress state. |
-| #85 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Explicit upstream credential-expiry state. Browser/app-session expiry is not implementable because ArrDash has no app authentication. |
-| #86 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Component failures receive a bounded retry surface; #96 handles Cleanup’s request failure path. |
-| #87 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | implemented and verified | Existing D-state detail now states impact, signals to watch, and safe next action. |
-| #88 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | already resolved / review needed | Existing #45 activity-card overhaul covers current work, recency, empty states and drill-down; proposed next card model is documented. |
-| #89 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | partial | Shared shell/navigation migration designed; current page needs visual implementation in follow-up. |
-| #90 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | duplicate | Exact duplicate of #89; implemented/planned once and remains open for review. |
-| #91 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | partial | Operator tasks, IA, deep-link/state migration, and acceptance checks documented. |
-| #92 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | duplicate | Exact duplicate of #91; remains open for review. |
-| #93 | 2026-10-03T23:08:00+01:00 | 2026-10-03T23:11:00+01:00 | partial | Existing drawer/user page is functional; documented deep-linkable range/source/user return model awaits route migration. |
-| #94 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | implemented and verified | Broken dashboard/activity image requests receive intentional fallback UI. |
-| #95 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | duplicate | Exact duplicate of #94; implemented once and remains open for review. |
-| #96 | 2026-10-03T22:44:00+01:00 | 2026-10-03T22:48:00+01:00 | implemented and verified | One bounded library-scoped snapshot; page-level failure is recoverable with retained prior data and an explicit retry. Related PR #76 remains separate. |
-| #98 | 2026-10-03T23:00:00+01:00 | 2026-10-03T23:11:00+01:00 | blocked | Depends on #99’s canonical authoritative completion report; no row can be shown honestly yet. |
-| #99 | 2026-10-03T22:58:00+01:00 | 2026-10-03T23:11:00+01:00 | blocked | External canonical script/report needs a ServerMaintenance correction; ArrDash read-only authority contract documented. |
+| #84 | 2026-10-03T22:50:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Single-flight dashboard refresh and honest last-success/update-in-progress state. |
+| #85 | 2026-10-03T22:47:00+01:00 | 2026-10-03T22:50:00+01:00 | implemented and verified | Explicit upstream credential-expiry state. Browser/app-session expiry is not implementable because ArrDash has no app authentication. |
+| #86 | 2026-10-03T22:47:00+01:00 | 2026-10-03T22:50:00+01:00 | implemented and verified | Component failures receive a bounded retry surface; #96 handles Cleanup’s request failure path. |
+| #87 | 2026-10-03T22:53:00+01:00 | 2026-10-03T22:55:00+01:00 | implemented and verified | Existing D-state detail now states impact, signals to watch, and safe next action. |
+| #88 | 2026-10-03T22:55:00+01:00 | 2026-10-03T22:57:00+01:00 | already resolved / review needed | Existing #45 activity-card overhaul covers current work, recency, empty states and drill-down; proposed next card model is documented. |
+| #89 | 2026-10-03T22:55:00+01:00 | 2026-10-03T22:57:00+01:00 | partial | Shared shell/navigation migration designed; current page needs visual implementation in follow-up. |
+| #90 | 2026-10-03T22:55:00+01:00 | 2026-10-03T22:57:00+01:00 | duplicate | Exact duplicate of #89; implemented/planned once and remains open for review. |
+| #91 | 2026-10-03T22:55:00+01:00 | 2026-10-03T22:57:00+01:00 | partial | Operator tasks, IA, deep-link/state migration, and acceptance checks documented. |
+| #92 | 2026-10-03T22:55:00+01:00 | 2026-10-03T22:57:00+01:00 | duplicate | Exact duplicate of #91; remains open for review. |
+| #93 | 2026-10-03T22:55:00+01:00 | 2026-10-03T22:57:00+01:00 | partial | Existing drawer/user page is functional; documented deep-linkable range/source/user return model awaits route migration. |
+| #94 | 2026-10-03T22:53:00+01:00 | 2026-10-03T22:55:00+01:00 | implemented and verified | Broken dashboard/activity image requests receive intentional fallback UI. |
+| #95 | 2026-10-03T22:53:00+01:00 | 2026-10-03T22:55:00+01:00 | duplicate | Exact duplicate of #94; implemented once and remains open for review. |
+| #96 | 2026-10-03T22:44:00+01:00 | 2026-10-03T22:47:00+01:00 | implemented and verified | One bounded library-scoped snapshot; page-level failure is recoverable with retained prior data and an explicit retry. Related PR #76 remains separate. |
+| #98 | 2026-10-03T22:53:00+01:00 | 2026-10-03T22:57:00+01:00 | blocked | Depends on #99’s canonical authoritative completion report; no row can be shown honestly yet. |
+| #99 | 2026-10-03T22:53:00+01:00 | 2026-10-03T22:57:00+01:00 | blocked | External canonical script/report needs a ServerMaintenance correction; ArrDash read-only authority contract documented. |
 
 ## Review order
 
@@ -120,6 +123,13 @@
 3. Exercise the changed pages in a browser with safe test service data: Cleanup loading/error/retry,
    dashboard updating/stale state, upstream 401 state, storage detail, and image failure fallback.
 4. No deployment occurred. The live ArrDash container and its configuration were not altered.
+
+## Commits and issue comments
+
+- `e1ebee3` #96; `9cca544` #85/#86; `8cbb1d9` #84; `5a52b0c` #87/#94/#95;
+  `ad2527c` #88/#89/#91/#93/#98/#99 documentation; `a508432` SDK documentation.
+- Each issue has a concise result comment. The implementation comments are linked from the
+  [PR #100 timeline](https://github.com/Unthred/ArrDash/pull/100) and no issue was closed.
 
 ## Deployment
 
