@@ -59,7 +59,9 @@
                         <div class="poster-frame">
                             @if (!string.IsNullOrWhiteSpace(session.ThumbnailUrl))
                             {
-                                <img src="@session.ThumbnailUrl" alt="@session.Title" loading="lazy" />
+                                <img src="@session.ThumbnailUrl" alt="@session.Title" loading="lazy"
+                                     onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
+                                <div class="poster-fallback" style="display:none">@Initials(session.Title)</div>
                             }
                             else
                             {

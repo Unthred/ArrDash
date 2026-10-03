@@ -19,15 +19,15 @@
 | #84 | 2026-10-03T22:54:00+01:00 | 2026-10-03T22:58:00+01:00 | implemented and verified | Single-flight dashboard refresh and honest last-success/update-in-progress state. |
 | #85 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Explicit upstream credential-expiry state. Browser/app-session expiry is not implementable because ArrDash has no app authentication. |
 | #86 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Component failures receive a bounded retry surface; #96 handles Cleanup’s request failure path. |
-| #87 | — | — | pending | Storage-blocked triage, building on #7. |
+| #87 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | implemented and verified | Existing D-state detail now states impact, signals to watch, and safe next action. |
 | #88 | — | — | pending | Activity-card usefulness and states. |
 | #89 | — | — | pending | Implemented once with duplicate #90. |
 | #90 | — | — | duplicate | Exact duplicate of #89; remains open for review. |
 | #91 | — | — | pending | Implemented once with duplicate #92. |
 | #92 | — | — | duplicate | Exact duplicate of #91; remains open for review. |
 | #93 | — | — | pending | User-focused activity drill-down. |
-| #94 | — | — | pending | Implemented once with duplicate #95. |
-| #95 | — | — | duplicate | Exact duplicate of #94; remains open for review. |
+| #94 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | implemented and verified | Broken dashboard/activity image requests receive intentional fallback UI. |
+| #95 | 2026-10-03T23:04:00+01:00 | 2026-10-03T23:07:00+01:00 | duplicate | Exact duplicate of #94; implemented once and remains open for review. |
 | #96 | 2026-10-03T22:44:00+01:00 | 2026-10-03T22:48:00+01:00 | implemented and verified | One bounded library-scoped snapshot; page-level failure is recoverable with retained prior data and an explicit retry. Related PR #76 remains separate. |
 | #98 | — | — | pending | Added to the run; implementation follows #99 investigation. |
 | #99 | 2026-10-03T22:58:00+01:00 | — | in progress | Authoritative collection-membership/completion investigation before #98. |
@@ -75,6 +75,21 @@
 - The hero announces “Updating” and retains the last successful timestamp while work is active.
   The manual button is disabled during that one operation, avoiding overlapping expensive work.
 - Verified: `DashboardState` transition coverage plus isolated full .NET 10 unit suite passed.
+
+### #87 — storage-blocked triage
+
+- Builds on the existing #7 D-state signals rather than creating a second detector. The detail
+  now explains that this is uninterruptible disk I/O wait, distinguishes it from capacity, names
+  the three signals to monitor (blocked count, disk I/O, parity/mover), and gives a safe next
+  action without controlling Docker or storage.
+
+### #94 / #95 — artwork fallback
+
+- Existing proxy-first artwork URLs remain the source strategy. When a main dashboard or activity
+  image request fails, the affected card now replaces the broken image with an intentional
+  initials/icon fallback. No URL, credential, or upstream response is surfaced.
+- This proves client-side source-unavailable handling. Live source-selection/cache diagnosis and
+  browser evidence remain unverified because production upstream services were not queried.
 
 ## Deployment
 

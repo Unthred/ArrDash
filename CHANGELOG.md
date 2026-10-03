@@ -61,6 +61,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- Main dashboard and activity artwork now fall back to an intentional initials/icon treatment if
+  a same-origin poster/thumbnail request fails; the storage-blocked detail now explains the
+  condition, the monitoring signals, and safe next steps ([#87](https://github.com/Unthred/ArrDash/issues/87),
+  [#94](https://github.com/Unthred/ArrDash/issues/94), [#95](https://github.com/Unthred/ArrDash/issues/95)).
 - Dashboard refresh requests now coalesce into one service-controlled collection; the dashboard
   shows when an update is in progress and retains the timestamp of the last successful result
   ([#84](https://github.com/Unthred/ArrDash/issues/84)).
