@@ -17,8 +17,8 @@
 | Issue | Started | Ended | Disposition | Notes |
 | --- | --- | --- | --- | --- |
 | #84 | — | — | pending | Dashboard freshness and bounded refresh. |
-| #85 | — | — | pending | Explicit expired-authentication state. |
-| #86 | — | — | pending | Transient error recovery. |
+| #85 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Explicit upstream credential-expiry state. Browser/app-session expiry is not implementable because ArrDash has no app authentication. |
+| #86 | 2026-10-03T22:49:00+01:00 | 2026-10-03T22:53:00+01:00 | implemented and verified | Component failures receive a bounded retry surface; #96 handles Cleanup’s request failure path. |
 | #87 | — | — | pending | Storage-blocked triage, building on #7. |
 | #88 | — | — | pending | Activity-card usefulness and states. |
 | #89 | — | — | pending | Implemented once with duplicate #90. |
@@ -52,6 +52,18 @@
   escape the component. This is a component/request failure path, not evidence of a container
   restart. Runtime restart diagnosis remains unverified because the live service was not touched.
 - Verified: isolated .NET 10 SDK container ran the full unit suite successfully after the change.
+
+### #85 / #86 — authentication clarity and transient recovery
+
+- Added a global, accessible warning only when a configured offline service reports a sanitized
+  authentication-style failure (401, 403, unauthorized/forbidden, or expired token). It links to
+  Settings and explicitly says affected data may be stale or unavailable.
+- ArrDash has no `AuthenticationStateProvider`, authorization middleware, login route, or app
+  cookie. The requested *app-session* expiry behavior therefore remains a product decision rather
+  than something this change can simulate honestly.
+- Added an `ErrorBoundary` recovery surface and a reusable error page with one user-triggered
+  retry (no retry loop) and a dashboard route. The raw exception is not shown to the user.
+- Verified: focused classifier tests and the isolated full .NET 10 unit suite passed.
 
 ## Deployment
 

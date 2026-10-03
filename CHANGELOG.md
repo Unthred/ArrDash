@@ -61,6 +61,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- A connected service that returns a sanitized authentication failure now has a distinct,
+  accessible reauthentication state and a direct Settings route; recoverable component failures
+  now offer an explicit bounded retry instead of only a terminal refresh instruction
+  ([#85](https://github.com/Unthred/ArrDash/issues/85), [#86](https://github.com/Unthred/ArrDash/issues/86)).
 - Cleanup Candidates now reads one library-scoped analysis snapshot, keeps the previous list when
   a refresh fails, and offers an explicit retry instead of letting an ordinary data failure tear
   down the page ([#96](https://github.com/Unthred/ArrDash/issues/96)).

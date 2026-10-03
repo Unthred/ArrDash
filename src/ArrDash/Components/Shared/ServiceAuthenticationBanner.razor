@@ -1,0 +1,41 @@
+@using ArrDash.Models
+@using ArrDash.Services
+@inject DashboardState State
+@implements IDisposable
+
+@if (_expired.Count > 0)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="service-auth-banner" role="alert">
+        <MudText Typo="Typo.subtitle2">Connection needs reauthentication</MudText>
+        <MudText Typo="Typo.body2">
+            ArrDash could not authenticate to @string.Join(", ", _expired.Select(s => s.Name)).
+            Data from @(_expired.Count == 1 ? "this service may" : "these services may") be stale or unavailable.
+        </MudText>
+        <MudButton Href="/settings" Variant="Variant.Outlined" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Settings" Class="mt-2">
+            Review connection settings
+        </MudButton>
+    </MudAlert>
+}
+
+@code {
+    private IReadOnlyList<ServiceHealth> _expired = [];
+
+    protected override void OnInitialized()
+    {
+        Update(State.Current);
+        State.Changed += OnDashboardChanged;
+    }
+
+    private void OnDashboardChanged(DashboardSnapshot snapshot) =>
+        _ = InvokeAsync(() =>
+        {
+            Update(snapshot);
+            StateHasChanged();
+        });
+
+    private void Update(DashboardSnapshot snapshot) =>
+        _expired = ServiceAuthenticationState.FindExpiredCredentials(snapshot.Services);
+
+    public void Dispose() => State.Changed -= OnDashboardChanged;
+}
