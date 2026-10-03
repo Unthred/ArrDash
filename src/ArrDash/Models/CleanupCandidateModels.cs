@@ -1,3 +1,5 @@
+using ArrDash.Data.Entities;
+
 namespace ArrDash.Models;
 
 public sealed record MovieInventoryDto(
@@ -65,6 +67,18 @@ public sealed record CleanupCandidateItem(
     bool MarkedForDeletion,
     double? Rating,
     string? SeriesStatus);
+
+/// <summary>
+/// The bounded data set needed to analyse the cleanup view. Keeping it as one snapshot prevents
+/// a page render from mixing results from several independently refreshed database reads.
+/// </summary>
+public sealed record CleanupCandidateAnalysisInputs(
+    IReadOnlyList<MediaInventoryItemEntity> Inventory,
+    IReadOnlyDictionary<int, DateTimeOffset> MovieLastPlayed,
+    IReadOnlyDictionary<string, DateTimeOffset> SeriesLastPlayed,
+    IReadOnlyDictionary<int, IReadOnlyList<string>> MovieWatchers,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> SeriesWatchers,
+    IReadOnlyDictionary<(string Source, int TagId), string> TagLabels);
 
 public enum CleanupDisplayMode
 {

@@ -7,6 +7,56 @@ namespace ArrDash.Services;
 
 public sealed class CleanupCandidatesRepository(IDbContextFactory<ArrDashDbContext> dbFactory)
 {
+    public async Task<CleanupCandidateAnalysisInputs> GetAnalysisInputsAsync(
+        IReadOnlyList<WatchStatsUserAlias> aliases,
+        CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var inventory = await db.MediaInventoryItems.AsNoTracking().ToListAsync(ct);
+
+        // Scope history reads to the current on-disk library. The Cleanup view never needs
+        // aggregates for media that cannot become a candidate.
+        var movieIds = inventory
+            .Where(i => i.MediaType == "movie" && i.TmdbId is not null)
+            .Select(i => i.TmdbId!.Value)
+            .Distinct()
+            .ToList();
+        var seriesTitles = inventory
+            .Where(i => i.MediaType == "series")
+            .SelectMany(i => new[] { i.Title.Trim().ToUpperInvariant(), CleanupCandidateAnalysisService.NormalizeSeriesTitle(i.Title) })
+            .Distinct()
+            .ToList();
+
+        var movieEvents = await db.PlayEvents.AsNoTracking()
+            .Where(e => e.MediaType == "movie" && e.TmdbId != null && movieIds.Contains(e.TmdbId.Value))
+            .Select(e => new { TmdbId = e.TmdbId!.Value, e.Source, e.UserDisplayName, e.PlayedAtUtc })
+            .ToListAsync(ct);
+        var seriesEvents = await db.PlayEvents.AsNoTracking()
+            .Where(e => e.MediaType == "episode" && e.SeriesTitle != null && seriesTitles.Contains(e.SeriesTitle.Trim().ToUpper()))
+            .Select(e => new { SeriesTitle = e.SeriesTitle!, e.Source, e.UserDisplayName, e.PlayedAtUtc })
+            .ToListAsync(ct);
+        var tagRows = await db.ArrTags.AsNoTracking()
+            .Select(t => new { t.Source, t.TagId, t.Label })
+            .ToListAsync(ct);
+
+        var movieLastPlayed = movieEvents
+            .GroupBy(e => e.TmdbId)
+            .ToDictionary(g => g.Key, g => new DateTimeOffset(g.Max(e => e.PlayedAtUtc), TimeSpan.Zero));
+        var seriesLastPlayed = seriesEvents
+            .GroupBy(e => CleanupCandidateAnalysisService.NormalizeSeriesTitle(e.SeriesTitle))
+            .ToDictionary(g => g.Key, g => new DateTimeOffset(g.Max(e => e.PlayedAtUtc), TimeSpan.Zero));
+        var movieWatchers = AggregateWatchers(
+            movieEvents.Where(e => !string.IsNullOrWhiteSpace(e.UserDisplayName))
+                .Select(e => (Key: e.TmdbId, e.Source, e.UserDisplayName)), aliases);
+        var seriesWatchers = AggregateWatchers(
+            seriesEvents.Where(e => !string.IsNullOrWhiteSpace(e.UserDisplayName))
+                .Select(e => (Key: CleanupCandidateAnalysisService.NormalizeSeriesTitle(e.SeriesTitle), e.Source, e.UserDisplayName)), aliases);
+        var tagLabels = tagRows.ToDictionary(t => (t.Source, t.TagId), t => t.Label);
+
+        return new CleanupCandidateAnalysisInputs(inventory, movieLastPlayed, seriesLastPlayed,
+            movieWatchers, seriesWatchers, tagLabels);
+    }
+
     public async Task<IReadOnlyList<MediaInventoryItemEntity>> GetInventoryAsync(CancellationToken ct)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);

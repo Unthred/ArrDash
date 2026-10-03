@@ -10,6 +10,7 @@
 @inject CleanupFeatureAvailability CleanupAvailability
 @inject IOptions<CleanupCandidatesOptions> DefaultOptions
 @inject ExternalLinkService Links
+@inject ILogger<CleanupCandidates> Logger
 
 <PageTitle>Cleanup · ArrDash</PageTitle>
 
@@ -211,6 +212,15 @@ else
     {
         <MudProgressLinear Indeterminate="true" />
     }
+    else if (_loadError is not null)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="ma-3">
+            <MudText Typo="Typo.subtitle2">Cleanup candidates could not be refreshed</MudText>
+            <MudText Typo="Typo.body2">Your existing list is kept where available. Try the bounded refresh again; no cleanup action has run.</MudText>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh"
+                       Disabled="_loading" OnClick="LoadAsync" Class="mt-2">Try again</MudButton>
+        </MudAlert>
+    }
     else if (FilteredCandidates.Count == 0)
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
@@ -401,6 +411,7 @@ else
     private bool _showKept;
     private int _thresholdMonths;
     private bool _loading = true;
+    private string? _loadError;
     private MediaInventorySyncStatus _status = new(false, "", null);
 
     private int MarkedCount => _markedCount;
@@ -435,44 +446,40 @@ else
 
     private async Task LoadAsync()
     {
+        if (_loading && _candidates.Count > 0)
+            return;
+
         _loading = true;
+        _loadError = null;
         StateHasChanged();
-
-        var aliases = Prefs.Current.UserAliases;
-        var inventory = await Repository.GetInventoryAsync(CancellationToken.None);
-        var movieLastPlayed = await Repository.GetMovieLastPlayedAsync(CancellationToken.None);
-        var seriesLastPlayed = await Repository.GetSeriesLastPlayedAsync(CancellationToken.None);
-        var movieWatchers = await Repository.GetMovieWatchersAsync(aliases, CancellationToken.None);
-        var seriesWatchers = await Repository.GetSeriesWatchersAsync(aliases, CancellationToken.None);
-        var tagLabels = await Repository.GetTagLabelsAsync(CancellationToken.None);
-
-        _candidates = CleanupCandidateAnalysisService.Build(
-            inventory,
-            movieLastPlayed,
-            seriesLastPlayed,
-            movieWatchers,
-            seriesWatchers,
-            tagLabels,
-            _thresholdMonths,
-            ServiceOptions.Options.Radarr.Url,
-            ServiceOptions.Options.Sonarr.Url).ToList();
-
-        _availableWatchers = _candidates
-            .SelectMany(c => c.WatchedBy)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        // Drop selections that disappeared after a refresh.
-        if (HasWatcherFilter)
+        try
         {
-            var stillValid = new HashSet<string>(_availableWatchers, StringComparer.OrdinalIgnoreCase);
-            _selectedWatchers = _selectedWatchers.Where(stillValid.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        }
+            var inputs = await Repository.GetAnalysisInputsAsync(Prefs.Current.UserAliases, CancellationToken.None);
+            _candidates = CleanupCandidateAnalysisService.Build(
+                inputs.Inventory, inputs.MovieLastPlayed, inputs.SeriesLastPlayed,
+                inputs.MovieWatchers, inputs.SeriesWatchers, inputs.TagLabels,
+                _thresholdMonths, ServiceOptions.Options.Radarr.Url, ServiceOptions.Options.Sonarr.Url).ToList();
+            _availableWatchers = _candidates.SelectMany(c => c.WatchedBy)
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
 
-        RebuildFiltered();
-        _loading = false;
-        StateHasChanged();
+            if (HasWatcherFilter)
+            {
+                var stillValid = new HashSet<string>(_availableWatchers, StringComparer.OrdinalIgnoreCase);
+                _selectedWatchers = _selectedWatchers.Where(stillValid.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            }
+
+            RebuildFiltered();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Cleanup candidate snapshot failed");
+            _loadError = "snapshot failed";
+        }
+        finally
+        {
+            _loading = false;
+            StateHasChanged();
+        }
     }
 
     private void RebuildFiltered()
